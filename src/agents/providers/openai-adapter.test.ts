@@ -165,3 +165,128 @@ test('openai-adapter - handles http non-200 cleanly', async () => {
     delete process.env.OPENAI_API_KEY;
   }
 });
+
+test('openai-adapter - request includes json_schema response format', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: any = null;
+
+  globalThis.fetch = (async (url: string, options: any) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              task: 'task',
+              understanding: 'plan',
+              assumptions: [],
+              filesLikelyNeeded: ['src/index.ts'],
+              forbiddenActions: [],
+              successCriteria: ['compile'],
+              riskLevel: 'low',
+              requiresApproval: false,
+              createdAt: new Date().toISOString(),
+              mode: 'strict'
+            })
+          }
+        }]
+      })
+    };
+  }) as any;
+
+  process.env.OPENAI_API_KEY = 'sk-mock-key';
+
+  try {
+    const adapter = new OpenAIAdapter();
+    const config = { ...DEFAULT_CONFIG, provider: 'openai' as const, model: 'gpt-4o' };
+    await adapter.plan({
+      task: 'task',
+      repoSummary: 'summary',
+      config,
+      skills: []
+    });
+
+    assert.ok(requestBody);
+    assert.strictEqual(requestBody.response_format?.type, 'json_schema');
+    assert.strictEqual(requestBody.response_format?.json_schema?.name, 'TaskContract');
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test('openai-adapter - blocks unsupported models by default', async () => {
+  process.env.OPENAI_API_KEY = 'sk-mock-key';
+  try {
+    const adapter = new OpenAIAdapter();
+    // Default config has allowUnstructuredProviderFallback = false
+    const config = { ...DEFAULT_CONFIG, provider: 'openai' as const, model: 'gpt-3.5-turbo' };
+    
+    await assert.rejects(async () => {
+      await adapter.plan({
+        task: 'task',
+        repoSummary: 'summary',
+        config,
+        skills: []
+      });
+    }, /does not support structured output, and allowUnstructuredProviderFallback is false/);
+  } finally {
+    delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test('openai-adapter - permits unsupported models when fallback is allowed', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+
+  globalThis.fetch = (async (url: string, options: any) => {
+    fetchCalled = true;
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              task: 'task',
+              understanding: 'plan',
+              assumptions: [],
+              filesLikelyNeeded: ['src/index.ts'],
+              forbiddenActions: [],
+              successCriteria: ['compile'],
+              riskLevel: 'low',
+              requiresApproval: false,
+              createdAt: new Date().toISOString(),
+              mode: 'strict'
+            })
+          }
+        }]
+      })
+    };
+  }) as any;
+
+  process.env.OPENAI_API_KEY = 'sk-mock-key';
+
+  try {
+    const adapter = new OpenAIAdapter();
+    const config = {
+      ...DEFAULT_CONFIG,
+      provider: 'openai' as const,
+      model: 'gpt-3.5-turbo',
+      allowUnstructuredProviderFallback: true
+    };
+    
+    await adapter.plan({
+      task: 'task',
+      repoSummary: 'summary',
+      config,
+      skills: []
+    });
+
+    assert.ok(fetchCalled);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.OPENAI_API_KEY;
+  }
+});
+

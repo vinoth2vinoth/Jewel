@@ -2,7 +2,10 @@ import { AgentAdapter, PlanInput, PatchInput, ReviewInput, PatchProposal, Review
 import { TaskContract } from '../../core/session';
 import { extractJsonObject, validateTaskContractJson, validatePatchProposalJson, validateReviewResultJson } from '../json-response';
 import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt } from '../prompt-builder';
-import { postJsonWithRetry, parseProviderResponseText } from './http-client';
+import { postJsonWithRetry } from './http-client';
+import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema } from '../structured-schema';
+import { getModelCapabilities } from '../model-capabilities';
+import { normalizeResponse } from './response-normalizer';
 
 /**
  * OpenAI Chat Completions adapter.
@@ -15,16 +18,18 @@ export class OpenAIAdapter implements AgentAdapter {
     outputTokens?: number;
     totalTokens?: number;
     estimatedCostUsd?: number;
+    retryCount?: number;
   };
 
-  private accumulateUsage(usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }) {
+  private accumulateUsage(usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number; retryCount?: number }) {
     if (!usage) return;
     if (!this.usage) {
-      this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, retryCount: 0 };
     }
     this.usage.inputTokens = (this.usage.inputTokens || 0) + (usage.inputTokens || 0);
     this.usage.outputTokens = (this.usage.outputTokens || 0) + (usage.outputTokens || 0);
     this.usage.totalTokens = (this.usage.totalTokens || 0) + (usage.totalTokens || 0);
+    this.usage.retryCount = (this.usage.retryCount || 0) + (usage.retryCount || 0);
   }
 
   async plan(input: PlanInput): Promise<TaskContract> {
@@ -54,8 +59,9 @@ export class OpenAIAdapter implements AgentAdapter {
       maxOutputTokens: 4000,
       llmTimeoutMs: 60000,
       llmMaxRetries: 2,
-      llmStrictJson: true
-    };
+      llmStrictJson: true,
+      allowUnstructuredProviderFallback: false
+    } as any;
 
     const response = await this.callLLM([
       { role: 'system', content: systemPrompt },
@@ -81,8 +87,9 @@ export class OpenAIAdapter implements AgentAdapter {
       maxOutputTokens: 4000,
       llmTimeoutMs: 60000,
       llmMaxRetries: 2,
-      llmStrictJson: true
-    };
+      llmStrictJson: true,
+      allowUnstructuredProviderFallback: false
+    } as any;
 
     const response = await this.callLLM([
       { role: 'system', content: systemPrompt },
@@ -109,16 +116,51 @@ export class OpenAIAdapter implements AgentAdapter {
     const timeoutMs = typeof config.llmTimeoutMs === 'number' ? config.llmTimeoutMs : 60000;
     const maxRetries = typeof config.llmMaxRetries === 'number' ? config.llmMaxRetries : 2;
 
+    const { capabilities, isKnown, warning } = getModelCapabilities('openai', model);
+    if (warning) {
+      console.warn(`[Warning] ${warning}`);
+    }
+
+    if (!capabilities.supportsStructuredOutput && !config.allowUnstructuredProviderFallback) {
+      throw new Error(`FAIL: Model "${model}" does not support structured output, and allowUnstructuredProviderFallback is false.`);
+    }
+
     const requestBody: any = {
       model,
       messages,
       temperature,
       max_tokens: maxTokens
     };
-    if (config.llmStrictJson) {
+
+    if (capabilities.supportsStructuredOutput && config.llmStrictJson) {
+      let schema: any;
+      let name = '';
+      if (method === 'plan') {
+        schema = TaskContractSchema;
+        name = 'TaskContract';
+      } else if (method === 'proposePatch') {
+        schema = PatchProposalSchema;
+        name = 'PatchProposal';
+      } else if (method === 'reviewDiff') {
+        schema = ReviewResultSchema;
+        name = 'ReviewResult';
+      }
+
+      if (schema) {
+        requestBody.response_format = {
+          type: 'json_schema',
+          json_schema: {
+            name,
+            strict: true,
+            schema
+          }
+        };
+      }
+    } else if (config.llmStrictJson) {
       requestBody.response_format = { type: 'json_object' };
     }
 
+    const retryTracker = { count: 0 };
     const data = await postJsonWithRetry('https://api.openai.com/v1/chat/completions', {
       headers: {
         'Authorization': `Bearer ${apiKey}`
@@ -128,11 +170,15 @@ export class OpenAIAdapter implements AgentAdapter {
       maxRetries,
       sessionPath,
       providerName: 'openai',
-      methodName: method
+      methodName: method,
+      retryTracker
     });
 
-    const parsed = parseProviderResponseText(data, 'openai');
-    this.accumulateUsage(parsed.usage);
-    return parsed.content;
+    const normalized = normalizeResponse(data, 'openai', model);
+    this.accumulateUsage({
+      ...normalized.usage,
+      retryCount: retryTracker.count
+    });
+    return normalized.text;
   }
 }

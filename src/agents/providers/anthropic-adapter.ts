@@ -2,7 +2,10 @@ import { AgentAdapter, PlanInput, PatchInput, ReviewInput, PatchProposal, Review
 import { TaskContract } from '../../core/session';
 import { extractJsonObject, validateTaskContractJson, validatePatchProposalJson, validateReviewResultJson } from '../json-response';
 import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt } from '../prompt-builder';
-import { postJsonWithRetry, parseProviderResponseText } from './http-client';
+import { postJsonWithRetry } from './http-client';
+import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema } from '../structured-schema';
+import { getModelCapabilities } from '../model-capabilities';
+import { normalizeResponse } from './response-normalizer';
 
 export class AnthropicAdapter implements AgentAdapter {
   name = 'anthropic';
@@ -11,16 +14,18 @@ export class AnthropicAdapter implements AgentAdapter {
     outputTokens?: number;
     totalTokens?: number;
     estimatedCostUsd?: number;
+    retryCount?: number;
   };
 
-  private accumulateUsage(usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }) {
+  private accumulateUsage(usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number; retryCount?: number }) {
     if (!usage) return;
     if (!this.usage) {
-      this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, retryCount: 0 };
     }
     this.usage.inputTokens = (this.usage.inputTokens || 0) + (usage.inputTokens || 0);
     this.usage.outputTokens = (this.usage.outputTokens || 0) + (usage.outputTokens || 0);
     this.usage.totalTokens = (this.usage.totalTokens || 0) + (usage.totalTokens || 0);
+    this.usage.retryCount = (this.usage.retryCount || 0) + (usage.retryCount || 0);
   }
 
   async plan(input: PlanInput): Promise<TaskContract> {
@@ -49,8 +54,9 @@ export class AnthropicAdapter implements AgentAdapter {
       maxOutputTokens: 4000,
       llmTimeoutMs: 60000,
       llmMaxRetries: 2,
-      llmStrictJson: true
-    };
+      llmStrictJson: true,
+      allowUnstructuredProviderFallback: false
+    } as any;
 
     const response = await this.callLLM([
       { role: 'system', content: systemPrompt },
@@ -75,8 +81,9 @@ export class AnthropicAdapter implements AgentAdapter {
       maxOutputTokens: 4000,
       llmTimeoutMs: 60000,
       llmMaxRetries: 2,
-      llmStrictJson: true
-    };
+      llmStrictJson: true,
+      allowUnstructuredProviderFallback: false
+    } as any;
 
     const response = await this.callLLM([
       { role: 'system', content: systemPrompt },
@@ -103,6 +110,15 @@ export class AnthropicAdapter implements AgentAdapter {
     const timeoutMs = typeof config.llmTimeoutMs === 'number' ? config.llmTimeoutMs : 60000;
     const maxRetries = typeof config.llmMaxRetries === 'number' ? config.llmMaxRetries : 2;
 
+    const { capabilities, isKnown, warning } = getModelCapabilities('anthropic', model);
+    if (warning) {
+      console.warn(`[Warning] ${warning}`);
+    }
+
+    if (!capabilities.supportsStructuredOutput && !config.allowUnstructuredProviderFallback) {
+      throw new Error(`FAIL: Model "${model}" does not support structured output, and allowUnstructuredProviderFallback is false.`);
+    }
+
     let systemText = '';
     const anthropicMessages: any[] = [];
 
@@ -128,8 +144,41 @@ export class AnthropicAdapter implements AgentAdapter {
       requestBody.system = systemText;
     }
 
+    if (capabilities.supportsStructuredOutput && config.llmStrictJson) {
+      let schema: any;
+      let name = '';
+      let description = '';
+      if (method === 'plan') {
+        schema = TaskContractSchema;
+        name = 'submit_task_contract';
+        description = 'Submit the TaskContract JSON object';
+      } else if (method === 'proposePatch') {
+        schema = PatchProposalSchema;
+        name = 'submit_patch_proposal';
+        description = 'Submit the PatchProposal JSON object';
+      } else if (method === 'reviewDiff') {
+        schema = ReviewResultSchema;
+        name = 'submit_review_result';
+        description = 'Submit the ReviewResult JSON object';
+      }
+
+      if (schema) {
+        const { $schema, ...strippedSchema } = schema;
+        requestBody.tools = [{
+          name,
+          description,
+          input_schema: strippedSchema
+        }];
+        requestBody.tool_choice = {
+          type: 'tool',
+          name
+        };
+      }
+    }
+
     const url = 'https://api.anthropic.com/v1/messages';
 
+    const retryTracker = { count: 0 };
     const data = await postJsonWithRetry(url, {
       headers: {
         'x-api-key': apiKey,
@@ -140,11 +189,15 @@ export class AnthropicAdapter implements AgentAdapter {
       maxRetries,
       sessionPath,
       providerName: 'anthropic',
-      methodName: method
+      methodName: method,
+      retryTracker
     });
 
-    const parsed = parseProviderResponseText(data, 'anthropic');
-    this.accumulateUsage(parsed.usage);
-    return parsed.content;
+    const normalized = normalizeResponse(data, 'anthropic', model);
+    this.accumulateUsage({
+      ...normalized.usage,
+      retryCount: retryTracker.count
+    });
+    return normalized.text;
   }
 }

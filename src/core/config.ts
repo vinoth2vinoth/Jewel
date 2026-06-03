@@ -30,6 +30,7 @@ export interface JewelConfig {
   protectedFiles: string[];
   dangerousCommandPolicy: 'block' | 'warn' | 'allow';
   reportFormat: ('markdown' | 'json')[];
+  allowUnstructuredProviderFallback: boolean;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -74,7 +75,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
     'src/security/**'
   ],
   dangerousCommandPolicy: 'block',
-  reportFormat: ['markdown', 'json']
+  reportFormat: ['markdown', 'json'],
+  allowUnstructuredProviderFallback: false
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -129,7 +131,8 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'allowProtectedFileChanges',
     'allowGitPush',
     'requireHumanDiffApproval',
-    'llmStrictJson'
+    'llmStrictJson',
+    'allowUnstructuredProviderFallback'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {

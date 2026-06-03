@@ -39,6 +39,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const git_1 = require("../../storage/git");
 const config_1 = require("../../core/config");
+const model_capabilities_1 = require("../../agents/model-capabilities");
 function runDoctor(cwd = process.cwd()) {
     console.log('Running Jewel Diagnostics (Doctor)...\n');
     let failCount = 0;
@@ -200,6 +201,49 @@ function runDoctor(cwd = process.cwd()) {
             else {
                 report('WARN', `LLM Adapter key ${expectedKey} is missing from environment. Real LLM agents won't work.`);
             }
+        }
+        const model = config.model || '';
+        const { capabilities, isKnown, warning } = (0, model_capabilities_1.getModelCapabilities)(provider, model);
+        if (!model) {
+            report('WARN', `No model name configured for provider "${provider}". Defaulting to provider default.`);
+        }
+        else if (!isKnown) {
+            report('WARN', `Model "${model}" is unknown to Jewel's capability registry. Capabilities might be assumed.`);
+        }
+        else {
+            report('PASS', `Model "${model}" is registered and supported.`);
+        }
+        if (capabilities.supportsStructuredOutput) {
+            report('PASS', `Model "${model || 'default'}" supports structured outputs natively.`);
+        }
+        else {
+            report('WARN', `Model "${model || 'default'}" does not support structured outputs natively.`);
+        }
+        if (config.allowUnstructuredProviderFallback === true) {
+            report('WARN', 'Configuration field "allowUnstructuredProviderFallback" is set to true. Fallbacks are allowed, which may reduce reliability.');
+        }
+        else {
+            report('PASS', 'Configuration field "allowUnstructuredProviderFallback" is set to false.');
+        }
+        if (config.requireHumanDiffApproval === false) {
+            report('WARN', 'Configuration field "requireHumanDiffApproval" is set to false while an active LLM provider is configured. This increases security risk.');
+        }
+        else {
+            report('PASS', 'Configuration field "requireHumanDiffApproval" is set to true.');
+        }
+        const timeout = config.llmTimeoutMs ?? 60000;
+        if (timeout < 1000 || timeout > 600000) {
+            report('WARN', `LLM timeout "${timeout}ms" is outside of the recommended range (1s - 10mins).`);
+        }
+        else {
+            report('PASS', `LLM timeout "${timeout}ms" is within recommended range.`);
+        }
+        const retries = config.llmMaxRetries ?? 2;
+        if (retries < 0 || retries > 10) {
+            report('WARN', `LLM max retries "${retries}" is outside of the recommended range (0 - 10).`);
+        }
+        else {
+            report('PASS', `LLM max retries "${retries}" is within recommended range.`);
         }
     }
     console.log(`\nDiagnostics finished with ${failCount} Failures and ${warnCount} Warnings.`);

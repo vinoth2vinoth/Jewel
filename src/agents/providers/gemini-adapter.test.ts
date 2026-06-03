@@ -211,3 +211,76 @@ test('gemini-adapter - handles timeout cleanly', async () => {
     delete process.env.GEMINI_API_KEY;
   }
 });
+
+test('gemini-adapter - request includes JSON schema config', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: any = null;
+
+  globalThis.fetch = (async (url: string, options: any) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                task: 'task',
+                understanding: 'plan',
+                assumptions: [],
+                filesLikelyNeeded: ['src/index.ts'],
+                forbiddenActions: [],
+                successCriteria: ['compile'],
+                riskLevel: 'low',
+                requiresApproval: false,
+                createdAt: new Date().toISOString(),
+                mode: 'strict'
+              })
+            }]
+          }
+        }]
+      })
+    };
+  }) as any;
+
+  process.env.GEMINI_API_KEY = 'ai-mock-key';
+
+  try {
+    const adapter = new GeminiAdapter();
+    const config = { ...DEFAULT_CONFIG, provider: 'gemini' as const, model: 'gemini-1.5-flash' };
+    await adapter.plan({
+      task: 'task',
+      repoSummary: 'summary',
+      config,
+      skills: []
+    });
+
+    assert.ok(requestBody);
+    assert.strictEqual(requestBody.generationConfig?.responseMimeType, 'application/json');
+    assert.ok(requestBody.generationConfig?.responseSchema);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('gemini-adapter - blocks unsupported models by default', async () => {
+  process.env.GEMINI_API_KEY = 'ai-mock-key';
+  try {
+    const adapter = new GeminiAdapter();
+    // Default config has allowUnstructuredProviderFallback = false
+    const config = { ...DEFAULT_CONFIG, provider: 'gemini' as const, model: 'unknown-gemini-model' };
+    
+    await assert.rejects(async () => {
+      await adapter.plan({
+        task: 'task',
+        repoSummary: 'summary',
+        config,
+        skills: []
+      });
+    }, /does not support structured output, and allowUnstructuredProviderFallback is false/);
+  } finally {
+    delete process.env.GEMINI_API_KEY;
+  }
+});
+

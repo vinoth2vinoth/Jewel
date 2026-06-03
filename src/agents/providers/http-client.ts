@@ -7,11 +7,30 @@ export interface ProviderUsage {
   outputTokens?: number;
   totalTokens?: number;
   estimatedCostUsd?: number;
+  retryCount?: number;
 }
 
 export interface HttpClientResponse {
   content: string;
   usage?: ProviderUsage;
+}
+
+export class NonRetryableError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'NonRetryableError';
+    this.status = status;
+  }
+}
+
+export class RetryableError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'RetryableError';
+    this.status = status;
+  }
 }
 
 export function createAbortTimeout(timeoutMs: number): { controller: AbortController; timeoutId: NodeJS.Timeout } {
@@ -77,15 +96,20 @@ export async function postJsonWithRetry(
     sessionPath?: string;
     providerName: string;
     methodName: string;
+    retryTracker?: { count: number };
   }
 ): Promise<any> {
-  const { headers, body, timeoutMs, maxRetries, sessionPath, providerName, methodName } = options;
+  const { headers, body, timeoutMs, maxRetries, sessionPath, providerName, methodName, retryTracker } = options;
 
   let attempt = 0;
   let lastError: any = null;
 
   while (attempt <= maxRetries) {
     const { controller, timeoutId } = createAbortTimeout(timeoutMs);
+
+    if (retryTracker) {
+      retryTracker.count = attempt;
+    }
 
     try {
       const res = await fetch(url, {
@@ -102,7 +126,15 @@ export async function postJsonWithRetry(
 
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`HTTP Error ${res.status}: ${text}`);
+        const status = res.status;
+        const isRetryable = status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+        const errMsg = `HTTP Error ${status}: ${text}`;
+
+        if (!isRetryable) {
+          throw new NonRetryableError(errMsg, status);
+        } else {
+          throw new RetryableError(errMsg, status);
+        }
       }
 
       const data = await res.json() as any;
@@ -113,16 +145,29 @@ export async function postJsonWithRetry(
       return data;
     } catch (err: any) {
       clearTimeout(timeoutId);
-      
+
       let errorToReport = err;
       if (err.name === 'AbortError') {
-        errorToReport = new Error(`LLM request timed out after ${timeoutMs}ms.`);
+        errorToReport = new RetryableError(`LLM request timed out after ${timeoutMs}ms.`);
+      } else if (!(err instanceof NonRetryableError) && !(err instanceof RetryableError)) {
+        // Network error, typically retryable
+        errorToReport = new RetryableError(err.message || 'Network error');
       }
 
       lastError = redactProviderError(errorToReport);
 
-      // Save raw response debug log for error
+      // Save debug log for error
       saveDebugLog(sessionPath, providerName, methodName, body, { error: lastError.message });
+
+      if (err instanceof NonRetryableError) {
+        throw new Error(`FAIL: LLM request failed. Non-retryable error: ${lastError.message}`);
+      }
+
+      if (attempt < maxRetries) {
+        // Exponential backoff with jitter
+        const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 1000, 10000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
 
       attempt++;
     }

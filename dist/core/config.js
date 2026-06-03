@@ -80,7 +80,8 @@ exports.DEFAULT_CONFIG = {
         'src/security/**'
     ],
     dangerousCommandPolicy: 'block',
-    reportFormat: ['markdown', 'json']
+    reportFormat: ['markdown', 'json'],
+    allowUnstructuredProviderFallback: false
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -128,7 +129,8 @@ function validateAndMergeConfig(parsed) {
         'allowProtectedFileChanges',
         'allowGitPush',
         'requireHumanDiffApproval',
-        'llmStrictJson'
+        'llmStrictJson',
+        'allowUnstructuredProviderFallback'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {

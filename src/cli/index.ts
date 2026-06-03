@@ -23,6 +23,7 @@ Commands:
   diff [session-id]          Show proposed changes and diff preview for a session.
   audit                      Perform a safety and repository quality check.
   doctor                     Run local environment health and configuration checks.
+  smoke-provider             Run provider validation smoke tests.
   version                    Print the version info.
 
 Options:
@@ -86,6 +87,39 @@ export async function main(): Promise<void> {
 
     case 'doctor': {
       runDoctor();
+      break;
+    }
+
+    case 'smoke-provider': {
+      let providerOverride: string | undefined;
+      let modelOverride: string | undefined;
+      let schemaFlag = false;
+      let noWriteFlag = false;
+
+      const remainingArgs = args.slice(1);
+      for (let i = 0; i < remainingArgs.length; i++) {
+        const arg = remainingArgs[i];
+        if (arg === '--provider') {
+          const val = remainingArgs[i + 1];
+          if (val && !val.startsWith('-')) {
+            providerOverride = val;
+            i++;
+          }
+        } else if (arg === '--model') {
+          const val = remainingArgs[i + 1];
+          if (val && !val.startsWith('-')) {
+            modelOverride = val;
+            i++;
+          }
+        } else if (arg === '--schema') {
+          schemaFlag = true;
+        } else if (arg === '--no-write') {
+          noWriteFlag = true;
+        }
+      }
+
+      const { runSmokeProvider } = require('./commands/smoke-provider');
+      await runSmokeProvider(providerOverride, modelOverride, schemaFlag, noWriteFlag);
       break;
     }
 
