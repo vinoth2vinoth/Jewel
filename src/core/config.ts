@@ -31,6 +31,7 @@ export interface JewelConfig {
   dangerousCommandPolicy: 'block' | 'warn' | 'allow';
   reportFormat: ('markdown' | 'json')[];
   allowUnstructuredProviderFallback: boolean;
+  preferredProviders?: string[];
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -76,7 +77,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
   ],
   dangerousCommandPolicy: 'block',
   reportFormat: ['markdown', 'json'],
-  allowUnstructuredProviderFallback: false
+  allowUnstructuredProviderFallback: false,
+  preferredProviders: []
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -215,6 +217,18 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     config.reportFormat = parsed.reportFormat.map((item: any, i: number) => {
       if (item !== 'markdown' && item !== 'json') {
         throw new Error(`Invalid config: "reportFormat[${i}]" must be "markdown" or "json".`);
+      }
+      return item;
+    });
+  }
+
+  if (parsed.preferredProviders !== undefined) {
+    if (!Array.isArray(parsed.preferredProviders)) {
+      throw new Error('Invalid config: "preferredProviders" must be an array of strings.');
+    }
+    config.preferredProviders = parsed.preferredProviders.map((item: any, i: number) => {
+      if (typeof item !== 'string') {
+        throw new Error(`Invalid config: "preferredProviders[${i}]" must be a string.`);
       }
       return item;
     });

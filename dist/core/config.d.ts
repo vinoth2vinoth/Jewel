@@ -28,6 +28,7 @@ export interface JewelConfig {
     dangerousCommandPolicy: 'block' | 'warn' | 'allow';
     reportFormat: ('markdown' | 'json')[];
     allowUnstructuredProviderFallback: boolean;
+    preferredProviders?: string[];
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

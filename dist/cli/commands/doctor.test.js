@@ -128,3 +128,41 @@ const sandboxDir = path.join(__dirname, '../../../sandbox-test-doctor');
         }
     }
 });
+(0, node_test_1.default)('doctor checks - preferredProviders diagnostics', () => {
+    if (fs.existsSync(sandboxDir)) {
+        fs.rmSync(sandboxDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    const originalExit = process.exit;
+    process.exit = (code) => { };
+    const originalLog = console.log;
+    const logs = [];
+    console.log = (...args) => logs.push(args.join(' '));
+    try {
+        const config = {
+            provider: 'none',
+            preferredProviders: ['gemini', 'openrouter']
+        };
+        fs.writeFileSync(path.join(sandboxDir, 'jewel.config.json'), JSON.stringify(config, null, 2), 'utf8');
+        const oldGemini = process.env.GEMINI_API_KEY;
+        const oldOpenRouter = process.env.OPENROUTER_API_KEY;
+        delete process.env.GEMINI_API_KEY;
+        delete process.env.OPENROUTER_API_KEY;
+        (0, doctor_1.runDoctor)(sandboxDir);
+        const logStr = logs.join('\n');
+        node_assert_1.default.ok(logStr.includes('Preferred Providers: gemini, openrouter'));
+        node_assert_1.default.ok(logStr.includes('GEMINI_API_KEY is missing'));
+        node_assert_1.default.ok(logStr.includes('OPENROUTER_API_KEY is missing'));
+        if (oldGemini !== undefined)
+            process.env.GEMINI_API_KEY = oldGemini;
+        if (oldOpenRouter !== undefined)
+            process.env.OPENROUTER_API_KEY = oldOpenRouter;
+    }
+    finally {
+        process.exit = originalExit;
+        console.log = originalLog;
+        if (fs.existsSync(sandboxDir)) {
+            fs.rmSync(sandboxDir, { recursive: true, force: true });
+        }
+    }
+});

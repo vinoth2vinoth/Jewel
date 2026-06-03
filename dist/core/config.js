@@ -81,7 +81,8 @@ exports.DEFAULT_CONFIG = {
     ],
     dangerousCommandPolicy: 'block',
     reportFormat: ['markdown', 'json'],
-    allowUnstructuredProviderFallback: false
+    allowUnstructuredProviderFallback: false,
+    preferredProviders: []
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -205,6 +206,17 @@ function validateAndMergeConfig(parsed) {
         config.reportFormat = parsed.reportFormat.map((item, i) => {
             if (item !== 'markdown' && item !== 'json') {
                 throw new Error(`Invalid config: "reportFormat[${i}]" must be "markdown" or "json".`);
+            }
+            return item;
+        });
+    }
+    if (parsed.preferredProviders !== undefined) {
+        if (!Array.isArray(parsed.preferredProviders)) {
+            throw new Error('Invalid config: "preferredProviders" must be an array of strings.');
+        }
+        config.preferredProviders = parsed.preferredProviders.map((item, i) => {
+            if (typeof item !== 'string') {
+                throw new Error(`Invalid config: "preferredProviders[${i}]" must be a string.`);
             }
             return item;
         });

@@ -14,13 +14,16 @@ const helpIndex = args.indexOf('--help') !== -1 || args.indexOf('-h') !== -1;
 
 if (args.length === 0 || helpIndex) {
   console.log(`
-Jewel CLI - Manual Real Provider Smoke Validator
+Jewel CLI - Manual Real Provider Smoke Validator (Gemini & OpenRouter Focused)
 
 Usage:
   node scripts/manual-real-provider-smoke.js <provider> [model] [options]
 
 Providers:
-  openai, gemini, anthropic, openrouter
+  gemini      (Primary default, uses GEMINI_API_KEY)
+  openrouter  (Primary default, uses OPENROUTER_API_KEY)
+  openai      (Optional/Skipped by default unless requested, uses OPENAI_API_KEY)
+  anthropic   (Optional/Skipped by default unless requested, uses ANTHROPIC_API_KEY)
 
 Options:
   --write     Save smoke reports to .jewel/reports/ (default: does not write reports to disk)
@@ -28,8 +31,9 @@ Options:
   -h, --help  Display this help menu
 
 Examples:
-  node scripts/manual-real-provider-smoke.js openai gpt-4o-mini --schema
-  node scripts/manual-real-provider-smoke.js gemini gemini-1.5-flash
+  node scripts/manual-real-provider-smoke.js gemini gemini-2.5-flash
+  node scripts/manual-real-provider-smoke.js openrouter openai/gpt-4o-mini --schema
+  node scripts/manual-real-provider-smoke.js openai gpt-4o-mini
   `);
   process.exit(0);
 }

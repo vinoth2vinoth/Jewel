@@ -27,6 +27,7 @@ Commands:
   audit                      Perform a safety and repository quality check.
   doctor                     Run local environment health and configuration checks.
   smoke-provider             Run provider validation smoke tests.
+  provider-ready             Verify provider configuration, capability registry, and run connection checks.
   release-check              Verify public package and release readiness checklist.
   version                    Print the version info.
 
@@ -120,6 +121,31 @@ async function main() {
                 }
                 const { runSmokeProvider } = require('./commands/smoke-provider');
                 await runSmokeProvider(providerOverride, modelOverride, schemaFlag, noWriteFlag);
+                break;
+            }
+            case 'provider-ready': {
+                let providerOverride;
+                let modelOverride;
+                const remainingArgs = args.slice(1);
+                for (let i = 0; i < remainingArgs.length; i++) {
+                    const arg = remainingArgs[i];
+                    if (arg === '--provider') {
+                        const val = remainingArgs[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            providerOverride = val;
+                            i++;
+                        }
+                    }
+                    else if (arg === '--model') {
+                        const val = remainingArgs[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            modelOverride = val;
+                            i++;
+                        }
+                    }
+                }
+                const { runProviderReady } = require('./commands/provider-ready');
+                await runProviderReady(providerOverride || '', modelOverride);
                 break;
             }
             case 'audit': {

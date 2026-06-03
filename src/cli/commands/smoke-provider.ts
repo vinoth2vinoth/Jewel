@@ -10,8 +10,9 @@ export async function runSmokeProvider(
   modelOverride?: string,
   schemaFlag?: boolean,
   noWriteFlag?: boolean,
-  cwd: string = process.cwd()
-): Promise<void> {
+  cwd: string = process.cwd(),
+  bypassExit: boolean = false
+): Promise<any> {
   console.log('Running Jewel Provider Smoke Test...');
 
   let config: any;
@@ -25,14 +26,18 @@ export async function runSmokeProvider(
   const model = modelOverride || config.model;
 
   if (provider === 'none') {
-    console.error('Error: Provider "none" is invalid for smoke-provider.');
+    const msg = 'Error: Provider "none" is invalid for smoke-provider.';
+    console.error(msg);
+    if (bypassExit) throw new Error(msg);
     process.exit(1);
     return;
   }
 
   const validProviders = ['openai', 'gemini', 'anthropic', 'openrouter'];
   if (!validProviders.includes(provider)) {
-    console.error(`Error: Invalid provider "${provider}". Must be one of: ${validProviders.join(', ')}.`);
+    const msg = `Error: Invalid provider "${provider}". Must be one of: ${validProviders.join(', ')}.`;
+    console.error(msg);
+    if (bypassExit) throw new Error(msg);
     process.exit(1);
     return;
   }
@@ -46,7 +51,9 @@ export async function runSmokeProvider(
 
   const expectedKey = keyMap[provider];
   if (!process.env[expectedKey]) {
-    console.error(`Error: Missing API key environment variable "${expectedKey}" for provider "${provider}".`);
+    const msg = `Error: Missing API key environment variable "${expectedKey}" for provider "${provider}".`;
+    console.error(msg);
+    if (bypassExit) throw new Error(msg);
     process.exit(1);
     return;
   }
@@ -65,6 +72,7 @@ export async function runSmokeProvider(
     adapter = createAgentAdapter(testConfig);
   } catch (err: any) {
     console.error(`Error instantiating provider adapter: ${err.message}`);
+    if (bypassExit) throw err;
     process.exit(1);
     return;
   }
@@ -158,9 +166,11 @@ export async function runSmokeProvider(
   }
 
   if (status === 'FAIL') {
+    if (bypassExit) return finalReport;
     process.exit(1);
   } else {
     console.log('[+] Smoke test passed successfully!');
+    if (bypassExit) return finalReport;
     process.exit(0);
   }
 }

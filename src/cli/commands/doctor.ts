@@ -67,6 +67,9 @@ export function runDoctor(cwd: string = process.cwd()): void {
       config = validateAndMergeConfig(parsedRaw);
       report('PASS', 'jewel.config.json exists and is valid configuration.');
       configExists = true;
+      if (config.preferredProviders && config.preferredProviders.length > 0) {
+        console.log(`Preferred Providers: ${config.preferredProviders.join(', ')}`);
+      }
     } catch (err: any) {
       report('FAIL', 'jewel.config.json contains invalid configuration.', err.message);
     }
@@ -149,8 +152,23 @@ export function runDoctor(cwd: string = process.cwd()): void {
 
   // 12. API Key configuration
   const provider = config?.provider || 'none';
-  if (provider === 'none') {
-    report('PASS', 'LLM Provider is set to "none". API key checks skipped.');
+  const preferred = config?.preferredProviders || [];
+  const providersToCheck = new Set<string>();
+  if (provider !== 'none') {
+    providersToCheck.add(provider);
+  }
+  for (const p of preferred) {
+    if (p !== 'none') {
+      providersToCheck.add(p);
+    }
+  }
+
+  if (providersToCheck.size === 0) {
+    if (provider === 'none') {
+      report('PASS', 'LLM Provider is set to "none". API key checks skipped.');
+    } else {
+      report('PASS', 'No active or preferred LLM Providers configured. API key checks skipped.');
+    }
   } else {
     const keyMap: Record<string, string> = {
       openai: 'OPENAI_API_KEY',
@@ -158,12 +176,14 @@ export function runDoctor(cwd: string = process.cwd()): void {
       gemini: 'GEMINI_API_KEY',
       openrouter: 'OPENROUTER_API_KEY'
     };
-    const expectedKey = keyMap[provider];
-    if (expectedKey) {
-      if (process.env[expectedKey]) {
-        report('PASS', `LLM Adapter key ${expectedKey} present in environment.`);
-      } else {
-        report('WARN', `LLM Adapter key ${expectedKey} is missing from environment. Real LLM agents won't work.`);
+    for (const p of providersToCheck) {
+      const expectedKey = keyMap[p];
+      if (expectedKey) {
+        if (process.env[expectedKey]) {
+          report('PASS', `LLM Adapter key ${expectedKey} present in environment for provider "${p}".`);
+        } else {
+          report('WARN', `LLM Adapter key ${expectedKey} is missing from environment for provider "${p}". Real LLM runs using "${p}" will fail.`);
+        }
       }
     }
 
