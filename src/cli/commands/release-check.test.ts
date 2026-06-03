@@ -131,3 +131,54 @@ test('release-check - warns on missing docs and below version target', async () 
     cleanupWorkspace(workspace);
   }
 });
+
+test('release-check - dogfood fixture check behaves correctly', async () => {
+  const originalExit = process.exit;
+  const originalLog = console.log;
+
+  let exitCode: number | undefined;
+  process.exit = ((code?: number) => {
+    exitCode = code;
+    return undefined as never;
+  }) as any;
+
+  const logs: string[] = [];
+  console.log = (...args: any[]) => {
+    logs.push(args.join(' '));
+  };
+
+  const workspace = createMockReleaseWorkspace('0.7.0', true, true);
+  fs.mkdirSync(path.join(workspace, 'scripts'), { recursive: true });
+
+  try {
+    // Scenario 1: verify script exits with 0 (fixture is broken/passes validation)
+    fs.writeFileSync(
+      path.join(workspace, 'scripts', 'verify-dogfood-fixture.js'),
+      'process.exit(0);',
+      'utf8'
+    );
+    exitCode = undefined;
+    logs.length = 0;
+    runReleaseCheck(workspace);
+    assert.strictEqual(exitCode, 0);
+    assert.ok(logs.some(log => log.includes('[PASS] Dogfood fixture initial state is broken as expected.')));
+
+    // Scenario 2: verify script exits with 1 (fixture is fixed/fails validation)
+    fs.writeFileSync(
+      path.join(workspace, 'scripts', 'verify-dogfood-fixture.js'),
+      'process.exit(1);',
+      'utf8'
+    );
+    exitCode = undefined;
+    logs.length = 0;
+    runReleaseCheck(workspace);
+    assert.strictEqual(exitCode, 1);
+    assert.ok(logs.some(log => log.includes('[FAIL] Dogfood fixture is not broken. src/math.ts appears already fixed.')));
+
+  } finally {
+    process.exit = originalExit;
+    console.log = originalLog;
+    cleanupWorkspace(workspace);
+  }
+});
+

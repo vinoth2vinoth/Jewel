@@ -192,6 +192,19 @@ export function runReleaseCheck(cwd: string = process.cwd()): void {
     report('WARN', `Report redaction audit flagged potential leaked secrets in files: ${fileList}`);
   }
 
+  // 14. Check dogfood fixture status
+  const verifyScriptPath = path.join(cwd, 'scripts', 'verify-dogfood-fixture.js');
+  if (fs.existsSync(verifyScriptPath)) {
+    try {
+      execSync(`node "${verifyScriptPath}"`, { cwd, stdio: 'ignore' });
+      report('PASS', 'Dogfood fixture initial state is broken as expected.');
+    } catch (err: any) {
+      report('FAIL', 'Dogfood fixture is not broken. src/math.ts appears already fixed.');
+    }
+  } else {
+    report('WARN', 'Dogfood verification script (verify-dogfood-fixture.js) is missing.');
+  }
+
   console.log(`\nRelease Readiness Checklist finished with ${failCount} Failures and ${warnCount} Warnings.`);
 
   if (failCount > 0) {

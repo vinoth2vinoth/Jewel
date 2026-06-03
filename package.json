@@ -10,7 +10,8 @@
     "build": "tsc",
     "dev": "tsc -w",
     "test": "node scripts/run-all-tests.js",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo \"No linting configured\"",
+    "verify:dogfood-fixture": "node scripts/verify-dogfood-fixture.js"
   },
   "keywords": [
     "ai",
