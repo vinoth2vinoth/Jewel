@@ -6,6 +6,7 @@ import { runDoctor } from './commands/doctor';
 import { runAudit } from './commands/audit';
 import { runTask } from './commands/run';
 import { runVersion } from './commands/version';
+import { toJewelError } from './errors';
 
 function printHelp(): void {
   console.log(`
@@ -24,6 +25,7 @@ Commands:
   audit                      Perform a safety and repository quality check.
   doctor                     Run local environment health and configuration checks.
   smoke-provider             Run provider validation smoke tests.
+  release-check              Verify public package and release readiness checklist.
   version                    Print the version info.
 
 Options:
@@ -51,164 +53,180 @@ export async function main(): Promise<void> {
 
   const command = args[0];
 
-  switch (command) {
-    case 'init': {
-      runInit();
-      break;
-    }
-
-    case 'version': {
-      runVersion();
-      break;
-    }
-
-    case 'verify': {
-      runVerify();
-      break;
-    }
-
-    case 'status': {
-      runStatus();
-      break;
-    }
-
-    case 'rollback': {
-      const targetSession = args[1] && !args[1].startsWith('-') ? args[1] : undefined;
-      runRollback(targetSession);
-      break;
-    }
-
-    case 'diff': {
-      const targetSession = args[1] && !args[1].startsWith('-') ? args[1] : undefined;
-      const { runDiff } = require('./commands/diff');
-      runDiff(targetSession);
-      break;
-    }
-
-    case 'doctor': {
-      runDoctor();
-      break;
-    }
-
-    case 'smoke-provider': {
-      let providerOverride: string | undefined;
-      let modelOverride: string | undefined;
-      let schemaFlag = false;
-      let noWriteFlag = false;
-
-      const remainingArgs = args.slice(1);
-      for (let i = 0; i < remainingArgs.length; i++) {
-        const arg = remainingArgs[i];
-        if (arg === '--provider') {
-          const val = remainingArgs[i + 1];
-          if (val && !val.startsWith('-')) {
-            providerOverride = val;
-            i++;
-          }
-        } else if (arg === '--model') {
-          const val = remainingArgs[i + 1];
-          if (val && !val.startsWith('-')) {
-            modelOverride = val;
-            i++;
-          }
-        } else if (arg === '--schema') {
-          schemaFlag = true;
-        } else if (arg === '--no-write') {
-          noWriteFlag = true;
-        }
+  try {
+    switch (command) {
+      case 'init': {
+        runInit();
+        break;
       }
 
-      const { runSmokeProvider } = require('./commands/smoke-provider');
-      await runSmokeProvider(providerOverride, modelOverride, schemaFlag, noWriteFlag);
-      break;
-    }
+      case 'version': {
+        runVersion();
+        break;
+      }
 
-    case 'audit': {
-      runAudit();
-      break;
-    }
+      case 'verify': {
+        runVerify();
+        break;
+      }
 
-    case 'run': {
-      const taskText = args[1];
-      if (!taskText || taskText.startsWith('-')) {
-        console.error('Error: You must provide a task description. Example: jewel run "Fix styling bug"');
+      case 'status': {
+        runStatus();
+        break;
+      }
+
+      case 'rollback': {
+        const targetSession = args[1] && !args[1].startsWith('-') ? args[1] : undefined;
+        runRollback(targetSession);
+        break;
+      }
+
+      case 'diff': {
+        const targetSession = args[1] && !args[1].startsWith('-') ? args[1] : undefined;
+        const { runDiff } = require('./commands/diff');
+        runDiff(targetSession);
+        break;
+      }
+
+      case 'doctor': {
+        runDoctor();
+        break;
+      }
+
+      case 'release-check': {
+        const { runReleaseCheck } = require('./commands/release-check');
+        runReleaseCheck();
+        break;
+      }
+
+      case 'smoke-provider': {
+        let providerOverride: string | undefined;
+        let modelOverride: string | undefined;
+        let schemaFlag = false;
+        let noWriteFlag = false;
+
+        const remainingArgs = args.slice(1);
+        for (let i = 0; i < remainingArgs.length; i++) {
+          const arg = remainingArgs[i];
+          if (arg === '--provider') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              providerOverride = val;
+              i++;
+            }
+          } else if (arg === '--model') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              modelOverride = val;
+              i++;
+            }
+          } else if (arg === '--schema') {
+            schemaFlag = true;
+          } else if (arg === '--no-write') {
+            noWriteFlag = true;
+          }
+        }
+
+        const { runSmokeProvider } = require('./commands/smoke-provider');
+        await runSmokeProvider(providerOverride, modelOverride, schemaFlag, noWriteFlag);
+        break;
+      }
+
+      case 'audit': {
+        runAudit();
+        break;
+      }
+
+      case 'run': {
+        const taskText = args[1];
+        if (!taskText || taskText.startsWith('-')) {
+          console.error('Error: You must provide a task description. Example: jewel run "Fix styling bug"');
+          process.exit(1);
+        }
+
+        // Parse options
+        let filesNeeded: string[] = [];
+        let useMock = false;
+        let yesFlag = false;
+        let noReview = false;
+        let keepFailed = false;
+        let providerOverride: string | undefined;
+        let modelOverride: string | undefined;
+        let temperatureOverride: number | undefined;
+        let maxOutputTokensOverride: number | undefined;
+        let dryRun = false;
+
+        const remainingArgs = args.slice(2);
+        for (let i = 0; i < remainingArgs.length; i++) {
+          const arg = remainingArgs[i];
+          if (arg === '-f' || arg === '--files') {
+            const fileVal = remainingArgs[i + 1];
+            if (fileVal && !fileVal.startsWith('-')) {
+              filesNeeded = fileVal.split(',').map(s => s.trim()).filter(Boolean);
+              i++;
+            }
+          } else if (arg === '-m' || arg === '--mock') {
+            useMock = true;
+          } else if (arg === '--yes') {
+            yesFlag = true;
+          } else if (arg === '--no-review') {
+            noReview = true;
+          } else if (arg === '--keep-failed') {
+            keepFailed = true;
+          } else if (arg === '--provider') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              providerOverride = val;
+              i++;
+            }
+          } else if (arg === '--model') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              modelOverride = val;
+              i++;
+            }
+          } else if (arg === '--temperature') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              temperatureOverride = parseFloat(val);
+              i++;
+            }
+          } else if (arg === '--max-output-tokens') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              maxOutputTokensOverride = parseInt(val, 10);
+              i++;
+            }
+          } else if (arg === '--dry-run') {
+            dryRun = true;
+          }
+        }
+
+        const overrides = {
+          provider: providerOverride,
+          model: modelOverride,
+          temperature: temperatureOverride,
+          maxOutputTokens: maxOutputTokensOverride
+        };
+
+        await runTask(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun);
+        break;
+      }
+
+      default: {
+        console.error(`Error: Unknown command "${command}".`);
+        printHelp();
         process.exit(1);
       }
-
-      // Parse options
-      let filesNeeded: string[] = [];
-      let useMock = false;
-      let yesFlag = false;
-      let noReview = false;
-      let keepFailed = false;
-      let providerOverride: string | undefined;
-      let modelOverride: string | undefined;
-      let temperatureOverride: number | undefined;
-      let maxOutputTokensOverride: number | undefined;
-      let dryRun = false;
-
-      const remainingArgs = args.slice(2);
-      for (let i = 0; i < remainingArgs.length; i++) {
-        const arg = remainingArgs[i];
-        if (arg === '-f' || arg === '--files') {
-          const fileVal = remainingArgs[i + 1];
-          if (fileVal && !fileVal.startsWith('-')) {
-            filesNeeded = fileVal.split(',').map(s => s.trim()).filter(Boolean);
-            i++;
-          }
-        } else if (arg === '-m' || arg === '--mock') {
-          useMock = true;
-        } else if (arg === '--yes') {
-          yesFlag = true;
-        } else if (arg === '--no-review') {
-          noReview = true;
-        } else if (arg === '--keep-failed') {
-          keepFailed = true;
-        } else if (arg === '--provider') {
-          const val = remainingArgs[i + 1];
-          if (val && !val.startsWith('-')) {
-            providerOverride = val;
-            i++;
-          }
-        } else if (arg === '--model') {
-          const val = remainingArgs[i + 1];
-          if (val && !val.startsWith('-')) {
-            modelOverride = val;
-            i++;
-          }
-        } else if (arg === '--temperature') {
-          const val = remainingArgs[i + 1];
-          if (val && !val.startsWith('-')) {
-            temperatureOverride = parseFloat(val);
-            i++;
-          }
-        } else if (arg === '--max-output-tokens') {
-          const val = remainingArgs[i + 1];
-          if (val && !val.startsWith('-')) {
-            maxOutputTokensOverride = parseInt(val, 10);
-            i++;
-          }
-        } else if (arg === '--dry-run') {
-          dryRun = true;
-        }
-      }
-
-      const overrides = {
-        provider: providerOverride,
-        model: modelOverride,
-        temperature: temperatureOverride,
-        maxOutputTokens: maxOutputTokensOverride
-      };
-
-      await runTask(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun);
-      break;
     }
-
-    default: {
-      console.error(`Error: Unknown command "${command}".`);
-      printHelp();
-      process.exit(1);
-    }
+  } catch (err: any) {
+    const jewelErr = toJewelError(err);
+    console.error(`\n======================================`);
+    console.error(`Status: ${jewelErr.status}`);
+    console.error(`Error: ${jewelErr.message}`);
+    console.error(`Next Action: ${jewelErr.nextAction}`);
+    console.error(`======================================\n`);
+    process.exit(1);
   }
 }
 

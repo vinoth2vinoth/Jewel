@@ -789,3 +789,58 @@ test('run command - dry-run does not write files, create checkpoints, or call pr
   }
 });
 
+test('run command - provider none metadata is correct in report', async () => {
+  const tempDir = createTempWorkspace();
+  const originalExit = process.exit;
+  
+  let exitCode: number | null = null;
+  process.exit = ((code?: number) => {
+    exitCode = code !== undefined ? code : 0;
+    throw new Error(`exit-${exitCode}`);
+  }) as any;
+
+  fs.writeFileSync(
+    path.join(tempDir, 'jewel.config.json'),
+    JSON.stringify({
+      projectName: 'test-project',
+      mode: 'strict',
+      provider: 'none',
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      maxOutputTokens: 4000,
+      llmTimeoutMs: 60000,
+      llmMaxRetries: 1,
+      llmStrictJson: true,
+      commands: {
+        test: 'npm run test'
+      },
+      requireHumanDiffApproval: false,
+      requireVerificationBeforeDone: false
+    }, null, 2),
+    'utf8'
+  );
+
+  try {
+    try {
+      await runTask('mock task', ['math.js'], true, tempDir, true, true, true);
+    } catch (err: any) {
+      if (!err.message.includes('exit-0')) {
+        throw err;
+      }
+    }
+
+    assert.strictEqual(exitCode, 0);
+    const reportPath = path.join(tempDir, '.jewel', 'reports', 'latest-run.json');
+    assert.ok(fs.existsSync(reportPath));
+    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+
+    assert.strictEqual(report.provider, 'none');
+    assert.strictEqual(report.model, 'mock');
+    assert.strictEqual(report.adapterName, 'mock-agent');
+    assert.strictEqual(report.usage, 'usage unavailable (mock)');
+  } finally {
+    process.exit = originalExit;
+    cleanupWorkspace(tempDir);
+  }
+});
+

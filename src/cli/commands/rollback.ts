@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { rollbackCheckpoint, CheckpointMetadata } from '../../storage/git';
+import { JewelError, toJewelError } from '../errors';
 
 export function runRollback(
   targetSessionId?: string,
@@ -9,12 +10,12 @@ export function runRollback(
   dryRun: boolean = false,
   force: boolean = false
 ): void {
-  console.log('Initiating Jewel Rollback...');
+  try {
+    console.log('Initiating Jewel Rollback...');
 
   const sessionsDir = path.join(cwd, '.jewel', 'sessions');
   if (!fs.existsSync(sessionsDir)) {
-    console.error('Error: No sessions folder found. Cannot rollback.');
-    process.exit(1);
+    throw new JewelError('ROLLBACK_FAILED', 'No sessions folder found. Cannot rollback.', 'Run Jewel run to create a session first.');
   }
 
   let sessionId = targetSessionId;
@@ -25,8 +26,7 @@ export function runRollback(
       .sort((a, b) => b.localeCompare(a));
 
     if (sessions.length === 0) {
-      console.error('Error: No Jewel sessions found to roll back.');
-      process.exit(1);
+      throw new JewelError('ROLLBACK_FAILED', 'No Jewel sessions found to roll back.', 'Run Jewel run to create a session first.');
     }
     sessionId = sessions[0];
   }
@@ -35,12 +35,10 @@ export function runRollback(
   const checkpointPath = path.join(sessionPath, 'checkpoint.json');
 
   if (!fs.existsSync(checkpointPath)) {
-    console.error(`Error: Checkpoint metadata not found for session ${sessionId}.`);
-    process.exit(1);
+    throw new JewelError('ROLLBACK_FAILED', `Checkpoint metadata not found for session ${sessionId}.`, 'Check the session ID or look inside the .jewel/sessions/ directory.');
   }
 
-  try {
-    const metadata: CheckpointMetadata = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+  const metadata: CheckpointMetadata = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
     console.log(`[+] Found checkpoint metadata for session: ${sessionId}`);
     console.log(`    Strategy: ${metadata.isGit ? 'Git branch reset' : 'Directory copy'}`);
     if (metadata.isGit) {
@@ -92,7 +90,11 @@ export function runRollback(
       console.warn(`     git reset --hard ${metadata.gitCheckpointSha}\n`);
 
       if (!force) {
-        process.exit(1);
+        throw new JewelError(
+          'ROLLBACK_REFUSED_DUE_TO_NEW_COMMITS',
+          `New commits were detected since the Jewel checkpoint for session ${sessionId}.`,
+          `Run 'jewel rollback ${sessionId} --force' to force the rollback and discard new commits, or resolve the differences manually.`
+        );
       }
       console.log(`[+] --force specified. Proceeding with rollback despite new commits...`);
     }
@@ -154,7 +156,15 @@ export function runRollback(
 
     console.log(`\n[+] Rollback completed successfully. Project returned to pre-run state.`);
   } catch (err: any) {
-    console.error(`\n[-] Rollback failed: ${err.message}`);
+    if (err && err.message && err.message.startsWith('exit-')) {
+      throw err;
+    }
+    const jewelErr = toJewelError(err);
+    console.error(`\n======================================`);
+    console.error(`Status: ${jewelErr.status}`);
+    console.error(`Error: ${jewelErr.message}`);
+    console.error(`Next Action: ${jewelErr.nextAction}`);
+    console.error(`======================================\n`);
     process.exit(1);
   }
 }

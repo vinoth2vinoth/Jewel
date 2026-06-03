@@ -1,0 +1,47 @@
+name: Jewel CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [18.x, 20.x]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build codebase
+      run: npm run build
+
+    - name: Run unit & integration tests
+      # Real LLM tests remain disabled by default (JEWEL_RUN_REAL_LLM_TESTS is not set).
+      # To run real API connection checks manually, set JEWEL_RUN_REAL_LLM_TESTS=true
+      # and ensure respective environment variable keys (e.g. OPENAI_API_KEY) are supplied.
+      run: npm test
+
+    - name: Verify CLI Help works
+      run: node dist/cli/index.js --help
+
+    - name: Verify CLI Version works
+      run: node dist/cli/index.js version
+
+    - name: Dry run packaging
+      run: npm pack --dry-run

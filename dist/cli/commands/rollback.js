@@ -38,31 +38,29 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const git_1 = require("../../storage/git");
+const errors_1 = require("../errors");
 function runRollback(targetSessionId, cwd = process.cwd(), dryRun = false, force = false) {
-    console.log('Initiating Jewel Rollback...');
-    const sessionsDir = path.join(cwd, '.jewel', 'sessions');
-    if (!fs.existsSync(sessionsDir)) {
-        console.error('Error: No sessions folder found. Cannot rollback.');
-        process.exit(1);
-    }
-    let sessionId = targetSessionId;
-    if (!sessionId) {
-        const sessions = fs.readdirSync(sessionsDir)
-            .filter(f => f.startsWith('session-'))
-            .sort((a, b) => b.localeCompare(a));
-        if (sessions.length === 0) {
-            console.error('Error: No Jewel sessions found to roll back.');
-            process.exit(1);
-        }
-        sessionId = sessions[0];
-    }
-    const sessionPath = path.join(sessionsDir, sessionId);
-    const checkpointPath = path.join(sessionPath, 'checkpoint.json');
-    if (!fs.existsSync(checkpointPath)) {
-        console.error(`Error: Checkpoint metadata not found for session ${sessionId}.`);
-        process.exit(1);
-    }
     try {
+        console.log('Initiating Jewel Rollback...');
+        const sessionsDir = path.join(cwd, '.jewel', 'sessions');
+        if (!fs.existsSync(sessionsDir)) {
+            throw new errors_1.JewelError('ROLLBACK_FAILED', 'No sessions folder found. Cannot rollback.', 'Run Jewel run to create a session first.');
+        }
+        let sessionId = targetSessionId;
+        if (!sessionId) {
+            const sessions = fs.readdirSync(sessionsDir)
+                .filter(f => f.startsWith('session-'))
+                .sort((a, b) => b.localeCompare(a));
+            if (sessions.length === 0) {
+                throw new errors_1.JewelError('ROLLBACK_FAILED', 'No Jewel sessions found to roll back.', 'Run Jewel run to create a session first.');
+            }
+            sessionId = sessions[0];
+        }
+        const sessionPath = path.join(sessionsDir, sessionId);
+        const checkpointPath = path.join(sessionPath, 'checkpoint.json');
+        if (!fs.existsSync(checkpointPath)) {
+            throw new errors_1.JewelError('ROLLBACK_FAILED', `Checkpoint metadata not found for session ${sessionId}.`, 'Check the session ID or look inside the .jewel/sessions/ directory.');
+        }
         const metadata = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
         console.log(`[+] Found checkpoint metadata for session: ${sessionId}`);
         console.log(`    Strategy: ${metadata.isGit ? 'Git branch reset' : 'Directory copy'}`);
@@ -114,7 +112,7 @@ function runRollback(targetSessionId, cwd = process.cwd(), dryRun = false, force
             console.warn(`  3. Or reset manually using standard git commands:`);
             console.warn(`     git reset --hard ${metadata.gitCheckpointSha}\n`);
             if (!force) {
-                process.exit(1);
+                throw new errors_1.JewelError('ROLLBACK_REFUSED_DUE_TO_NEW_COMMITS', `New commits were detected since the Jewel checkpoint for session ${sessionId}.`, `Run 'jewel rollback ${sessionId} --force' to force the rollback and discard new commits, or resolve the differences manually.`);
             }
             console.log(`[+] --force specified. Proceeding with rollback despite new commits...`);
         }
@@ -167,7 +165,15 @@ function runRollback(targetSessionId, cwd = process.cwd(), dryRun = false, force
         console.log(`\n[+] Rollback completed successfully. Project returned to pre-run state.`);
     }
     catch (err) {
-        console.error(`\n[-] Rollback failed: ${err.message}`);
+        if (err && err.message && err.message.startsWith('exit-')) {
+            throw err;
+        }
+        const jewelErr = (0, errors_1.toJewelError)(err);
+        console.error(`\n======================================`);
+        console.error(`Status: ${jewelErr.status}`);
+        console.error(`Error: ${jewelErr.message}`);
+        console.error(`Next Action: ${jewelErr.nextAction}`);
+        console.error(`======================================\n`);
         process.exit(1);
     }
 }

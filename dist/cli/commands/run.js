@@ -49,6 +49,7 @@ const provider_factory_1 = require("../../agents/provider-factory");
 const safe_patch_writer_1 = require("../../safety/safe-patch-writer");
 const json_response_1 = require("../../agents/json-response");
 const secret_redactor_1 = require("../../safety/secret-redactor");
+const errors_1 = require("../errors");
 function askQuestion(query) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -85,260 +86,360 @@ function generateRepoSummary(cwd) {
     return `Project Structure:\n${files.map(f => `- ${f}`).join('\n')}`;
 }
 async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false) {
-    if (!task || task.trim() === '') {
-        console.error('Error: Task description cannot be empty.');
-        process.exit(1);
-    }
-    console.log(`Starting Jewel Harness for task: "${task}"`);
-    let reviewRequired = false;
-    let approved = true;
-    // 1. Load config & skills
-    let config;
     try {
-        config = (0, config_1.loadConfig)(cwd);
-    }
-    catch (err) {
-        console.error('Error:', err.message);
-        process.exit(1);
-    }
-    if (cliOverrides) {
-        if (cliOverrides.provider !== undefined) {
-            if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(cliOverrides.provider)) {
-                console.error('Error: Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".');
-                process.exit(1);
+        if (!task || task.trim() === '') {
+            throw new errors_1.JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
+        }
+        console.log(`Starting Jewel Harness for task: "${task}"`);
+        let reviewRequired = false;
+        let approved = true;
+        // 1. Load config & skills
+        let config;
+        try {
+            config = (0, config_1.loadConfig)(cwd);
+        }
+        catch (err) {
+            throw new errors_1.JewelError('CONFIG_ERROR', `Failed to load configuration: ${err.message}`, 'Check jewel.config.json formatting and paths.', err);
+        }
+        if (cliOverrides) {
+            if (cliOverrides.provider !== undefined) {
+                if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(cliOverrides.provider)) {
+                    throw new errors_1.JewelError('INVALID_INPUT', 'Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".', 'Provide a valid provider name.');
+                }
+                config.provider = cliOverrides.provider;
             }
-            config.provider = cliOverrides.provider;
-        }
-        if (cliOverrides.model !== undefined) {
-            config.model = cliOverrides.model;
-        }
-        if (cliOverrides.temperature !== undefined) {
-            config.temperature = cliOverrides.temperature;
-        }
-        if (cliOverrides.maxOutputTokens !== undefined) {
-            config.maxOutputTokens = cliOverrides.maxOutputTokens;
-        }
-    }
-    if (dryRun) {
-        const contract = (0, session_1.generateLocalContract)(task, config, filesNeeded);
-        console.log('\n======================================');
-        console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
-        console.log('======================================');
-        console.log(`Task: "${task}"`);
-        console.log(`Provider: ${config.provider}`);
-        console.log(`Model: ${config.model || 'N/A'}`);
-        console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
-        console.log(`Risk Level: ${contract.riskLevel}`);
-        console.log('Success Criteria:');
-        contract.successCriteria.forEach((c) => console.log(`  - ${c}`));
-        console.log('\n[Dry-Run] No checkpoints will be created, no LLM provider will be called, and no files will be written or verified.');
-        console.log('======================================\n');
-        process.exit(0);
-    }
-    const skills = (0, loader_1.loadSkills)(cwd);
-    console.log(`[+] Loaded ${skills.length} skills from .jewel/skills`);
-    const agentsMd = path.join(cwd, 'AGENTS.md');
-    if (fs.existsSync(agentsMd)) {
-        console.log('[+] Detected AGENTS.md rules file.');
-    }
-    // Determine if we are running an agent or manual human edits
-    const isAgentMode = useMock || config.provider !== 'none';
-    // 2. Initialize Session & Task Contract
-    const { sessionId, sessionPath, contractPath } = (0, session_1.createSession)(task, config, filesNeeded, cwd);
-    let adapter = null;
-    if (isAgentMode) {
-        const adapterConfig = useMock ? { ...config, provider: 'none' } : config;
-        try {
-            adapter = (0, provider_factory_1.createAgentAdapter)(adapterConfig);
-        }
-        catch (err) {
-            console.error(`[-] Error instantiating agent adapter: ${err.message}`);
-            process.exit(1);
-        }
-        console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
-        const repoSummary = generateRepoSummary(cwd);
-        let contractFromAdapter;
-        try {
-            contractFromAdapter = await adapter.plan({
-                task,
-                repoSummary,
-                config,
-                skills,
-                sessionPath,
-                filesNeeded
-            });
-        }
-        catch (err) {
-            console.error(`[-] Adapter planning failed: ${err.message}`);
-            writeRunReport(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
-            process.exit(1);
-        }
-        try {
-            (0, json_response_1.validateTaskContractJson)(contractFromAdapter);
-        }
-        catch (err) {
-            console.error(`[-] Task contract validation failed: ${err.message}`);
-            writeRunReport(cwd, sessionPath, sessionId, task, 'BLOCKED', config, adapter, { error: `Task contract validation failed: ${err.message}` });
-            process.exit(1);
-        }
-        fs.writeFileSync(contractPath, JSON.stringify(contractFromAdapter, null, 2), 'utf8');
-    }
-    const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-    console.log(`\n--- Enforced Task Contract (Session: ${sessionId}) ---`);
-    console.log(`Task: ${contract.task}`);
-    console.log(`Risk Level: ${contract.riskLevel}`);
-    console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
-    console.log('Success Criteria:');
-    contract.successCriteria.forEach(c => console.log(`  - ${c}`));
-    // 3. Create Checkpoint
-    console.log('\nCreating checkpoint...');
-    const checkpoint = (0, git_1.createCheckpoint)(sessionId, cwd);
-    fs.writeFileSync(path.join(sessionPath, 'checkpoint.json'), JSON.stringify(checkpoint, null, 2), 'utf8');
-    console.log(`[+] Checkpoint created. strategy: ${checkpoint.isGit ? 'Git commit' : 'Backup copy'}`);
-    // 4. Apply changes (LLM adapter or User edit)
-    let changedFilesCount = 0;
-    let patchBlocked = false;
-    let noChangeNeeded = false;
-    let blockReasons = [];
-    let noChangeReason = '';
-    if (isAgentMode) {
-        console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
-        let repoContext = '';
-        for (const filePath of contract.filesLikelyNeeded) {
-            const fullPath = path.resolve(cwd, filePath);
-            if (fs.existsSync(fullPath)) {
-                const content = fs.readFileSync(fullPath, 'utf8');
-                repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
+            if (cliOverrides.model !== undefined) {
+                config.model = cliOverrides.model;
             }
-            else {
-                repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
+            if (cliOverrides.temperature !== undefined) {
+                config.temperature = cliOverrides.temperature;
+            }
+            if (cliOverrides.maxOutputTokens !== undefined) {
+                config.maxOutputTokens = cliOverrides.maxOutputTokens;
             }
         }
-        let patch;
-        try {
-            patch = await adapter.proposePatch({
-                taskContract: contract,
-                allowedFiles: contract.filesLikelyNeeded,
-                repoContext,
-                verificationResult: null,
-                config,
-                sessionPath
-            });
+        if (dryRun) {
+            const contract = (0, session_1.generateLocalContract)(task, config, filesNeeded);
+            console.log('\n======================================');
+            console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
+            console.log('======================================');
+            console.log(`Task: "${task}"`);
+            console.log(`Provider: ${config.provider}`);
+            console.log(`Model: ${config.model || 'N/A'}`);
+            console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
+            console.log(`Risk Level: ${contract.riskLevel}`);
+            console.log('Success Criteria:');
+            contract.successCriteria.forEach((c) => console.log(`  - ${c}`));
+            console.log('\n[Dry-Run] No checkpoints will be created, no LLM provider will be called, and no files will be written or verified.');
+            console.log('======================================\n');
+            process.exit(0);
         }
-        catch (err) {
-            console.error(`[-] Patch proposal failed: ${err.message}`);
-            patchBlocked = true;
-            blockReasons = [`Patch proposal failed: ${err.message}`];
-            patch = { summary: '', files: [], notes: [], riskLevel: contract.riskLevel };
+        const skills = (0, loader_1.loadSkills)(cwd);
+        console.log(`[+] Loaded ${skills.length} skills from .jewel/skills`);
+        const agentsMd = path.join(cwd, 'AGENTS.md');
+        if (fs.existsSync(agentsMd)) {
+            console.log('[+] Detected AGENTS.md rules file.');
         }
-        if (!patchBlocked) {
+        // Determine if we are running an agent or manual human edits
+        const isAgentMode = useMock || config.provider !== 'none';
+        // 2. Initialize Session & Task Contract
+        const { sessionId, sessionPath, contractPath } = (0, session_1.createSession)(task, config, filesNeeded, cwd);
+        let adapter = null;
+        if (isAgentMode) {
+            const adapterConfig = useMock ? { ...config, provider: 'none' } : config;
             try {
-                (0, json_response_1.validatePatchProposalJson)(patch);
+                adapter = (0, provider_factory_1.createAgentAdapter)(adapterConfig);
             }
             catch (err) {
-                patchBlocked = true;
-                blockReasons = [`Patch proposal validation failed: ${err.message}`];
+                throw new errors_1.JewelError('ADAPTER_INSTANTIATION_FAILED', `Error instantiating agent adapter: ${err.message}`, 'Verify provider settings and environment.', err);
             }
+            console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
+            const repoSummary = generateRepoSummary(cwd);
+            let contractFromAdapter;
+            try {
+                contractFromAdapter = await adapter.plan({
+                    task,
+                    repoSummary,
+                    config,
+                    skills,
+                    sessionPath,
+                    filesNeeded
+                });
+            }
+            catch (err) {
+                writeRunReport(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
+                throw (0, errors_1.toJewelError)(err);
+            }
+            try {
+                (0, json_response_1.validateTaskContractJson)(contractFromAdapter);
+            }
+            catch (err) {
+                writeRunReport(cwd, sessionPath, sessionId, task, 'BLOCKED', config, adapter, { error: `Task contract validation failed: ${err.message}` });
+                throw new errors_1.JewelError('SCHEMA_VALIDATION_FAILURE', `Task contract validation failed: ${err.message}`, 'Retry the task or check model temperature/prompt settings.', err);
+            }
+            fs.writeFileSync(contractPath, JSON.stringify(contractFromAdapter, null, 2), 'utf8');
         }
-        if (!patchBlocked) {
-            if (patch.noChangeNeeded === true) {
-                noChangeNeeded = true;
-                noChangeReason = patch.noChangeReason || 'No changes needed indicated by LLM.';
-                console.log(`\n[Adapter] Adapter indicated no changes are needed. Reason: "${noChangeReason}"`);
-            }
-        }
-        if (!patchBlocked && !noChangeNeeded) {
-            const patchResult = (0, safe_patch_writer_1.applyPatchProposalSafely)(patch, contract, config, cwd, sessionPath);
-            if (!patchResult.success) {
-                patchBlocked = true;
-                blockReasons = patchResult.blockedFiles.map(b => `${b.filePath}: ${b.reason}`);
-                fs.writeFileSync(path.join(sessionPath, 'blocked-patch-proposal.json'), (0, secret_redactor_1.redactSecrets)(JSON.stringify(patch, null, 2)), 'utf8');
-            }
-            else {
-                for (const filePath of patchResult.appliedFiles) {
-                    console.log(`  [+] Applied patch to: ${filePath}`);
+        const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+        console.log(`\n--- Enforced Task Contract (Session: ${sessionId}) ---`);
+        console.log(`Task: ${contract.task}`);
+        console.log(`Risk Level: ${contract.riskLevel}`);
+        console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
+        console.log('Success Criteria:');
+        contract.successCriteria.forEach(c => console.log(`  - ${c}`));
+        // 3. Create Checkpoint
+        console.log('\nCreating checkpoint...');
+        const checkpoint = (0, git_1.createCheckpoint)(sessionId, cwd);
+        fs.writeFileSync(path.join(sessionPath, 'checkpoint.json'), JSON.stringify(checkpoint, null, 2), 'utf8');
+        console.log(`[+] Checkpoint created. strategy: ${checkpoint.isGit ? 'Git commit' : 'Backup copy'}`);
+        // 4. Apply changes (LLM adapter or User edit)
+        let changedFilesCount = 0;
+        let patchBlocked = false;
+        let noChangeNeeded = false;
+        let blockReasons = [];
+        let noChangeReason = '';
+        if (isAgentMode) {
+            console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
+            let repoContext = '';
+            for (const filePath of contract.filesLikelyNeeded) {
+                const fullPath = path.resolve(cwd, filePath);
+                if (fs.existsSync(fullPath)) {
+                    const content = fs.readFileSync(fullPath, 'utf8');
+                    repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
                 }
-                changedFilesCount = patchResult.appliedFiles.length;
-            }
-        }
-        if (patchBlocked) {
-            console.error(`\n[-] PATCH BLOCKED BY SAFE PATCH WRITER OR VALIDATOR:\n${blockReasons.map(r => `  - ${r}`).join('\n')}`);
-        }
-    }
-    else {
-        console.log('\n>>> Jewel is now in SAFE SLEEP mode.');
-        console.log('>>> Please make your edits in the workspace.');
-        console.log('>>> When you are done editing, return here.');
-        await askQuestion('\nPress [ENTER] to verify and finalize your changes...');
-    }
-    // HUMAN DIFF APPROVAL loop
-    if (!patchBlocked && !noChangeNeeded) {
-        const diffAnalysisForReview = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd);
-        approved = true;
-        reviewRequired = config.requireHumanDiffApproval;
-        if (noReview) {
-            if (config.requireHumanDiffApproval) {
-                console.log('[!] --no-review is ignored because requireHumanDiffApproval is enabled in configuration.');
-            }
-            else {
-                reviewRequired = false;
-            }
-        }
-        if (yesFlag) {
-            reviewRequired = false;
-        }
-        if (reviewRequired) {
-            console.log('\n======================================');
-            console.log('   PROPOSED PATCH DIFF PREVIEW        ');
-            console.log('======================================');
-            console.log(`Changed Files (${diffAnalysisForReview.changedFiles.length}):`);
-            for (const file of diffAnalysisForReview.changedFiles) {
-                console.log(`  - ${file}`);
-            }
-            console.log(`Total Added Lines: ${diffAnalysisForReview.addedLinesCount}`);
-            console.log(`Total Removed Lines: ${diffAnalysisForReview.removedLinesCount}`);
-            if (diffAnalysisForReview.protectedFilesChanged.length > 0) {
-                console.warn(`\n[WARNING] Protected files modified:`);
-                for (const file of diffAnalysisForReview.protectedFilesChanged) {
-                    console.warn(`  ! ${file}`);
+                else {
+                    repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
                 }
             }
-            console.log('\nGit Diff Preview:');
-            if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+            let patch;
+            try {
+                patch = await adapter.proposePatch({
+                    taskContract: contract,
+                    allowedFiles: contract.filesLikelyNeeded,
+                    repoContext,
+                    verificationResult: null,
+                    config,
+                    sessionPath
+                });
+            }
+            catch (err) {
+                console.error(`[-] Patch proposal failed: ${err.message}`);
+                patchBlocked = true;
+                blockReasons = [`Patch proposal failed: ${err.message}`];
+                patch = { summary: '', files: [], notes: [], riskLevel: contract.riskLevel };
+            }
+            if (!patchBlocked) {
                 try {
-                    (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, {
-                        cwd,
-                        stdio: 'inherit',
-                        env: { ...process.env, PAGER: 'cat' }
-                    });
+                    (0, json_response_1.validatePatchProposalJson)(patch);
                 }
                 catch (err) {
-                    console.log(`(Failed to print git diff: ${err.message})`);
+                    patchBlocked = true;
+                    blockReasons = [`Patch proposal validation failed: ${err.message}`];
                 }
             }
-            else {
-                console.log('(Git diff preview is not available in non-Git backup mode)');
+            if (!patchBlocked) {
+                if (patch.noChangeNeeded === true) {
+                    noChangeNeeded = true;
+                    noChangeReason = patch.noChangeReason || 'No changes needed indicated by LLM.';
+                    console.log(`\n[Adapter] Adapter indicated no changes are needed. Reason: "${noChangeReason}"`);
+                }
             }
-            console.log('======================================\n');
-            const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
-            if (response.toLowerCase().trim() !== 'y') {
-                approved = false;
+            if (!patchBlocked && !noChangeNeeded) {
+                const patchResult = (0, safe_patch_writer_1.applyPatchProposalSafely)(patch, contract, config, cwd, sessionPath);
+                if (!patchResult.success) {
+                    patchBlocked = true;
+                    blockReasons = patchResult.blockedFiles.map(b => `${b.filePath}: ${b.reason}`);
+                    fs.writeFileSync(path.join(sessionPath, 'blocked-patch-proposal.json'), (0, secret_redactor_1.redactSecrets)(JSON.stringify(patch, null, 2)), 'utf8');
+                }
+                else {
+                    for (const filePath of patchResult.appliedFiles) {
+                        console.log(`  [+] Applied patch to: ${filePath}`);
+                    }
+                    changedFilesCount = patchResult.appliedFiles.length;
+                }
+            }
+            if (patchBlocked) {
+                console.error(`\n[-] PATCH BLOCKED BY SAFE PATCH WRITER OR VALIDATOR:\n${blockReasons.map(r => `  - ${r}`).join('\n')}`);
             }
         }
-        if (!approved) {
-            console.error('\n[-] Patch proposal rejected by human reviewer.');
-            const reportStatus = 'REJECTED';
-            writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
-                diffAnalysis: diffAnalysisForReview,
-                reviewRequired,
-                approved,
-                keepFailed
-            });
+        else {
+            console.log('\n>>> Jewel is now in SAFE SLEEP mode.');
+            console.log('>>> Please make your edits in the workspace.');
+            console.log('>>> When you are done editing, return here.');
+            await askQuestion('\nPress [ENTER] to verify and finalize your changes...');
+        }
+        // HUMAN DIFF APPROVAL loop
+        if (!patchBlocked && !noChangeNeeded) {
+            const diffAnalysisForReview = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd);
+            approved = true;
+            reviewRequired = config.requireHumanDiffApproval;
+            if (noReview) {
+                if (config.requireHumanDiffApproval) {
+                    console.log('[!] --no-review is ignored because requireHumanDiffApproval is enabled in configuration.');
+                }
+                else {
+                    reviewRequired = false;
+                }
+            }
+            if (yesFlag) {
+                reviewRequired = false;
+            }
+            if (reviewRequired) {
+                console.log('\n======================================');
+                console.log('   PROPOSED PATCH DIFF PREVIEW        ');
+                console.log('======================================');
+                console.log(`Changed Files (${diffAnalysisForReview.changedFiles.length}):`);
+                for (const file of diffAnalysisForReview.changedFiles) {
+                    console.log(`  - ${file}`);
+                }
+                console.log(`Total Added Lines: ${diffAnalysisForReview.addedLinesCount}`);
+                console.log(`Total Removed Lines: ${diffAnalysisForReview.removedLinesCount}`);
+                if (diffAnalysisForReview.protectedFilesChanged.length > 0) {
+                    console.warn(`\n[WARNING] Protected files modified:`);
+                    for (const file of diffAnalysisForReview.protectedFilesChanged) {
+                        console.warn(`  ! ${file}`);
+                    }
+                }
+                console.log('\nGit Diff Preview:');
+                if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+                    try {
+                        (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, {
+                            cwd,
+                            stdio: 'inherit',
+                            env: { ...process.env, PAGER: 'cat' }
+                        });
+                    }
+                    catch (err) {
+                        console.log(`(Failed to print git diff: ${err.message})`);
+                    }
+                }
+                else {
+                    console.log('(Git diff preview is not available in non-Git backup mode)');
+                }
+                console.log('======================================\n');
+                const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
+                if (response.toLowerCase().trim() !== 'y') {
+                    approved = false;
+                }
+            }
+            if (!approved) {
+                console.error('\n[-] Patch proposal rejected by human reviewer.');
+                const reportStatus = 'REJECTED';
+                writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
+                    diffAnalysis: diffAnalysisForReview,
+                    reviewRequired,
+                    approved,
+                    keepFailed
+                });
+                let rolledBack = false;
+                if (!keepFailed) {
+                    console.log('Rolling back changes to restore original state...');
+                    try {
+                        (0, git_1.rollbackCheckpoint)(checkpoint, cwd);
+                        console.log('[+] Rollback completed.');
+                        rolledBack = true;
+                    }
+                    catch (err) {
+                        console.error(`[-] Rollback failed: ${err.message}`);
+                    }
+                }
+                else {
+                    console.log('[+] --keep-failed was specified. Changes kept in workspace.');
+                }
+                if (rolledBack) {
+                    throw new errors_1.JewelError('ROLLBACK_COMPLETED', 'Patch proposal rejected by human reviewer and changes rolled back successfully.', 'Refine your task description or modify the source code to guide the LLM to the desired state.');
+                }
+                else {
+                    throw new errors_1.JewelError('HUMAN_REVIEW_REJECTED', 'Patch proposal rejected by human reviewer.', 'Refine your task description or modify the source code to guide the LLM to the desired state.');
+                }
+            }
+        }
+        // 5. Verify & Retries loop
+        let retries = 0;
+        const maxRetries = config.maxRetries;
+        let verification = null;
+        let diffAnalysis = null;
+        let critic = null;
+        let passedAll = false;
+        if (!patchBlocked && !noChangeNeeded) {
+            while (retries <= maxRetries) {
+                if (retries > 0) {
+                    console.log(`\n[Retry ${retries}/${maxRetries}] Retrying verification checks...`);
+                }
+                // A. Inspect changes via Diff Guard
+                diffAnalysis = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd);
+                console.log(`\n--- Diff Guard Summary (Status: ${diffAnalysis.status}) ---`);
+                console.log(`Changed files: ${diffAnalysis.changedFilesCount}`);
+                console.log(`Lines added: ${diffAnalysis.addedLinesCount}, removed: ${diffAnalysis.removedLinesCount}`);
+                if (diffAnalysis.findings.length > 0) {
+                    console.log('Findings:');
+                    diffAnalysis.findings.forEach(f => console.log(`  - ${f}`));
+                }
+                // B. Run verification commands
+                console.log('\nRunning verification tests...');
+                verification = (0, runner_1.runVerification)(config, cwd);
+                console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
+                // C. Run Critic Review
+                critic = (0, critic_1.runCriticReview)(contract, diffAnalysis, verification, config);
+                console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
+                if (critic.findings.length > 0) {
+                    console.log('Findings:');
+                    critic.findings.forEach(f => console.log(`  - ${f}`));
+                }
+                if (critic.requiredActions.length > 0) {
+                    console.log('Required Actions:');
+                    critic.requiredActions.forEach(a => console.log(`  - ${a}`));
+                }
+                if (critic.status === 'PASS') {
+                    passedAll = true;
+                    break;
+                }
+                // If verification/critic failed, allow interactive fix or automatic failure
+                if (useMock) {
+                    console.log('Mock mode: Failures detected. Bypassing interactive retry.');
+                    break;
+                }
+                else {
+                    console.log('\n[!] Checks failed. Please fix the problems in your code.');
+                    console.log(`Remaining retries: ${maxRetries - retries}`);
+                    const answer = await askQuestion('Would you like to re-run verification now? (y/n): ');
+                    if (answer.toLowerCase().trim() !== 'y') {
+                        break;
+                    }
+                    retries++;
+                }
+            }
+        }
+        // 6. Finalize (Success or Rollback)
+        const reportStatus = patchBlocked
+            ? 'BLOCKED'
+            : (noChangeNeeded
+                ? 'NO_CHANGES_DETECTED'
+                : (passedAll ? 'PASS' : (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK' ? 'BLOCKED' : 'FAIL')));
+        writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
+            noChangeNeeded,
+            noChangeReason,
+            patchBlocked,
+            blockReasons,
+            diffAnalysis,
+            verification,
+            critic,
+            reviewRequired,
+            approved,
+            keepFailed
+        });
+        if (passedAll || (noChangeNeeded && !patchBlocked)) {
+            console.log(`\n[+] Success! Task verified and finalized. Report written to .jewel/reports/latest-run.md`);
+            process.exit(0);
+        }
+        else {
+            console.error(`\n[-] Safety or verification check failed. Status: ${reportStatus}`);
+            let rolledBack = false;
             if (!keepFailed) {
                 console.log('Rolling back changes to restore original state...');
                 try {
                     (0, git_1.rollbackCheckpoint)(checkpoint, cwd);
-                    console.log('[+] Rollback completed.');
+                    console.log('[+] Rollback completed. Working files restored safely.');
+                    rolledBack = true;
                 }
                 catch (err) {
                     console.error(`[-] Rollback failed: ${err.message}`);
@@ -347,97 +448,39 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             else {
                 console.log('[+] --keep-failed was specified. Changes kept in workspace.');
             }
-            process.exit(1);
-        }
-    }
-    // 5. Verify & Retries loop
-    let retries = 0;
-    const maxRetries = config.maxRetries;
-    let verification = null;
-    let diffAnalysis = null;
-    let critic = null;
-    let passedAll = false;
-    if (!patchBlocked && !noChangeNeeded) {
-        while (retries <= maxRetries) {
-            if (retries > 0) {
-                console.log(`\n[Retry ${retries}/${maxRetries}] Retrying verification checks...`);
+            if (patchBlocked) {
+                const isUnsafePath = blockReasons.some(r => r.includes('policy') || r.includes('scope') || r.includes('not in allowed list') || r.includes('Unsafe patch path') || r.includes('Unsafe patch'));
+                if (isUnsafePath) {
+                    throw new errors_1.JewelError('UNSAFE_PATH_FROM_PROVIDER', `PATCH BLOCKED BY SAFE PATCH WRITER: ${blockReasons.join('; ')}`, 'The proposed patch attempted to modify files outside the allowed scope. Adjust the files list in your command (-f/--files) or verify that the model is scoped correctly.');
+                }
+                else {
+                    const hasApiKey = blockReasons.some(r => r.includes('API_KEY') || r.includes('key is missing'));
+                    if (hasApiKey) {
+                        throw new errors_1.JewelError('MISSING_API_KEY', blockReasons.join('; '), 'Set the appropriate API key environment variable (e.g. export OPENAI_API_KEY="your-key" or set it in .env) and run the command again.');
+                    }
+                    else {
+                        throw new errors_1.JewelError('SCHEMA_VALIDATION_FAILURE', `Patch proposal validation failed: ${blockReasons.join('; ')}`, 'The LLM provider response did not match the expected schema. Retry the task or check model temperature/prompt settings.');
+                    }
+                }
             }
-            // A. Inspect changes via Diff Guard
-            diffAnalysis = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd);
-            console.log(`\n--- Diff Guard Summary (Status: ${diffAnalysis.status}) ---`);
-            console.log(`Changed files: ${diffAnalysis.changedFilesCount}`);
-            console.log(`Lines added: ${diffAnalysis.addedLinesCount}, removed: ${diffAnalysis.removedLinesCount}`);
-            if (diffAnalysis.findings.length > 0) {
-                console.log('Findings:');
-                diffAnalysis.findings.forEach(f => console.log(`  - ${f}`));
-            }
-            // B. Run verification commands
-            console.log('\nRunning verification tests...');
-            verification = (0, runner_1.runVerification)(config, cwd);
-            console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
-            // C. Run Critic Review
-            critic = (0, critic_1.runCriticReview)(contract, diffAnalysis, verification, config);
-            console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
-            if (critic.findings.length > 0) {
-                console.log('Findings:');
-                critic.findings.forEach(f => console.log(`  - ${f}`));
-            }
-            if (critic.requiredActions.length > 0) {
-                console.log('Required Actions:');
-                critic.requiredActions.forEach(a => console.log(`  - ${a}`));
-            }
-            if (critic.status === 'PASS') {
-                passedAll = true;
-                break;
-            }
-            // If verification/critic failed, allow interactive fix or automatic failure
-            if (useMock) {
-                console.log('Mock mode: Failures detected. Bypassing interactive retry.');
-                break;
+            if (rolledBack) {
+                throw new errors_1.JewelError('ROLLBACK_COMPLETED', 'Verification or safety check failed and rollback completed successfully.', 'The workspace was restored to the pre-run checkpoint. Review your changes or task instructions, adjust settings, and try again.');
             }
             else {
-                console.log('\n[!] Checks failed. Please fix the problems in your code.');
-                console.log(`Remaining retries: ${maxRetries - retries}`);
-                const answer = await askQuestion('Would you like to re-run verification now? (y/n): ');
-                if (answer.toLowerCase().trim() !== 'y') {
-                    break;
-                }
-                retries++;
+                throw new errors_1.JewelError('VERIFICATION_COMMAND_FAILED', 'Verification or safety check failed. Workspace kept as is.', 'Fix the failing tests in your code, or run the verification command manually to diagnose. You can bypass rollback using --keep-failed.');
             }
         }
     }
-    // 6. Finalize (Success or Rollback)
-    const reportStatus = patchBlocked
-        ? 'BLOCKED'
-        : (noChangeNeeded
-            ? 'NO_CHANGES_DETECTED'
-            : (passedAll ? 'PASS' : (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK' ? 'BLOCKED' : 'FAIL')));
-    writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
-        noChangeNeeded,
-        noChangeReason,
-        patchBlocked,
-        blockReasons,
-        diffAnalysis,
-        verification,
-        critic,
-        reviewRequired,
-        approved,
-        keepFailed
-    });
-    if (passedAll || (noChangeNeeded && !patchBlocked)) {
-        console.log(`\n[+] Success! Task verified and finalized. Report written to .jewel/reports/latest-run.md`);
-        process.exit(0);
-    }
-    else {
-        console.error(`\n[-] Safety or verification check failed. Status: ${reportStatus}`);
-        console.log('Rolling back changes to restore original state...');
-        try {
-            (0, git_1.rollbackCheckpoint)(checkpoint, cwd);
-            console.log('[+] Rollback completed. Working files restored safely.');
+    catch (err) {
+        if (err && err.message && err.message.startsWith('exit-')) {
+            throw err;
         }
-        catch (err) {
-            console.error(`[-] Rollback failed: ${err.message}`);
-        }
+        const jewelErr = (0, errors_1.toJewelError)(err);
+        console.error(`\n======================================`);
+        console.error(`Status: ${jewelErr.status}`);
+        console.error(`Error: ${jewelErr.message}`);
+        console.error(`Next Action: ${jewelErr.nextAction}`);
+        console.error(`======================================\n`);
         process.exit(1);
     }
 }
@@ -459,9 +502,9 @@ function getPackageVersion(cwd) {
 }
 function writeRunReport(cwd, sessionPath, sessionId, task, status, config, adapter, options) {
     const version = getPackageVersion(cwd);
-    const provider = config.provider;
-    const model = config.model || 'N/A';
-    const adapterName = adapter?.name || 'N/A';
+    const provider = config.provider || 'none';
+    const model = provider === 'none' ? 'mock' : (config.model || 'N/A');
+    const adapterName = provider === 'none' ? 'mock-agent' : (adapter?.name || 'N/A');
     const verificationCommandsRun = options.verification
         ? options.verification.results.filter((r) => r.status !== 'SKIPPED').map((r) => r.commandLine)
         : [];
@@ -480,7 +523,10 @@ function writeRunReport(cwd, sessionPath, sessionId, task, status, config, adapt
     const filesChanged = options.diffAnalysis ? options.diffAnalysis.changedFiles : [];
     const filesProposedButBlocked = options.patchBlocked ? (options.blockReasons || []) : [];
     let tokenUsage = 'usage unavailable';
-    if (adapter?.usage) {
+    if (provider === 'none') {
+        tokenUsage = 'usage unavailable (mock)';
+    }
+    else if (adapter?.usage) {
         tokenUsage = `Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}`;
     }
     const finalReport = {
@@ -499,12 +545,12 @@ function writeRunReport(cwd, sessionPath, sessionId, task, status, config, adapt
         rollbackStatus,
         filesChanged,
         filesProposedButBlocked,
-        usage: adapter?.usage ? {
+        usage: provider === 'none' ? 'usage unavailable (mock)' : (adapter?.usage ? {
             inputTokens: adapter.usage.inputTokens,
             outputTokens: adapter.usage.outputTokens,
             totalTokens: adapter.usage.totalTokens,
             estimatedCostUsd: adapter.usage.estimatedCostUsd
-        } : 'usage unavailable',
+        } : 'usage unavailable'),
         error: options.error,
         blockReasons: options.patchBlocked ? options.blockReasons : undefined,
         noChangeReason: options.noChangeNeeded ? options.noChangeReason : undefined,

@@ -13,6 +13,7 @@ import { createAgentAdapter } from '../../agents/provider-factory';
 import { applyPatchProposalSafely } from '../../safety/safe-patch-writer';
 import { validateTaskContractJson, validatePatchProposalJson } from '../../agents/json-response';
 import { redactSecrets } from '../../safety/secret-redactor';
+import { JewelError, toJewelError } from '../errors';
 
 function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
@@ -64,10 +65,10 @@ export async function runTask(
   },
   dryRun: boolean = false
 ): Promise<void> {
-  if (!task || task.trim() === '') {
-    console.error('Error: Task description cannot be empty.');
-    process.exit(1);
-  }
+  try {
+    if (!task || task.trim() === '') {
+      throw new JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
+    }
 
   console.log(`Starting Jewel Harness for task: "${task}"`);
 
@@ -79,15 +80,13 @@ export async function runTask(
   try {
     config = loadConfig(cwd);
   } catch (err: any) {
-    console.error('Error:', err.message);
-    process.exit(1);
+    throw new JewelError('CONFIG_ERROR', `Failed to load configuration: ${err.message}`, 'Check jewel.config.json formatting and paths.', err);
   }
 
   if (cliOverrides) {
     if (cliOverrides.provider !== undefined) {
       if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(cliOverrides.provider)) {
-        console.error('Error: Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".');
-        process.exit(1);
+        throw new JewelError('INVALID_INPUT', 'Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".', 'Provide a valid provider name.');
       }
       config.provider = cliOverrides.provider as any;
     }
@@ -139,8 +138,7 @@ export async function runTask(
     try {
       adapter = createAgentAdapter(adapterConfig);
     } catch (err: any) {
-      console.error(`[-] Error instantiating agent adapter: ${err.message}`);
-      process.exit(1);
+      throw new JewelError('ADAPTER_INSTANTIATION_FAILED', `Error instantiating agent adapter: ${err.message}`, 'Verify provider settings and environment.', err);
     }
 
     console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
@@ -156,17 +154,15 @@ export async function runTask(
         filesNeeded
       });
     } catch (err: any) {
-      console.error(`[-] Adapter planning failed: ${err.message}`);
       writeRunReport(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
-      process.exit(1);
+      throw toJewelError(err);
     }
 
     try {
       validateTaskContractJson(contractFromAdapter);
     } catch (err: any) {
-      console.error(`[-] Task contract validation failed: ${err.message}`);
       writeRunReport(cwd, sessionPath, sessionId, task, 'BLOCKED', config, adapter, { error: `Task contract validation failed: ${err.message}` });
-      process.exit(1);
+      throw new JewelError('SCHEMA_VALIDATION_FAILURE', `Task contract validation failed: ${err.message}`, 'Retry the task or check model temperature/prompt settings.', err);
     }
 
     fs.writeFileSync(contractPath, JSON.stringify(contractFromAdapter, null, 2), 'utf8');
@@ -338,18 +334,32 @@ export async function runTask(
         keepFailed
       });
       
+      let rolledBack = false;
       if (!keepFailed) {
         console.log('Rolling back changes to restore original state...');
         try {
           rollbackCheckpoint(checkpoint, cwd);
           console.log('[+] Rollback completed.');
+          rolledBack = true;
         } catch (err: any) {
           console.error(`[-] Rollback failed: ${err.message}`);
         }
       } else {
         console.log('[+] --keep-failed was specified. Changes kept in workspace.');
       }
-      process.exit(1);
+      if (rolledBack) {
+        throw new JewelError(
+          'ROLLBACK_COMPLETED',
+          'Patch proposal rejected by human reviewer and changes rolled back successfully.',
+          'Refine your task description or modify the source code to guide the LLM to the desired state.'
+        );
+      } else {
+        throw new JewelError(
+          'HUMAN_REVIEW_REJECTED',
+          'Patch proposal rejected by human reviewer.',
+          'Refine your task description or modify the source code to guide the LLM to the desired state.'
+        );
+      }
     }
   }
 
@@ -441,13 +451,69 @@ export async function runTask(
     process.exit(0);
   } else {
     console.error(`\n[-] Safety or verification check failed. Status: ${reportStatus}`);
-    console.log('Rolling back changes to restore original state...');
-    try {
-      rollbackCheckpoint(checkpoint, cwd);
-      console.log('[+] Rollback completed. Working files restored safely.');
-    } catch (err: any) {
-      console.error(`[-] Rollback failed: ${err.message}`);
+    let rolledBack = false;
+    if (!keepFailed) {
+      console.log('Rolling back changes to restore original state...');
+      try {
+        rollbackCheckpoint(checkpoint, cwd);
+        console.log('[+] Rollback completed. Working files restored safely.');
+        rolledBack = true;
+      } catch (err: any) {
+        console.error(`[-] Rollback failed: ${err.message}`);
+      }
+    } else {
+      console.log('[+] --keep-failed was specified. Changes kept in workspace.');
     }
+
+    if (patchBlocked) {
+      const isUnsafePath = blockReasons.some(r => r.includes('policy') || r.includes('scope') || r.includes('not in allowed list') || r.includes('Unsafe patch path') || r.includes('Unsafe patch'));
+      if (isUnsafePath) {
+        throw new JewelError(
+          'UNSAFE_PATH_FROM_PROVIDER',
+          `PATCH BLOCKED BY SAFE PATCH WRITER: ${blockReasons.join('; ')}`,
+          'The proposed patch attempted to modify files outside the allowed scope. Adjust the files list in your command (-f/--files) or verify that the model is scoped correctly.'
+        );
+      } else {
+        const hasApiKey = blockReasons.some(r => r.includes('API_KEY') || r.includes('key is missing'));
+        if (hasApiKey) {
+          throw new JewelError(
+            'MISSING_API_KEY',
+            blockReasons.join('; '),
+            'Set the appropriate API key environment variable (e.g. export OPENAI_API_KEY="your-key" or set it in .env) and run the command again.'
+          );
+        } else {
+          throw new JewelError(
+            'SCHEMA_VALIDATION_FAILURE',
+            `Patch proposal validation failed: ${blockReasons.join('; ')}`,
+            'The LLM provider response did not match the expected schema. Retry the task or check model temperature/prompt settings.'
+          );
+        }
+      }
+    }
+
+    if (rolledBack) {
+      throw new JewelError(
+        'ROLLBACK_COMPLETED',
+        'Verification or safety check failed and rollback completed successfully.',
+        'The workspace was restored to the pre-run checkpoint. Review your changes or task instructions, adjust settings, and try again.'
+      );
+    } else {
+      throw new JewelError(
+        'VERIFICATION_COMMAND_FAILED',
+        'Verification or safety check failed. Workspace kept as is.',
+        'Fix the failing tests in your code, or run the verification command manually to diagnose. You can bypass rollback using --keep-failed.'
+      );
+    }
+  } } catch (err: any) {
+    if (err && err.message && err.message.startsWith('exit-')) {
+      throw err;
+    }
+    const jewelErr = toJewelError(err);
+    console.error(`\n======================================`);
+    console.error(`Status: ${jewelErr.status}`);
+    console.error(`Error: ${jewelErr.message}`);
+    console.error(`Next Action: ${jewelErr.nextAction}`);
+    console.error(`======================================\n`);
     process.exit(1);
   }
 }
@@ -491,9 +557,9 @@ function writeRunReport(
   }
 ) {
   const version = getPackageVersion(cwd);
-  const provider = config.provider;
-  const model = config.model || 'N/A';
-  const adapterName = adapter?.name || 'N/A';
+  const provider = config.provider || 'none';
+  const model = provider === 'none' ? 'mock' : (config.model || 'N/A');
+  const adapterName = provider === 'none' ? 'mock-agent' : (adapter?.name || 'N/A');
   const verificationCommandsRun = options.verification 
     ? options.verification.results.filter((r: any) => r.status !== 'SKIPPED').map((r: any) => r.commandLine)
     : [];
@@ -517,7 +583,9 @@ function writeRunReport(
   const filesProposedButBlocked = options.patchBlocked ? (options.blockReasons || []) : [];
 
   let tokenUsage = 'usage unavailable';
-  if (adapter?.usage) {
+  if (provider === 'none') {
+    tokenUsage = 'usage unavailable (mock)';
+  } else if (adapter?.usage) {
     tokenUsage = `Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}`;
   }
 
@@ -537,12 +605,12 @@ function writeRunReport(
     rollbackStatus,
     filesChanged,
     filesProposedButBlocked,
-    usage: adapter?.usage ? {
+    usage: provider === 'none' ? 'usage unavailable (mock)' : (adapter?.usage ? {
       inputTokens: adapter.usage.inputTokens,
       outputTokens: adapter.usage.outputTokens,
       totalTokens: adapter.usage.totalTokens,
       estimatedCostUsd: adapter.usage.estimatedCostUsd
-    } : 'usage unavailable',
+    } : 'usage unavailable'),
     error: options.error,
     blockReasons: options.patchBlocked ? options.blockReasons : undefined,
     noChangeReason: options.noChangeNeeded ? options.noChangeReason : undefined,

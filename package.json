@@ -1,6 +1,6 @@
 {
   "name": "jewel-cli",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Jewel: AI Coding Safety Harness",
   "main": "dist/cli/index.js",
   "bin": {
@@ -29,7 +29,8 @@
     "!dist/**/*.test.d.ts",
     "!dist/**/*.test.js.map",
     "README.md",
-    "package.json"
+    "package.json",
+    "docs"
   ],
   "devDependencies": {
     "@types/node": "^20.11.0",
