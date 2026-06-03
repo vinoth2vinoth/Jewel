@@ -34,12 +34,22 @@ export function runDiffGuard(
         encoding: 'utf8'
       }).trim();
 
+      let gitRoot = cwd;
+      try {
+        gitRoot = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf8' }).trim();
+      } catch {}
+
       if (diffStat) {
         changedFiles = diffStat.split('\n').map(line => {
           const [addedStr, removedStr, file] = line.split(/\s+/);
           const added = addedStr === '-' ? 0 : Number(addedStr || 0);
           const removed = removedStr === '-' ? 0 : Number(removedStr || 0);
-          return { file, added, removed };
+          
+          // Convert git-root relative path to cwd-relative path
+          const absolutePath = path.resolve(gitRoot, file);
+          const relativeToCwd = path.relative(cwd, absolutePath).replace(/\\/g, '/');
+          
+          return { file: relativeToCwd, added, removed };
         });
       }
     } catch (err: any) {
