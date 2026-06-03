@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { JewelConfig } from './config';
+import { isProtectedPath, isDependencyPath } from '../safety/path-policy';
 
 export interface TaskContract {
   task: string;
@@ -44,32 +45,16 @@ export function assessRiskLevel(task: string, filesNeeded: string[], config: Jew
     }
   }
 
-  // Check files likely needed against config.protectedFiles glob patterns or direct paths
-  // Simple check for now: if any file is in protectedFiles list or starts with src/auth, src/payments, src/billing, src/security, .env
-  const highRiskFilePrefixes = ['src/auth', 'src/payments', 'src/billing', 'src/security', '.env'];
+  // Check files likely needed against config.protectedFiles glob patterns
   for (const file of filesNeeded) {
-    const normFile = file.replace(/\\/g, '/');
-    if (highRiskFilePrefixes.some(p => normFile.startsWith(p)) || normFile.endsWith('.env') || normFile.includes('.env.')) {
+    if (isProtectedPath(file, config)) {
       return 'high';
-    }
-
-    // Direct match with config.protectedFiles
-    for (const pattern of config.protectedFiles) {
-      // Basic glob matching fallback
-      const regexPattern = pattern
-        .replace(/\./g, '\\.')
-        .replace(/\*\*/g, '.*')
-        .replace(/\*/g, '[^/]*');
-      const regex = new RegExp(`^${regexPattern}$`);
-      if (regex.test(normFile)) {
-        return 'high';
-      }
     }
   }
 
   // Dependency changes make risk medium or high
   const dependencyKeywords = ['dependency', 'dependencies', 'install', 'package', 'npm', 'yarn', 'pnpm', 'bun', 'add', 'package.json'];
-  if (dependencyKeywords.some(kw => normalizedTask.includes(kw)) || filesNeeded.some(f => f.endsWith('package.json'))) {
+  if (dependencyKeywords.some(kw => normalizedTask.includes(kw)) || filesNeeded.some(f => isDependencyPath(f))) {
     return 'medium';
   }
 

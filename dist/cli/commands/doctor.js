@@ -179,13 +179,26 @@ function runDoctor(cwd = process.cwd()) {
         }
     }
     // 12. API Key configuration
-    const apiKeys = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY'];
-    const activeKeys = apiKeys.filter(k => process.env[k]);
-    if (activeKeys.length > 0) {
-        report('PASS', `LLM Adapter keys present in environment: ${activeKeys.join(', ')}`);
+    const provider = config?.provider || 'none';
+    if (provider === 'none') {
+        report('PASS', 'LLM Provider is set to "none". API key checks skipped.');
     }
     else {
-        report('WARN', 'No LLM API keys detected in environment (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY). Real LLM agents won\'t work.');
+        const keyMap = {
+            openai: 'OPENAI_API_KEY',
+            anthropic: 'ANTHROPIC_API_KEY',
+            gemini: 'GEMINI_API_KEY',
+            openrouter: 'OPENROUTER_API_KEY'
+        };
+        const expectedKey = keyMap[provider];
+        if (expectedKey) {
+            if (process.env[expectedKey]) {
+                report('PASS', `LLM Adapter key ${expectedKey} present in environment.`);
+            }
+            else {
+                report('WARN', `LLM Adapter key ${expectedKey} is missing from environment. Real LLM agents won't work.`);
+            }
+        }
     }
     console.log(`\nDiagnostics finished with ${failCount} Failures and ${warnCount} Warnings.`);
     if (failCount > 0) {

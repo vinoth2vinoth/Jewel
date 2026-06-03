@@ -12,6 +12,11 @@ exports.DEFAULT_CONFIG_CONTENT = `{
   "allowNewDependencies": false,
   "allowProtectedFileChanges": false,
   "allowGitPush": false,
+  "requireHumanDiffApproval": true,
+  "provider": "none",
+  "model": "",
+  "temperature": 0,
+  "maxOutputTokens": 4000,
   "commands": {
     "lint": "",
     "typecheck": "",

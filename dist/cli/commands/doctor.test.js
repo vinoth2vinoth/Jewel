@@ -47,20 +47,82 @@ const sandboxDir = path.join(__dirname, '../../../sandbox-test-doctor');
         fs.rmSync(sandboxDir, { recursive: true, force: true });
     }
     fs.mkdirSync(sandboxDir, { recursive: true });
-    // Mock process.exit to prevent the test runner itself from exiting
     const originalExit = process.exit;
     let exitCode;
     process.exit = (code) => {
         exitCode = code;
     };
     try {
-        // Run doctor inside sandbox
         (0, doctor_1.runDoctor)(sandboxDir);
-        // Doctor should execute and call process.exit (0 or 1)
         node_assert_1.default.ok(exitCode === 0 || exitCode === 1);
     }
     finally {
         process.exit = originalExit;
+        if (fs.existsSync(sandboxDir)) {
+            fs.rmSync(sandboxDir, { recursive: true, force: true });
+        }
+    }
+});
+(0, node_test_1.default)('doctor checks - provider-specific API key warnings', () => {
+    if (fs.existsSync(sandboxDir)) {
+        fs.rmSync(sandboxDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    const originalExit = process.exit;
+    process.exit = (code) => { };
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    try {
+        const runDoctorWithProvider = (provider, envVal, envKey) => {
+            const logs = [];
+            console.log = (...args) => logs.push(args.join(' '));
+            console.warn = (...args) => logs.push(args.join(' '));
+            const oldEnv = envKey ? process.env[envKey] : undefined;
+            if (envKey) {
+                if (envVal !== undefined) {
+                    process.env[envKey] = envVal;
+                }
+                else {
+                    delete process.env[envKey];
+                }
+            }
+            const config = { provider };
+            fs.writeFileSync(path.join(sandboxDir, 'jewel.config.json'), JSON.stringify(config, null, 2), 'utf8');
+            (0, doctor_1.runDoctor)(sandboxDir);
+            if (envKey) {
+                if (oldEnv !== undefined) {
+                    process.env[envKey] = oldEnv;
+                }
+                else {
+                    delete process.env[envKey];
+                }
+            }
+            return logs.join('\n');
+        };
+        // 1. None provider
+        const logNone = runDoctorWithProvider('none');
+        node_assert_1.default.ok(logNone.includes('set to "none"'));
+        node_assert_1.default.ok(!logNone.includes('missing from environment'));
+        // 2. OpenAI provider - missing key
+        const logOpenAiMissing = runDoctorWithProvider('openai', undefined, 'OPENAI_API_KEY');
+        node_assert_1.default.ok(logOpenAiMissing.includes('OPENAI_API_KEY is missing'));
+        // 3. OpenAI provider - present key
+        const logOpenAiPresent = runDoctorWithProvider('openai', 'sk-test', 'OPENAI_API_KEY');
+        node_assert_1.default.ok(logOpenAiPresent.includes('OPENAI_API_KEY present'));
+        // 4. Anthropic provider - missing key
+        const logAnthropicMissing = runDoctorWithProvider('anthropic', undefined, 'ANTHROPIC_API_KEY');
+        node_assert_1.default.ok(logAnthropicMissing.includes('ANTHROPIC_API_KEY is missing'));
+        // 5. Gemini provider - missing key
+        const logGeminiMissing = runDoctorWithProvider('gemini', undefined, 'GEMINI_API_KEY');
+        node_assert_1.default.ok(logGeminiMissing.includes('GEMINI_API_KEY is missing'));
+        // 6. OpenRouter provider - missing key
+        const logOpenrouterMissing = runDoctorWithProvider('openrouter', undefined, 'OPENROUTER_API_KEY');
+        node_assert_1.default.ok(logOpenrouterMissing.includes('OPENROUTER_API_KEY is missing'));
+    }
+    finally {
+        process.exit = originalExit;
+        console.log = originalLog;
+        console.warn = originalWarn;
         if (fs.existsSync(sandboxDir)) {
             fs.rmSync(sandboxDir, { recursive: true, force: true });
         }

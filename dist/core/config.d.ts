@@ -9,6 +9,11 @@ export interface JewelConfig {
     allowNewDependencies: boolean;
     allowProtectedFileChanges: boolean;
     allowGitPush: boolean;
+    requireHumanDiffApproval: boolean;
+    provider: 'none' | 'openai' | 'anthropic' | 'gemini' | 'openrouter';
+    model: string;
+    temperature: number;
+    maxOutputTokens: number;
     commands: {
         lint: string;
         typecheck: string;

@@ -5,3 +5,5 @@ sandbox-test-*/
 *.bak
 .env
 .env.*
+graphify-out/
+

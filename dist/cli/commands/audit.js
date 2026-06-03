@@ -38,6 +38,8 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const git_1 = require("../../storage/git");
+const config_1 = require("../../core/config");
+const path_policy_1 = require("../../safety/path-policy");
 function runAudit(cwd = process.cwd()) {
     console.log('Running Jewel Repository Safety and Quality Audit...\n');
     const checks = [];
@@ -196,18 +198,11 @@ function runAudit(cwd = process.cwd()) {
             const statusOutput = (0, child_process_1.execSync)('git diff --name-only', { cwd, encoding: 'utf8' }).trim();
             if (statusOutput) {
                 const dirtyFiles = statusOutput.split('\n');
+                const patterns = (config && Array.isArray(config.protectedFiles))
+                    ? config.protectedFiles
+                    : config_1.DEFAULT_CONFIG.protectedFiles;
                 const dirtyProtected = dirtyFiles.filter((f) => {
-                    if (f.endsWith('.env') || f.startsWith('src/auth') || f.startsWith('src/security'))
-                        return true;
-                    // check config list too
-                    if (config && config.protectedFiles) {
-                        for (const pattern of config.protectedFiles) {
-                            const regex = new RegExp(`^${pattern.replace(/\./g, '\\.').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*')}$`);
-                            if (regex.test(f))
-                                return true;
-                        }
-                    }
-                    return false;
+                    return (0, path_policy_1.matchesProtectedPattern)((0, path_policy_1.normalizeRepoPath)(f, cwd), patterns);
                 });
                 if (dirtyProtected.length > 0) {
                     addCheck('risky_changes', 'Risky Working Tree Changes', 'WARN', `Modifications detected in protected files: ${dirtyProtected.join(', ')}`);

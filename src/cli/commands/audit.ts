@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { isGitRepository, getGitStatus } from '../../storage/git';
+import { DEFAULT_CONFIG } from '../../core/config';
+import { matchesProtectedPattern, normalizeRepoPath } from '../../safety/path-policy';
 
 export interface AuditCheck {
   id: string;
@@ -159,16 +161,11 @@ export function runAudit(cwd: string = process.cwd()): void {
       const statusOutput = execSync('git diff --name-only', { cwd, encoding: 'utf8' }).trim();
       if (statusOutput) {
         const dirtyFiles = statusOutput.split('\n');
+        const patterns = (config && Array.isArray(config.protectedFiles)) 
+          ? config.protectedFiles 
+          : DEFAULT_CONFIG.protectedFiles;
         const dirtyProtected = dirtyFiles.filter((f: string) => {
-          if (f.endsWith('.env') || f.startsWith('src/auth') || f.startsWith('src/security')) return true;
-          // check config list too
-          if (config && config.protectedFiles) {
-            for (const pattern of config.protectedFiles) {
-              const regex = new RegExp(`^${pattern.replace(/\./g, '\\.').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*')}$`);
-              if (regex.test(f)) return true;
-            }
-          }
-          return false;
+          return matchesProtectedPattern(normalizeRepoPath(f, cwd), patterns);
         });
 
         if (dirtyProtected.length > 0) {

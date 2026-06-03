@@ -37,6 +37,7 @@ exports.runDiffGuard = runDiffGuard;
 const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const path_policy_1 = require("./path-policy");
 function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
     const findings = [];
     let status = 'PASS';
@@ -153,24 +154,8 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
     }
     // 3. Detect protected files changed
     const protectedFilesChanged = [];
-    const highRiskFilePrefixes = ['src/auth', 'src/payments', 'src/billing', 'src/security'];
     for (const file of changedFileNames) {
-        const normFile = file.replace(/\\/g, '/');
-        // Check general prefixes
-        const matchesPrefix = highRiskFilePrefixes.some(p => normFile.startsWith(p));
-        let matchesPattern = false;
-        for (const pattern of config.protectedFiles) {
-            const regexPattern = pattern
-                .replace(/\./g, '\\.')
-                .replace(/\*\*/g, '.*')
-                .replace(/\*/g, '[^/]*');
-            const regex = new RegExp(`^${regexPattern}$`);
-            if (regex.test(normFile)) {
-                matchesPattern = true;
-                break;
-            }
-        }
-        if (matchesPrefix || matchesPattern) {
+        if ((0, path_policy_1.isProtectedPath)(file, config)) {
             protectedFilesChanged.push(file);
         }
     }
@@ -185,7 +170,7 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
     }
     // 4. Detect dependency changes in package.json
     let dependenciesChanged = false;
-    if (changedFileNames.includes('package.json')) {
+    if (changedFileNames.some(f => (0, path_policy_1.isDependencyPath)(f))) {
         try {
             let oldPkg = {};
             const currentPkgPath = path.join(cwd, 'package.json');
@@ -237,8 +222,7 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
         }
     }
     // 5. Lockfiles changed
-    const lockfiles = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb'];
-    const lockfilesChanged = changedFileNames.filter(f => lockfiles.includes(path.basename(f)));
+    const lockfilesChanged = changedFileNames.filter(f => (0, path_policy_1.isLockfilePath)(f));
     if (lockfilesChanged.length > 0) {
         findings.push(`Lockfile(s) modified: ${lockfilesChanged.join(', ')}`);
         if (!config.allowNewDependencies && !config.allowProtectedFileChanges) {

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { JewelConfig } from '../core/config';
 import { CheckpointMetadata } from '../storage/git';
+import { isProtectedPath, isDependencyPath, isLockfilePath } from './path-policy';
 
 export interface DiffAnalysis {
   status: 'PASS' | 'WARN' | 'BLOCK';
@@ -145,28 +146,8 @@ export function runDiffGuard(
 
   // 3. Detect protected files changed
   const protectedFilesChanged: string[] = [];
-  const highRiskFilePrefixes = ['src/auth', 'src/payments', 'src/billing', 'src/security'];
-  
   for (const file of changedFileNames) {
-    const normFile = file.replace(/\\/g, '/');
-    
-    // Check general prefixes
-    const matchesPrefix = highRiskFilePrefixes.some(p => normFile.startsWith(p));
-    let matchesPattern = false;
-
-    for (const pattern of config.protectedFiles) {
-      const regexPattern = pattern
-        .replace(/\./g, '\\.')
-        .replace(/\*\*/g, '.*')
-        .replace(/\*/g, '[^/]*');
-      const regex = new RegExp(`^${regexPattern}$`);
-      if (regex.test(normFile)) {
-        matchesPattern = true;
-        break;
-      }
-    }
-
-    if (matchesPrefix || matchesPattern) {
+    if (isProtectedPath(file, config)) {
       protectedFilesChanged.push(file);
     }
   }
@@ -182,7 +163,7 @@ export function runDiffGuard(
 
   // 4. Detect dependency changes in package.json
   let dependenciesChanged = false;
-  if (changedFileNames.includes('package.json')) {
+  if (changedFileNames.some(f => isDependencyPath(f))) {
     try {
       let oldPkg: any = {};
       const currentPkgPath = path.join(cwd, 'package.json');
@@ -233,8 +214,7 @@ export function runDiffGuard(
   }
 
   // 5. Lockfiles changed
-  const lockfiles = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb'];
-  const lockfilesChanged = changedFileNames.filter(f => lockfiles.includes(path.basename(f)));
+  const lockfilesChanged = changedFileNames.filter(f => isLockfilePath(f));
   
   if (lockfilesChanged.length > 0) {
     findings.push(`Lockfile(s) modified: ${lockfilesChanged.join(', ')}`);

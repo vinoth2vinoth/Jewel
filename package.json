@@ -1,6 +1,6 @@
 {
   "name": "jewel-cli",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Jewel: AI Coding Safety Harness",
   "main": "dist/cli/index.js",
   "bin": {
@@ -9,14 +9,33 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
-    "test": "node --test dist/**/*.test.js",
+    "test": "node --test dist",
     "lint": "echo \"No linting configured\""
   },
-  "keywords": ["ai", "safety", "harness", "git", "verification", "cli"],
+  "keywords": [
+    "ai",
+    "safety",
+    "harness",
+    "git",
+    "verification",
+    "cli"
+  ],
   "author": "",
   "license": "MIT",
+  "files": [
+    "bin",
+    "dist",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "README.md",
+    "package.json"
+  ],
   "devDependencies": {
     "@types/node": "^20.11.0",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "minimatch": "^10.2.5"
   }
 }

@@ -49,6 +49,11 @@ exports.DEFAULT_CONFIG = {
     allowNewDependencies: false,
     allowProtectedFileChanges: false,
     allowGitPush: false,
+    requireHumanDiffApproval: true,
+    provider: 'none',
+    model: '',
+    temperature: 0,
+    maxOutputTokens: 4000,
     commands: {
         lint: '',
         typecheck: '',
@@ -118,7 +123,8 @@ function validateAndMergeConfig(parsed) {
         'requireVerificationBeforeDone',
         'allowNewDependencies',
         'allowProtectedFileChanges',
-        'allowGitPush'
+        'allowGitPush',
+        'requireHumanDiffApproval'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {
@@ -127,6 +133,32 @@ function validateAndMergeConfig(parsed) {
             }
             config[field] = parsed[field];
         }
+    }
+    if (parsed.provider !== undefined) {
+        if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(parsed.provider)) {
+            throw new Error('Invalid config: "provider" must be one of "none", "openai", "anthropic", "gemini", or "openrouter".');
+        }
+        config.provider = parsed.provider;
+    }
+    if (parsed.model !== undefined) {
+        if (typeof parsed.model !== 'string') {
+            throw new Error('Invalid config: "model" must be a string.');
+        }
+        config.model = parsed.model;
+    }
+    if (parsed.temperature !== undefined) {
+        const val = Number(parsed.temperature);
+        if (isNaN(val) || val < 0) {
+            throw new Error('Invalid config: "temperature" must be a non-negative number.');
+        }
+        config.temperature = val;
+    }
+    if (parsed.maxOutputTokens !== undefined) {
+        const val = Number(parsed.maxOutputTokens);
+        if (isNaN(val) || val < 0) {
+            throw new Error('Invalid config: "maxOutputTokens" must be a non-negative number.');
+        }
+        config.maxOutputTokens = val;
     }
     if (parsed.commands !== undefined) {
         if (typeof parsed.commands !== 'object' || parsed.commands === null) {

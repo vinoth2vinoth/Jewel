@@ -21,12 +21,16 @@ Commands:
   verify                     Run all configured verification commands.
   status                     Display the current session, checkpoint, and repository status.
   rollback [session-id]      Roll back the workspace to a session checkpoint state.
+  diff [session-id]          Show proposed changes and diff preview for a session.
   audit                      Perform a safety and repository quality check.
   doctor                     Run local environment health and configuration checks.
 
 Options:
   -f, --files <file1,file2>  Declare files likely needed for the task contract (used with 'run').
   -m, --mock                 Use the mock agent adapter to automatically apply deterministic patches (used with 'run').
+  --yes                      Bypass interactive human diff approval review.
+  --no-review                Disable diff approval review (ignored if config requires it).
+  --keep-failed              Do not roll back changes if verification or review fails.
   -h, --help                 Print this help menu.
 `);
 }
@@ -55,6 +59,12 @@ async function main() {
             (0, rollback_1.runRollback)(targetSession);
             break;
         }
+        case 'diff': {
+            const targetSession = args[1] && !args[1].startsWith('-') ? args[1] : undefined;
+            const { runDiff } = require('./commands/diff');
+            runDiff(targetSession);
+            break;
+        }
         case 'doctor': {
             (0, doctor_1.runDoctor)();
             break;
@@ -72,6 +82,9 @@ async function main() {
             // Parse options
             let filesNeeded = [];
             let useMock = false;
+            let yesFlag = false;
+            let noReview = false;
+            let keepFailed = false;
             const remainingArgs = args.slice(2);
             for (let i = 0; i < remainingArgs.length; i++) {
                 const arg = remainingArgs[i];
@@ -85,8 +98,17 @@ async function main() {
                 else if (arg === '-m' || arg === '--mock') {
                     useMock = true;
                 }
+                else if (arg === '--yes') {
+                    yesFlag = true;
+                }
+                else if (arg === '--no-review') {
+                    noReview = true;
+                }
+                else if (arg === '--keep-failed') {
+                    keepFailed = true;
+                }
             }
-            await (0, run_1.runTask)(taskText, filesNeeded, useMock);
+            await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed);
             break;
         }
         default: {

@@ -1,0 +1,36 @@
+{
+  "projectName": "",
+  "mode": "strict",
+  "maxRetries": 3,
+  "maxFilesChanged": 8,
+  "maxLinesChanged": 500,
+  "requirePlanBeforeEdit": true,
+  "requireVerificationBeforeDone": true,
+  "allowNewDependencies": false,
+  "allowProtectedFileChanges": false,
+  "allowGitPush": false,
+  "commands": {
+    "lint": "",
+    "typecheck": "",
+    "test": "",
+    "build": "",
+    "e2e": ""
+  },
+  "protectedFiles": [
+    ".env",
+    ".env.local",
+    ".env.*",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lockb",
+    "schema.prisma",
+    "migrations/**",
+    "src/auth/**",
+    "src/payments/**",
+    "src/billing/**",
+    "src/security/**"
+  ],
+  "dangerousCommandPolicy": "block",
+  "reportFormat": ["markdown", "json"]
+}

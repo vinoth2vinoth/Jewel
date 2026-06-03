@@ -39,6 +39,7 @@ exports.generateLocalContract = generateLocalContract;
 exports.createSession = createSession;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const path_policy_1 = require("../safety/path-policy");
 function validateContract(contract) {
     const errors = [];
     if (!contract.task || typeof contract.task !== 'string' || contract.task.trim() === '') {
@@ -61,30 +62,15 @@ function assessRiskLevel(task, filesNeeded, config) {
             return 'high';
         }
     }
-    // Check files likely needed against config.protectedFiles glob patterns or direct paths
-    // Simple check for now: if any file is in protectedFiles list or starts with src/auth, src/payments, src/billing, src/security, .env
-    const highRiskFilePrefixes = ['src/auth', 'src/payments', 'src/billing', 'src/security', '.env'];
+    // Check files likely needed against config.protectedFiles glob patterns
     for (const file of filesNeeded) {
-        const normFile = file.replace(/\\/g, '/');
-        if (highRiskFilePrefixes.some(p => normFile.startsWith(p)) || normFile.endsWith('.env') || normFile.includes('.env.')) {
+        if ((0, path_policy_1.isProtectedPath)(file, config)) {
             return 'high';
-        }
-        // Direct match with config.protectedFiles
-        for (const pattern of config.protectedFiles) {
-            // Basic glob matching fallback
-            const regexPattern = pattern
-                .replace(/\./g, '\\.')
-                .replace(/\*\*/g, '.*')
-                .replace(/\*/g, '[^/]*');
-            const regex = new RegExp(`^${regexPattern}$`);
-            if (regex.test(normFile)) {
-                return 'high';
-            }
         }
     }
     // Dependency changes make risk medium or high
     const dependencyKeywords = ['dependency', 'dependencies', 'install', 'package', 'npm', 'yarn', 'pnpm', 'bun', 'add', 'package.json'];
-    if (dependencyKeywords.some(kw => normalizedTask.includes(kw)) || filesNeeded.some(f => f.endsWith('package.json'))) {
+    if (dependencyKeywords.some(kw => normalizedTask.includes(kw)) || filesNeeded.some(f => (0, path_policy_1.isDependencyPath)(f))) {
         return 'medium';
     }
     return 'low';
