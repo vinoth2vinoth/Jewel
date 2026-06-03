@@ -124,7 +124,8 @@ export async function runSmokeProvider(
       inputTokens: adapter.usage.inputTokens,
       outputTokens: adapter.usage.outputTokens,
       totalTokens: adapter.usage.totalTokens,
-      estimatedCostUsd: adapter.usage.estimatedCostUsd
+      estimatedCostUsd: adapter.usage.estimatedCostUsd,
+      retryCount: adapter.usage.retryCount ?? 0
     };
   }
 

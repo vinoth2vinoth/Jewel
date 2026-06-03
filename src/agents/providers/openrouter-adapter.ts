@@ -117,7 +117,9 @@ export class OpenRouterAdapter implements AgentAdapter {
 
     if (!capabilities.supportsStructuredOutput && !config.allowUnstructuredProviderFallback) {
       throw new Error(`FAIL: Model "${model}" does not support structured outputs (response_format json_schema) in OpenRouter registry.
-      Next Action: Please try using an OpenRouter model known to support structured outputs, such as "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", or "meta-llama/llama-3.3-70b-instruct".
+      This is a likely model capability mismatch since structured output (strict JSON schema) is required for Jewel safety harnesses.
+      Next Action: Please try switching models to one known to support structured outputs, such as "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", or "meta-llama/llama-3.3-70b-instruct".
+      We recommend keeping "allowUnstructuredProviderFallback" disabled for maximum reliability. For more information, please refer to docs/model-capabilities.md.
       If you still wish to proceed without structured output enforcement, set "allowUnstructuredProviderFallback" to true in your configuration (warning: this may reduce reliability).`);
     }
 

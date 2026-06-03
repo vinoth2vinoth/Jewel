@@ -78,6 +78,7 @@ export interface AgentAdapter {
     outputTokens?: number;
     totalTokens?: number;
     estimatedCostUsd?: number;
+    retryCount?: number;
   };
 }
 
@@ -88,6 +89,7 @@ export class MockAgentAdapter implements AgentAdapter {
     outputTokens?: number;
     totalTokens?: number;
     estimatedCostUsd?: number;
+    retryCount?: number;
   };
 
   private accumulateMockUsage() {

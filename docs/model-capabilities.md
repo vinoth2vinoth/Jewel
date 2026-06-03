@@ -52,6 +52,16 @@ If a model does not support structured outputs, you can toggle the fallback sett
 
 ---
 
+## OpenRouter model selection for Jewel
+To ensure the best experience when using OpenRouter with Jewel:
+1. **Start with `openai/gpt-4o-mini`** if available. It is fast, cheap, and fully supports strict JSON schema mode.
+2. **If schema unsupported**, try a different model with native structured output support (such as `anthropic/claude-3.5-sonnet` or `meta-llama/llama-3.3-70b-instruct`).
+3. **If rate limited**, reduce test frequency or increase token bounds.
+4. **If invalid JSON**, try a stronger, more capable model.
+5. **Never enable `allowUnstructuredProviderFallback`** for important or production repositories.
+
+---
+
 ## How to Choose a Safer Model
 To ensure maximum safety and reliability while running Jewel:
 1. **Prefer registry models**: Use pre-tested models such as `gpt-4o-mini` or `gemini-1.5-flash`.

@@ -71,6 +71,7 @@ export interface AgentAdapter {
         outputTokens?: number;
         totalTokens?: number;
         estimatedCostUsd?: number;
+        retryCount?: number;
     };
 }
 export declare class MockAgentAdapter implements AgentAdapter {
@@ -80,6 +81,7 @@ export declare class MockAgentAdapter implements AgentAdapter {
         outputTokens?: number;
         totalTokens?: number;
         estimatedCostUsd?: number;
+        retryCount?: number;
     };
     private accumulateMockUsage;
     plan(input: PlanInput): Promise<TaskContract>;

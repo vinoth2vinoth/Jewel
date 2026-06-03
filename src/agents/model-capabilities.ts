@@ -62,7 +62,7 @@ export const CAPABILITY_REGISTRY: Record<string, ProviderCapabilityRegistry> = {
   },
   gemini: {
     defaultModel: 'gemini-1.5-flash',
-    recommendedModels: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+    recommendedModels: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.5-flash'],
     models: {
       'gemini-1.5-flash': {
         supportsStructuredOutput: true,
@@ -81,6 +81,14 @@ export const CAPABILITY_REGISTRY: Record<string, ProviderCapabilityRegistry> = {
         knownLimitations: []
       },
       'gemini-2.0-flash': {
+        supportsStructuredOutput: true,
+        supportsUsage: true,
+        supportsSystemPrompt: true,
+        supportsTemperature: true,
+        supportsMaxTokens: true,
+        knownLimitations: []
+      },
+      'gemini-2.5-flash': {
         supportsStructuredOutput: true,
         supportsUsage: true,
         supportsSystemPrompt: true,
