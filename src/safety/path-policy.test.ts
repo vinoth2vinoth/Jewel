@@ -9,7 +9,8 @@ import {
   isProtectedPath,
   isDependencyPath,
   isLockfilePath,
-  isAbsoluteOrEscapingPath
+  isAbsoluteOrEscapingPath,
+  isSafeRepoRelativePath
 } from './path-policy';
 import { DEFAULT_CONFIG } from '../core/config';
 
@@ -68,11 +69,19 @@ test('path-policy - boundary checks and escape detection', () => {
   assert.ok(isAbsoluteOrEscapingPath(root, '../outside.txt') === true);
   assert.ok(isAbsoluteOrEscapingPath(root, 'src/../../outside.txt') === true);
   
-  // Inside checks
   assert.ok(isPathInsideRoot(root, 'src/components/Button.tsx') === true);
   assert.ok(isPathInsideRoot(root, 'Button.tsx') === true);
-  assert.ok(isPathInsideRoot(root, '../Project/Button.tsx') === true); // resolves inside C:\Project
+  assert.ok(isAbsoluteOrEscapingPath(root, '../Project/Button.tsx') === true); 
   assert.ok(isPathInsideRoot(root, '../outside/Button.tsx') === false); // escapes root
+
+  // isSafeRepoRelativePath checks
+  assert.strictEqual(isSafeRepoRelativePath('../Project/Button.tsx'), false);
+  assert.strictEqual(isSafeRepoRelativePath('src/../Button.tsx'), false);
+  assert.strictEqual(isSafeRepoRelativePath('src/components/Button.tsx'), true);
+  assert.strictEqual(isSafeRepoRelativePath('math.js'), true);
+  assert.strictEqual(isSafeRepoRelativePath('C:\\Users\\test\\outside.txt'), false);
+  assert.strictEqual(isSafeRepoRelativePath('\\\\server\\share\\file.txt'), false);
+  assert.strictEqual(isSafeRepoRelativePath('some\0file.txt'), false);
 
   // Null byte paths are blocked
   assert.ok(isAbsoluteOrEscapingPath(root, 'some\0file.txt') === true);

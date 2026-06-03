@@ -1,6 +1,6 @@
 {
   "name": "jewel-cli",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Jewel: AI Coding Safety Harness",
   "main": "dist/cli/index.js",
   "bin": {
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
-    "test": "node --test dist",
+    "test": "node scripts/run-all-tests.js",
     "lint": "echo \"No linting configured\""
   },
   "keywords": [

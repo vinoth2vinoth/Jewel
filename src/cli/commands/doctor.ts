@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isGitRepository } from '../../storage/git';
+import { validateAndMergeConfig } from '../../core/config';
 
 export function runDoctor(cwd: string = process.cwd()): void {
   console.log('Running Jewel Diagnostics (Doctor)...\n');
@@ -61,11 +62,12 @@ export function runDoctor(cwd: string = process.cwd()): void {
   let config: any = null;
   if (fs.existsSync(configPath)) {
     try {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      report('PASS', 'jewel.config.json exists and is valid JSON.');
+      const parsedRaw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config = validateAndMergeConfig(parsedRaw);
+      report('PASS', 'jewel.config.json exists and is valid configuration.');
       configExists = true;
     } catch (err: any) {
-      report('FAIL', 'jewel.config.json exists but contains invalid JSON.', err.message);
+      report('FAIL', 'jewel.config.json contains invalid configuration.', err.message);
     }
   } else {
     report('WARN', 'jewel.config.json is missing. Please run "jewel init".');

@@ -36,4 +36,34 @@ const config_1 = require("./config");
     node_assert_1.default.throws(() => {
         (0, config_1.validateAndMergeConfig)({ requirePlanBeforeEdit: 'yes' });
     }, /requirePlanBeforeEdit.*must be a boolean/);
+    // v0.3 LLM Config validation
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ provider: 'invalid_provider' });
+    }, /provider.*must be one of/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ llmTimeoutMs: -10 });
+    }, /llmTimeoutMs.*must be a non-negative number/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ llmMaxRetries: 'invalid' });
+    }, /llmMaxRetries.*must be a non-negative number/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ llmStrictJson: 'not_bool' });
+    }, /llmStrictJson.*must be a boolean/);
+    // Check valid LLM fields work
+    const valid = (0, config_1.validateAndMergeConfig)({
+        provider: 'openai',
+        model: 'gpt-4o',
+        temperature: 0.7,
+        maxOutputTokens: 2000,
+        llmTimeoutMs: 30000,
+        llmMaxRetries: 3,
+        llmStrictJson: false
+    });
+    node_assert_1.default.strictEqual(valid.provider, 'openai');
+    node_assert_1.default.strictEqual(valid.model, 'gpt-4o');
+    node_assert_1.default.strictEqual(valid.temperature, 0.7);
+    node_assert_1.default.strictEqual(valid.maxOutputTokens, 2000);
+    node_assert_1.default.strictEqual(valid.llmTimeoutMs, 30000);
+    node_assert_1.default.strictEqual(valid.llmMaxRetries, 3);
+    node_assert_1.default.strictEqual(valid.llmStrictJson, false);
 });

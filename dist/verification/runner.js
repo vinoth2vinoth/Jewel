@@ -93,8 +93,8 @@ function runVerification(config, cwd = process.cwd()) {
                 commandLine: cmdLine,
                 status: exitCode === 0 ? 'PASS' : 'FAIL',
                 exitCode,
-                stdout: (0, policy_1.redactSecrets)(stdout),
-                stderr: (0, policy_1.redactSecrets)(stderr)
+                stdout: (0, secret_redactor_1.redactSecrets)(stdout),
+                stderr: (0, secret_redactor_1.redactSecrets)(stderr)
             });
         }
         catch (err) {
@@ -104,7 +104,7 @@ function runVerification(config, cwd = process.cwd()) {
                 status: 'FAIL',
                 exitCode: 99,
                 stdout: '',
-                stderr: (0, policy_1.redactSecrets)(err.message || 'Execution error.')
+                stderr: (0, secret_redactor_1.redactSecrets)(err.message || 'Execution error.')
             });
         }
     }
@@ -145,6 +145,7 @@ function runVerification(config, cwd = process.cwd()) {
     saveVerificationReports(report, cwd, config.reportFormat);
     return report;
 }
+const secret_redactor_1 = require("../safety/secret-redactor");
 function saveVerificationReports(report, cwd, formats) {
     const reportsDir = path.join(cwd, '.jewel', 'reports');
     if (!fs.existsSync(reportsDir)) {
@@ -152,11 +153,11 @@ function saveVerificationReports(report, cwd, formats) {
     }
     if (formats.includes('json')) {
         const jsonPath = path.join(reportsDir, 'latest.json');
-        fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf8');
+        fs.writeFileSync(jsonPath, (0, secret_redactor_1.redactSecrets)(JSON.stringify(report, null, 2)), 'utf8');
     }
     if (formats.includes('markdown')) {
         const mdPath = path.join(reportsDir, 'latest.md');
-        fs.writeFileSync(mdPath, generateMarkdownReport(report), 'utf8');
+        fs.writeFileSync(mdPath, (0, secret_redactor_1.redactSecrets)(generateMarkdownReport(report)), 'utf8');
     }
 }
 function generateMarkdownReport(report) {

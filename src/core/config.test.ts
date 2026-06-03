@@ -37,4 +37,39 @@ test('config loader - invalid types throw error', () => {
   assert.throws(() => {
     validateAndMergeConfig({ requirePlanBeforeEdit: 'yes' });
   }, /requirePlanBeforeEdit.*must be a boolean/);
+
+  // v0.3 LLM Config validation
+  assert.throws(() => {
+    validateAndMergeConfig({ provider: 'invalid_provider' });
+  }, /provider.*must be one of/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ llmTimeoutMs: -10 });
+  }, /llmTimeoutMs.*must be a non-negative number/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ llmMaxRetries: 'invalid' });
+  }, /llmMaxRetries.*must be a non-negative number/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ llmStrictJson: 'not_bool' });
+  }, /llmStrictJson.*must be a boolean/);
+
+  // Check valid LLM fields work
+  const valid = validateAndMergeConfig({
+    provider: 'openai',
+    model: 'gpt-4o',
+    temperature: 0.7,
+    maxOutputTokens: 2000,
+    llmTimeoutMs: 30000,
+    llmMaxRetries: 3,
+    llmStrictJson: false
+  });
+  assert.strictEqual(valid.provider, 'openai');
+  assert.strictEqual(valid.model, 'gpt-4o');
+  assert.strictEqual(valid.temperature, 0.7);
+  assert.strictEqual(valid.maxOutputTokens, 2000);
+  assert.strictEqual(valid.llmTimeoutMs, 30000);
+  assert.strictEqual(valid.llmMaxRetries, 3);
+  assert.strictEqual(valid.llmStrictJson, false);
 });

@@ -29,6 +29,10 @@ Options:
   --yes                      Bypass interactive human diff approval review.
   --no-review                Disable diff approval review (ignored if config requires it).
   --keep-failed              Do not roll back changes if verification or review fails.
+  --provider <provider>      Override provider (none, openai, gemini, anthropic, openrouter).
+  --model <model>            Override model name.
+  --temperature <temp>       Override temperature.
+  --max-output-tokens <n>    Override max output tokens.
   -h, --help                 Print this help menu.
 `);
 }
@@ -95,6 +99,10 @@ export async function main(): Promise<void> {
       let yesFlag = false;
       let noReview = false;
       let keepFailed = false;
+      let providerOverride: string | undefined;
+      let modelOverride: string | undefined;
+      let temperatureOverride: number | undefined;
+      let maxOutputTokensOverride: number | undefined;
 
       const remainingArgs = args.slice(2);
       for (let i = 0; i < remainingArgs.length; i++) {
@@ -113,10 +121,41 @@ export async function main(): Promise<void> {
           noReview = true;
         } else if (arg === '--keep-failed') {
           keepFailed = true;
+        } else if (arg === '--provider') {
+          const val = remainingArgs[i + 1];
+          if (val && !val.startsWith('-')) {
+            providerOverride = val;
+            i++;
+          }
+        } else if (arg === '--model') {
+          const val = remainingArgs[i + 1];
+          if (val && !val.startsWith('-')) {
+            modelOverride = val;
+            i++;
+          }
+        } else if (arg === '--temperature') {
+          const val = remainingArgs[i + 1];
+          if (val && !val.startsWith('-')) {
+            temperatureOverride = parseFloat(val);
+            i++;
+          }
+        } else if (arg === '--max-output-tokens') {
+          const val = remainingArgs[i + 1];
+          if (val && !val.startsWith('-')) {
+            maxOutputTokensOverride = parseInt(val, 10);
+            i++;
+          }
         }
       }
 
-      await runTask(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed);
+      const overrides = {
+        provider: providerOverride,
+        model: modelOverride,
+        temperature: temperatureOverride,
+        maxOutputTokens: maxOutputTokensOverride
+      };
+
+      await runTask(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides);
       break;
     }
 

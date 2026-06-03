@@ -126,5 +126,41 @@ export function isAbsoluteOrEscapingPath(root: string, candidate: string): boole
   if (isAnyAbsolutePath(candidate)) {
     return true;
   }
+  const normalized = candidate.replace(/\\/g, '/');
+  const segments = normalized.split('/');
+  if (segments.some(segment => segment === '..')) {
+    return true;
+  }
   return !isPathInsideRoot(root, candidate);
+}
+
+export function isSafeRepoRelativePath(candidate: string): boolean {
+  if (!candidate) return false;
+  if (candidate === '.' || candidate === '..') return false;
+  if (candidate.includes('\0')) return false;
+
+  // Normalize backslashes to forward slashes
+  const normalized = candidate.replace(/\\/g, '/');
+
+  // Reject UNC paths
+  if (normalized.startsWith('//')) return false;
+
+  // Reject POSIX absolute paths
+  if (normalized.startsWith('/')) return false;
+
+  // Reject Windows drive absolute or relative paths
+  if (/^[a-zA-Z]:/.test(normalized)) return false;
+
+  const segments = normalized.split('/');
+
+  // Reject empty path segments
+  if (segments.some(segment => segment === '')) return false;
+
+  // Reject parent traversal segment ".."
+  if (segments.some(segment => segment === '..')) return false;
+
+  // Reject current directory segment "."
+  if (segments.some(segment => segment === '.')) return false;
+
+  return true;
 }

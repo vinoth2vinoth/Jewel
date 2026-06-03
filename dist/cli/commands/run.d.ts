@@ -1,1 +1,6 @@
-export declare function runTask(task: string, filesNeeded?: string[], useMock?: boolean, cwd?: string, yesFlag?: boolean, noReview?: boolean, keepFailed?: boolean): Promise<void>;
+export declare function runTask(task: string, filesNeeded?: string[], useMock?: boolean, cwd?: string, yesFlag?: boolean, noReview?: boolean, keepFailed?: boolean, cliOverrides?: {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    maxOutputTokens?: number;
+}): Promise<void>;

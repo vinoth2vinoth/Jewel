@@ -70,7 +70,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res2 = applyPatchProposalSafely(proposal2, taskContract, config, tempDir);
     assert.ok(!res2.success);
-    assert.ok(res2.blockedFiles.some(b => b.filePath === '../../outside.txt' && b.reason.includes('escapes')));
+    assert.ok(res2.blockedFiles.some(b => b.filePath === '../../outside.txt' && b.reason.includes('Unsafe patch path')));
 
     // 3. /tmp/outside.txt is blocked.
     const proposal3 = {
@@ -79,6 +79,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res3 = applyPatchProposalSafely(proposal3, taskContract, config, tempDir);
     assert.ok(!res3.success);
+    assert.ok(res3.blockedFiles.some(b => b.filePath === '/tmp/outside.txt' && b.reason.includes('Unsafe patch path')));
 
     // 4. C:\Users\test\outside.txt style absolute path is blocked.
     const proposal4 = {
@@ -87,6 +88,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res4 = applyPatchProposalSafely(proposal4, taskContract, config, tempDir);
     assert.ok(!res4.success);
+    assert.ok(res4.blockedFiles.some(b => b.filePath === 'C:\\Users\\test\\outside.txt' && b.reason.includes('Unsafe patch path')));
 
     // 5. .env is blocked by default.
     const proposal5 = {
@@ -193,7 +195,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res12 = applyPatchProposalSafely(proposal12, taskContract, config, tempDir);
     assert.ok(!res12.success);
-    assert.ok(res12.blockedFiles.some(b => b.reason.includes('absolute')));
+    assert.ok(res12.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
 
     // 13. C:/Users/test/outside.txt is blocked explicitly
     const proposal13 = {
@@ -202,7 +204,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res13 = applyPatchProposalSafely(proposal13, taskContract, config, tempDir);
     assert.ok(!res13.success);
-    assert.ok(res13.blockedFiles.some(b => b.reason.includes('absolute')));
+    assert.ok(res13.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
 
     // 14. UNC path is blocked explicitly
     const proposal14 = {
@@ -211,7 +213,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res14 = applyPatchProposalSafely(proposal14, taskContract, config, tempDir);
     assert.ok(!res14.success);
-    assert.ok(res14.blockedFiles.some(b => b.reason.includes('absolute')));
+    assert.ok(res14.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
 
     const proposal14Slash = {
       files: [{ filePath: '//server/share/file.txt', content: 'hack' }],
@@ -219,7 +221,7 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res14Slash = applyPatchProposalSafely(proposal14Slash, taskContract, config, tempDir);
     assert.ok(!res14Slash.success);
-    assert.ok(res14Slash.blockedFiles.some(b => b.reason.includes('absolute')));
+    assert.ok(res14Slash.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
 
     // 15. Null byte path is blocked explicitly
     const proposal15 = {
@@ -228,8 +230,106 @@ test('safe-patch-writer - validation and writing checks', () => {
     };
     const res15 = applyPatchProposalSafely(proposal15, taskContract, config, tempDir);
     assert.ok(!res15.success);
-    assert.ok(res15.blockedFiles.some(b => b.reason.includes('null bytes')));
+    assert.ok(res15.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
 
+    // 16. ../Project/Button.tsx is blocked
+    const proposal16 = {
+      files: [{ filePath: '../Project/Button.tsx', content: 'hack' }],
+      explanation: 'parent traversal'
+    };
+    const res16 = applyPatchProposalSafely(proposal16, taskContract, config, tempDir);
+    assert.ok(!res16.success);
+    assert.ok(res16.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
+
+    // 17. ../outside.txt is blocked
+    const proposal17 = {
+      files: [{ filePath: '../outside.txt', content: 'hack' }],
+      explanation: 'parent traversal 2'
+    };
+    const res17 = applyPatchProposalSafely(proposal17, taskContract, config, tempDir);
+    assert.ok(!res17.success);
+    assert.ok(res17.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
+
+    // 18. src/../Button.tsx is blocked
+    const proposal18 = {
+      files: [{ filePath: 'src/../Button.tsx', content: 'hack' }],
+      explanation: 'parent traversal 3'
+    };
+    const res18 = applyPatchProposalSafely(proposal18, taskContract, config, tempDir);
+    assert.ok(!res18.success);
+    assert.ok(res18.blockedFiles.some(b => b.reason.includes('Unsafe patch path')));
+
+    // 19. src/components/Button.tsx succeeds when declared in filesLikelyNeeded in strict mode
+    const strictContract2: TaskContract = {
+      ...taskContract,
+      mode: 'strict',
+      filesLikelyNeeded: ['src/components/Button.tsx']
+    };
+    const proposal19 = {
+      files: [{ filePath: 'src/components/Button.tsx', content: 'console.log("Button");' }],
+      explanation: 'add button'
+    };
+    const res19 = applyPatchProposalSafely(proposal19, strictContract2, config, tempDir);
+    assert.ok(res19.success);
+    assert.strictEqual(fs.readFileSync(path.join(tempDir, 'src/components/Button.tsx'), 'utf8'), 'console.log("Button");');
+
+  } finally {
+    cleanupTempDir(tempDir);
+  }
+});
+
+test('safe-patch-writer - transactional rollback on failure', () => {
+  const tempDir = createTempDir();
+  const config = {
+    ...DEFAULT_CONFIG,
+    allowProtectedFileChanges: true
+  };
+  const taskContract: TaskContract = {
+    task: 'rollback task',
+    understanding: 'rollback',
+    assumptions: [],
+    filesLikelyNeeded: ['file1.txt', 'dir-error/subfile.txt'],
+    forbiddenActions: [],
+    successCriteria: [],
+    riskLevel: 'low',
+    requiresApproval: false,
+    createdAt: new Date().toISOString(),
+    mode: 'lax'
+  };
+
+  try {
+    // Write pre-existing file1.txt
+    const file1Path = path.join(tempDir, 'file1.txt');
+    fs.writeFileSync(file1Path, 'original content', 'utf8');
+
+    // Create a directory where we will try to write a file, which will fail
+    const errorDir = path.join(tempDir, 'dir-error');
+    fs.mkdirSync(errorDir, { recursive: true });
+
+    // The proposal tries to modify file1.txt and write to a directory path 'dir-error'
+    const proposal = {
+      files: [
+        { filePath: 'file1.txt', content: 'new content attempt' },
+        { filePath: 'dir-error', content: 'this write should fail because dir-error is a directory' }
+      ]
+    };
+
+    const sessionPath = path.join(tempDir, '.jewel-session');
+    fs.mkdirSync(sessionPath, { recursive: true });
+
+    const result = applyPatchProposalSafely(proposal, taskContract, config, tempDir, sessionPath);
+    assert.ok(!result.success);
+    assert.ok(result.blockedFiles.some(b => b.filePath === 'write_failure'));
+
+    // Assert file1.txt content was rolled back to original content
+    assert.strictEqual(fs.readFileSync(file1Path, 'utf8'), 'original content');
+
+    // Assert recovery file was written
+    const recoveryFile = path.join(sessionPath, 'recovery', 'write-failure-recovery.json');
+    assert.ok(fs.existsSync(recoveryFile));
+    const recoveryData = JSON.parse(fs.readFileSync(recoveryFile, 'utf8'));
+    assert.ok(recoveryData.error);
+    assert.strictEqual(recoveryData.snapshots[0].filePath, path.resolve(tempDir, 'file1.txt'));
   } finally {
     cleanupTempDir(tempDir);
   }

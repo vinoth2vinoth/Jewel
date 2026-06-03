@@ -14,6 +14,9 @@ export interface JewelConfig {
     model: string;
     temperature: number;
     maxOutputTokens: number;
+    llmTimeoutMs: number;
+    llmMaxRetries: number;
+    llmStrictJson: boolean;
     commands: {
         lint: string;
         typecheck: string;

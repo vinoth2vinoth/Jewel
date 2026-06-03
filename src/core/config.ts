@@ -17,6 +17,9 @@ export interface JewelConfig {
   model: string;
   temperature: number;
   maxOutputTokens: number;
+  llmTimeoutMs: number;
+  llmMaxRetries: number;
+  llmStrictJson: boolean;
   commands: {
     lint: string;
     typecheck: string;
@@ -45,6 +48,9 @@ export const DEFAULT_CONFIG: JewelConfig = {
   model: '',
   temperature: 0,
   maxOutputTokens: 4000,
+  llmTimeoutMs: 60000,
+  llmMaxRetries: 2,
+  llmStrictJson: true,
   commands: {
     lint: '',
     typecheck: '',
@@ -105,7 +111,7 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     config.mode = parsed.mode;
   }
 
-  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged'];
+  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries'];
   for (const field of numericFields) {
     if (parsed[field] !== undefined) {
       const val = Number(parsed[field]);
@@ -122,7 +128,8 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'allowNewDependencies',
     'allowProtectedFileChanges',
     'allowGitPush',
-    'requireHumanDiffApproval'
+    'requireHumanDiffApproval',
+    'llmStrictJson'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {

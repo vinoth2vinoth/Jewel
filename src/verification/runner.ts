@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { JewelConfig } from '../core/config';
-import { checkCommandPolicy, redactSecrets } from '../safety/policy';
+import { checkCommandPolicy } from '../safety/policy';
 
 export interface CommandResult {
   commandKey: string;
@@ -140,6 +140,8 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
   return report;
 }
 
+import { redactSecrets } from '../safety/secret-redactor';
+
 export function saveVerificationReports(report: VerificationReport, cwd: string, formats: ('markdown' | 'json')[]) {
   const reportsDir = path.join(cwd, '.jewel', 'reports');
   if (!fs.existsSync(reportsDir)) {
@@ -148,12 +150,12 @@ export function saveVerificationReports(report: VerificationReport, cwd: string,
 
   if (formats.includes('json')) {
     const jsonPath = path.join(reportsDir, 'latest.json');
-    fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf8');
+    fs.writeFileSync(jsonPath, redactSecrets(JSON.stringify(report, null, 2)), 'utf8');
   }
 
   if (formats.includes('markdown')) {
     const mdPath = path.join(reportsDir, 'latest.md');
-    fs.writeFileSync(mdPath, generateMarkdownReport(report), 'utf8');
+    fs.writeFileSync(mdPath, redactSecrets(generateMarkdownReport(report)), 'utf8');
   }
 }
 

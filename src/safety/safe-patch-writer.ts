@@ -9,7 +9,8 @@ import {
   isDependencyPath, 
   isLockfilePath, 
   isAbsoluteOrEscapingPath,
-  isAnyAbsolutePath
+  isAnyAbsolutePath,
+  isSafeRepoRelativePath
 } from './path-policy';
 
 export interface BlockedFile {
@@ -30,6 +31,11 @@ function validateProposedFile(
   config: JewelConfig,
   cwd: string
 ): string | null {
+  // Strict repo-relative path check
+  if (!isSafeRepoRelativePath(filePath)) {
+    return 'Unsafe patch path. Patch paths must be clean repo-relative paths with no absolute path, drive prefix, UNC path, null byte, or parent traversal.';
+  }
+
   // 0. Reject null bytes in path.
   if (filePath.includes('\0')) {
     return `Path contains null bytes: "${filePath}"`;
@@ -129,7 +135,8 @@ export function applyPatchProposalSafely(
   patchProposal: any,
   taskContract: TaskContract,
   config: JewelConfig,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  sessionPath?: string
 ): SafePatchResult {
   const blockedFiles: BlockedFile[] = [];
 
@@ -161,14 +168,37 @@ export function applyPatchProposalSafely(
     };
   }
 
-  // Create parent folders only after all proposed files are validated.
-  // Write files only after full validation succeeds.
+  // 1. Take snapshots of original contents and existence state of target files
+  const snapshots: { filePath: string; exists: boolean; content?: string }[] = [];
+  for (const file of patchProposal.files) {
+    const targetPath = path.resolve(cwd, file.filePath);
+    const exists = fs.existsSync(targetPath);
+    if (exists) {
+      try {
+        const content = fs.readFileSync(targetPath, 'utf8');
+        snapshots.push({ filePath: targetPath, exists, content });
+      } catch (err) {
+        // Fallback if file exists but is not readable (e.g., directory)
+        snapshots.push({ filePath: targetPath, exists });
+      }
+    } else {
+      snapshots.push({ filePath: targetPath, exists });
+    }
+  }
+
+  // 2. Write files in a transaction-like loop
   const appliedFiles: string[] = [];
+  const newlyCreatedFiles: string[] = [];
   try {
     for (const file of patchProposal.files) {
       const targetPath = path.resolve(cwd, file.filePath);
       const parentDir = path.dirname(targetPath);
-      
+      const existedBefore = fs.existsSync(targetPath);
+
+      if (!existedBefore) {
+        newlyCreatedFiles.push(targetPath);
+      }
+
       if (!fs.existsSync(parentDir)) {
         fs.mkdirSync(parentDir, { recursive: true });
       }
@@ -177,10 +207,57 @@ export function applyPatchProposalSafely(
       appliedFiles.push(normalizeRepoPath(file.filePath, cwd));
     }
   } catch (err: any) {
+    // Write failure: Rollback all changes
+    for (const snapshot of snapshots) {
+      if (snapshot.exists && snapshot.content !== undefined) {
+        try {
+          fs.writeFileSync(snapshot.filePath, snapshot.content, 'utf8');
+        } catch {}
+      }
+    }
+    for (const newFilePath of newlyCreatedFiles) {
+      try {
+        if (fs.existsSync(newFilePath)) {
+          // If it was created as a directory, remove directory, otherwise unlink file
+          const stats = fs.statSync(newFilePath);
+          if (stats.isDirectory()) {
+            fs.rmSync(newFilePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(newFilePath);
+          }
+        }
+      } catch {}
+    }
+
+    // Save recovery details inside the session directory if provided
+    if (sessionPath) {
+      try {
+        const recoveryData = {
+          timestamp: new Date().toISOString(),
+          error: err.message,
+          snapshots: snapshots.map(s => ({
+            filePath: s.filePath,
+            existed: s.exists,
+            contentLength: s.content?.length
+          })),
+          newlyCreatedDeleted: newlyCreatedFiles
+        };
+        const recoveryDir = path.join(sessionPath, 'recovery');
+        if (!fs.existsSync(recoveryDir)) {
+          fs.mkdirSync(recoveryDir, { recursive: true });
+        }
+        fs.writeFileSync(
+          path.join(recoveryDir, 'write-failure-recovery.json'),
+          JSON.stringify(recoveryData, null, 2),
+          'utf8'
+        );
+      } catch {}
+    }
+
     return {
       success: false,
-      appliedFiles,
-      blockedFiles: [{ filePath: 'write_failure', reason: `Failed writing files: ${err.message}` }]
+      appliedFiles: [],
+      blockedFiles: [{ filePath: 'write_failure', reason: `Failed writing files: ${err.message}. Rollback successful.` }]
     };
   }
 

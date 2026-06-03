@@ -38,6 +38,7 @@ const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const git_1 = require("../../storage/git");
+const config_1 = require("../../core/config");
 function runDoctor(cwd = process.cwd()) {
     console.log('Running Jewel Diagnostics (Doctor)...\n');
     let failCount = 0;
@@ -95,12 +96,13 @@ function runDoctor(cwd = process.cwd()) {
     let config = null;
     if (fs.existsSync(configPath)) {
         try {
-            config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            report('PASS', 'jewel.config.json exists and is valid JSON.');
+            const parsedRaw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            config = (0, config_1.validateAndMergeConfig)(parsedRaw);
+            report('PASS', 'jewel.config.json exists and is valid configuration.');
             configExists = true;
         }
         catch (err) {
-            report('FAIL', 'jewel.config.json exists but contains invalid JSON.', err.message);
+            report('FAIL', 'jewel.config.json contains invalid configuration.', err.message);
         }
     }
     else {

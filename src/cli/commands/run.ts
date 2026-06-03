@@ -4,13 +4,15 @@ import * as readline from 'readline';
 import { execSync } from 'child_process';
 import { loadConfig } from '../../core/config';
 import { loadSkills } from '../../skills/loader';
-import { createSession, TaskContract } from '../../core/session';
+import { createSession, TaskContract, validateContract } from '../../core/session';
 import { createCheckpoint, rollbackCheckpoint, CheckpointMetadata } from '../../storage/git';
 import { runDiffGuard } from '../../safety/diff-guard';
 import { runVerification, VerificationReport } from '../../verification/runner';
 import { runCriticReview } from '../../safety/critic';
-import { MockAgentAdapter } from '../../agents/adapter';
+import { createAgentAdapter } from '../../agents/provider-factory';
 import { applyPatchProposalSafely } from '../../safety/safe-patch-writer';
+import { validateTaskContractJson, validatePatchProposalJson } from '../../agents/json-response';
+import { redactSecrets } from '../../safety/secret-redactor';
 
 function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
@@ -23,6 +25,29 @@ function askQuestion(query: string): Promise<string> {
   }));
 }
 
+function generateRepoSummary(cwd: string): string {
+  const files: string[] = [];
+  try {
+    const listFilesRecursive = (dir: string, depth = 0) => {
+      if (depth > 3) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.jewel') {
+          continue;
+        }
+        const rel = path.relative(cwd, path.join(dir, entry.name)).replace(/\\/g, '/');
+        if (entry.isDirectory()) {
+          listFilesRecursive(path.join(dir, entry.name), depth + 1);
+        } else {
+          files.push(rel);
+        }
+      }
+    };
+    listFilesRecursive(cwd);
+  } catch {}
+  return `Project Structure:\n${files.map(f => `- ${f}`).join('\n')}`;
+}
+
 export async function runTask(
   task: string,
   filesNeeded: string[] = [],
@@ -30,7 +55,13 @@ export async function runTask(
   cwd: string = process.cwd(),
   yesFlag: boolean = false,
   noReview: boolean = false,
-  keepFailed: boolean = false
+  keepFailed: boolean = false,
+  cliOverrides?: {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    maxOutputTokens?: number;
+  }
 ): Promise<void> {
   if (!task || task.trim() === '') {
     console.error('Error: Task description cannot be empty.');
@@ -48,6 +79,25 @@ export async function runTask(
     process.exit(1);
   }
 
+  if (cliOverrides) {
+    if (cliOverrides.provider !== undefined) {
+      if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(cliOverrides.provider)) {
+        console.error('Error: Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".');
+        process.exit(1);
+      }
+      config.provider = cliOverrides.provider as any;
+    }
+    if (cliOverrides.model !== undefined) {
+      config.model = cliOverrides.model;
+    }
+    if (cliOverrides.temperature !== undefined) {
+      config.temperature = cliOverrides.temperature;
+    }
+    if (cliOverrides.maxOutputTokens !== undefined) {
+      config.maxOutputTokens = cliOverrides.maxOutputTokens;
+    }
+  }
+
   const skills = loadSkills(cwd);
   console.log(`[+] Loaded ${skills.length} skills from .jewel/skills`);
 
@@ -56,8 +106,91 @@ export async function runTask(
     console.log('[+] Detected AGENTS.md rules file.');
   }
 
+  // Determine if we are running an agent or manual human edits
+  const isAgentMode = useMock || config.provider !== 'none';
+
   // 2. Initialize Session & Task Contract
   const { sessionId, sessionPath, contractPath } = createSession(task, config, filesNeeded, cwd);
+
+  let adapter: any = null;
+  if (isAgentMode) {
+    const adapterConfig = useMock ? { ...config, provider: 'none' as const } : config;
+    try {
+      adapter = createAgentAdapter(adapterConfig);
+    } catch (err: any) {
+      console.error(`[-] Error instantiating agent adapter: ${err.message}`);
+      process.exit(1);
+    }
+
+    console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
+    const repoSummary = generateRepoSummary(cwd);
+    let contractFromAdapter;
+    try {
+      contractFromAdapter = await adapter.plan({
+        task,
+        repoSummary,
+        config,
+        skills,
+        sessionPath,
+        filesNeeded
+      });
+    } catch (err: any) {
+      console.error(`[-] Adapter planning failed: ${err.message}`);
+      
+      const finalReport = {
+        sessionId,
+        task,
+        status: 'FAIL',
+        date: new Date().toISOString(),
+        error: err.message,
+        provider: config.provider,
+        model: config.model
+      };
+      const reportsDir = path.join(cwd, '.jewel', 'reports');
+      if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+
+      const md = redactSecrets(`# Jewel Run Report: FAIL\n\n**Session:** ${sessionId}\n**Task:** ${task}\n**Result:** FAIL\n**Error:** ${err.message}\n`);
+      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), md, 'utf8');
+      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), md, 'utf8');
+      
+      process.exit(1);
+    }
+
+    try {
+      validateTaskContractJson(contractFromAdapter);
+    } catch (err: any) {
+      console.error(`[-] Task contract validation failed: ${err.message}`);
+      
+      const finalReport = {
+        sessionId,
+        task,
+        status: 'BLOCKED',
+        date: new Date().toISOString(),
+        error: `Task contract validation failed: ${err.message}`,
+        provider: config.provider,
+        model: config.model
+      };
+      const reportsDir = path.join(cwd, '.jewel', 'reports');
+      if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+
+      const md = redactSecrets(`# Jewel Run Report: BLOCKED\n\n**Session:** ${sessionId}\n**Task:** ${task}\n**Result:** BLOCKED\n**Error:** Task contract validation failed: ${err.message}\n`);
+      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), md, 'utf8');
+      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), md, 'utf8');
+
+      process.exit(1);
+    }
+
+    fs.writeFileSync(contractPath, JSON.stringify(contractFromAdapter, null, 2), 'utf8');
+  }
+
   const contract: TaskContract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
 
   console.log(`\n--- Enforced Task Contract (Session: ${sessionId}) ---`);
@@ -73,38 +206,81 @@ export async function runTask(
   fs.writeFileSync(path.join(sessionPath, 'checkpoint.json'), JSON.stringify(checkpoint, null, 2), 'utf8');
   console.log(`[+] Checkpoint created. strategy: ${checkpoint.isGit ? 'Git commit' : 'Backup copy'}`);
 
-  // 4. Apply changes (Mock adapter or User edit)
+  // 4. Apply changes (LLM adapter or User edit)
   let changedFilesCount = 0;
   let patchBlocked = false;
+  let noChangeNeeded = false;
   let blockReasons: string[] = [];
+  let noChangeReason = '';
 
-  if (useMock) {
-    console.log('\n[Adapter] Running mock agent adapter to apply changes...');
-    const adapter = new MockAgentAdapter();
-    const patch = await adapter.proposePatch({
-      taskContract: contract,
-      allowedFiles: contract.filesLikelyNeeded,
-      repoContext: 'Mock context',
-      verificationResult: null
-    });
-
-    const patchResult = applyPatchProposalSafely(patch, contract, config, cwd);
-    if (!patchResult.success) {
-      patchBlocked = true;
-      blockReasons = patchResult.blockedFiles.map(b => `${b.filePath}: ${b.reason}`);
-      console.error(`\n[-] PATCH BLOCKED BY SAFE PATCH WRITER:\n${blockReasons.map(r => `  - ${r}`).join('\n')}`);
-      
-      // Save blocked patch proposal to the session folder
-      fs.writeFileSync(
-        path.join(sessionPath, 'blocked-patch-proposal.json'),
-        JSON.stringify(patch, null, 2),
-        'utf8'
-      );
-    } else {
-      for (const filePath of patchResult.appliedFiles) {
-        console.log(`  [+] Applied patch to: ${filePath}`);
+  if (isAgentMode) {
+    console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
+    let repoContext = '';
+    for (const filePath of contract.filesLikelyNeeded) {
+      const fullPath = path.resolve(cwd, filePath);
+      if (fs.existsSync(fullPath)) {
+        const content = fs.readFileSync(fullPath, 'utf8');
+        repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
+      } else {
+        repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
       }
-      changedFilesCount = patchResult.appliedFiles.length;
+    }
+
+    let patch: any;
+    try {
+      patch = await adapter.proposePatch({
+        taskContract: contract,
+        allowedFiles: contract.filesLikelyNeeded,
+        repoContext,
+        verificationResult: null,
+        config,
+        sessionPath
+      });
+    } catch (err: any) {
+      console.error(`[-] Patch proposal failed: ${err.message}`);
+      patchBlocked = true;
+      blockReasons = [`Patch proposal failed: ${err.message}`];
+      patch = { summary: '', files: [], notes: [], riskLevel: contract.riskLevel };
+    }
+
+    if (!patchBlocked) {
+      try {
+        validatePatchProposalJson(patch);
+      } catch (err: any) {
+        patchBlocked = true;
+        blockReasons = [`Patch proposal validation failed: ${err.message}`];
+      }
+    }
+
+    if (!patchBlocked) {
+      if (patch.noChangeNeeded === true) {
+        noChangeNeeded = true;
+        noChangeReason = patch.noChangeReason || 'No changes needed indicated by LLM.';
+        console.log(`\n[Adapter] Adapter indicated no changes are needed. Reason: "${noChangeReason}"`);
+      }
+    }
+
+    if (!patchBlocked && !noChangeNeeded) {
+      const patchResult = applyPatchProposalSafely(patch, contract, config, cwd, sessionPath);
+      if (!patchResult.success) {
+        patchBlocked = true;
+        blockReasons = patchResult.blockedFiles.map(b => `${b.filePath}: ${b.reason}`);
+        
+        fs.writeFileSync(
+          path.join(sessionPath, 'blocked-patch-proposal.json'),
+          redactSecrets(JSON.stringify(patch, null, 2)),
+          'utf8'
+        );
+      } else {
+        for (const filePath of patchResult.appliedFiles) {
+          console.log(`  [+] Applied patch to: ${filePath}`);
+        }
+        changedFilesCount = patchResult.appliedFiles.length;
+      }
+    }
+
+    if (patchBlocked) {
+      console.error(`\n[-] PATCH BLOCKED BY SAFE PATCH WRITER OR VALIDATOR:\n${blockReasons.map(r => `  - ${r}`).join('\n')}`);
     }
   } else {
     console.log('\n>>> Jewel is now in SAFE SLEEP mode.');
@@ -114,7 +290,7 @@ export async function runTask(
   }
 
   // HUMAN DIFF APPROVAL loop
-  if (!patchBlocked) {
+  if (!patchBlocked && !noChangeNeeded) {
     const diffAnalysisForReview = runDiffGuard(checkpoint, config, cwd);
     
     let approved = true;
@@ -179,6 +355,8 @@ export async function runTask(
         task,
         status: reportStatus,
         date: new Date().toISOString(),
+        provider: config.provider,
+        model: config.model,
         diffSummary: {
           filesChanged: diffAnalysisForReview.changedFilesCount,
           linesAdded: diffAnalysisForReview.addedLinesCount,
@@ -191,18 +369,20 @@ export async function runTask(
       if (!fs.existsSync(reportsDir)) {
         fs.mkdirSync(reportsDir, { recursive: true });
       }
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), JSON.stringify(finalReport, null, 2), 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), JSON.stringify(finalReport, null, 2), 'utf8');
+      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
       
       let md = `# Jewel Run Report: REJECTED\n\n`;
       md += `**Session:** ${sessionId}\n`;
       md += `**Task:** ${task}\n`;
       md += `**Result:** REJECTED\n`;
+      md += `**Provider:** ${config.provider}\n`;
+      md += `**Model:** ${config.model || 'N/A'}\n`;
       md += `**Date:** ${finalReport.date}\n\n`;
       md += `Patch proposal was rejected during human diff review.\n`;
       
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), md, 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), md, 'utf8');
+      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), redactSecrets(md), 'utf8');
+      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), redactSecrets(md), 'utf8');
       
       if (!keepFailed) {
         console.log('Rolling back changes to restore original state...');
@@ -227,7 +407,7 @@ export async function runTask(
   let critic = null;
   let passedAll = false;
 
-  if (!patchBlocked) {
+  if (!patchBlocked && !noChangeNeeded) {
     while (retries <= maxRetries) {
       if (retries > 0) {
         console.log(`\n[Retry ${retries}/${maxRetries}] Retrying verification checks...`);
@@ -267,7 +447,6 @@ export async function runTask(
 
       // If verification/critic failed, allow interactive fix or automatic failure
       if (useMock) {
-        // Mock mode does not support interactive debugging loop, so break immediately
         console.log('Mock mode: Failures detected. Bypassing interactive retry.');
         break;
       } else {
@@ -283,14 +462,28 @@ export async function runTask(
   }
 
   // 6. Finalize (Success or Rollback)
-  const reportStatus = patchBlocked ? 'BLOCKED' : (passedAll ? 'PASS' : (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK' ? 'BLOCKED' : 'FAIL'));
+  const reportStatus = patchBlocked 
+    ? 'BLOCKED' 
+    : (noChangeNeeded 
+        ? 'NO_CHANGES_DETECTED' 
+        : (passedAll ? 'PASS' : (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK' ? 'BLOCKED' : 'FAIL'))
+      );
 
   const finalReport = {
     sessionId,
     task,
     status: reportStatus,
     date: new Date().toISOString(),
+    provider: config.provider,
+    model: config.model,
+    usage: adapter?.usage ? {
+      inputTokens: adapter.usage.inputTokens,
+      outputTokens: adapter.usage.outputTokens,
+      totalTokens: adapter.usage.totalTokens,
+      estimatedCostUsd: adapter.usage.estimatedCostUsd
+    } : "usage unavailable",
     blockReasons: patchBlocked ? blockReasons : undefined,
+    noChangeReason: noChangeNeeded ? noChangeReason : undefined,
     diffSummary: diffAnalysis ? {
       filesChanged: diffAnalysis.changedFilesCount,
       linesAdded: diffAnalysis.addedLinesCount,
@@ -316,15 +509,28 @@ export async function runTask(
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true });
   }
-  fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), JSON.stringify(finalReport, null, 2), 'utf8');
-  fs.writeFileSync(path.join(sessionPath, 'run-report.json'), JSON.stringify(finalReport, null, 2), 'utf8');
+  fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+  fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
 
   // Markdown run report
   let md = `# Jewel Run Report: ${reportStatus}\n\n`;
   md += `**Session:** ${sessionId}\n`;
   md += `**Task:** ${task}\n`;
   md += `**Result:** ${reportStatus}\n`;
+  md += `**Provider:** ${config.provider}\n`;
+  md += `**Model:** ${config.model || 'N/A'}\n`;
+  if (adapter?.usage) {
+    md += `**Token Usage:** Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}\n`;
+  } else {
+    md += `**Token Usage:** usage unavailable\n`;
+  }
   md += `**Date:** ${finalReport.date}\n\n`;
+
+  if (noChangeNeeded) {
+    md += `## No Changes Needed\n\n`;
+    md += `The LLM adapter indicated that no changes are needed for this task.\n`;
+    md += `**Reason:** ${noChangeReason}\n\n`;
+  }
 
   if (patchBlocked) {
     md += `## Blocked Patch Details\n\n`;
@@ -346,10 +552,10 @@ export async function runTask(
     md += critic.findings.map(f => ` - ${f}`).join('\n') + '\n\n';
   }
 
-  fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), md, 'utf8');
-  fs.writeFileSync(path.join(sessionPath, 'run-report.md'), md, 'utf8');
+  fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), redactSecrets(md), 'utf8');
+  fs.writeFileSync(path.join(sessionPath, 'run-report.md'), redactSecrets(md), 'utf8');
 
-  if (passedAll) {
+  if (passedAll || (noChangeNeeded && !patchBlocked)) {
     console.log(`\n[+] Success! Task verified and finalized. Report written to .jewel/reports/latest-run.md`);
     process.exit(0);
   } else {

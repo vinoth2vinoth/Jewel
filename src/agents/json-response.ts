@@ -1,0 +1,202 @@
+import { TaskContract } from '../core/session';
+import { PatchProposal, ReviewResult } from './adapter';
+
+export function assertNoForbiddenExecutionFields(input: unknown): void {
+  const forbidden = [
+    'command', 'commands', 'shell', 'terminal', 'run', 'runs', 'exec', 
+    'execute', 'script', 'scripts', 'tool', 'tools', 'function_call', 'tool_calls'
+  ];
+
+  function check(obj: any) {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of Object.keys(obj)) {
+      if (forbidden.includes(key.toLowerCase())) {
+        throw new Error(`Forbidden execution field "${key}" detected.`);
+      }
+      if (typeof obj[key] === 'object' && obj[key] !== null) {
+        check(obj[key]);
+      }
+    }
+  }
+
+  check(input);
+}
+
+export function extractJsonObject(raw: string): unknown {
+  if (typeof raw !== 'string') {
+    throw new Error('Raw input must be a string.');
+  }
+
+  let text = raw.trim();
+
+  // Find markdown code blocks
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+  const matches = [...text.matchAll(codeBlockRegex)];
+
+  if (matches.length > 1) {
+    throw new Error('Multiple JSON objects/code blocks detected. Expected exactly one JSON object.');
+  }
+
+  if (matches.length === 1) {
+    text = matches[0][1].trim();
+  }
+
+  const firstBracket = text.indexOf('[');
+  const firstBraceIndex = text.indexOf('{');
+  if (firstBracket !== -1 && (firstBraceIndex === -1 || firstBracket < firstBraceIndex)) {
+    throw new Error('JSON response cannot be an array.');
+  }
+
+  if (!text.startsWith('{') || !text.endsWith('}')) {
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
+      throw new Error('No JSON object found in the response.');
+    }
+    text = text.substring(firstBrace, lastBrace + 1);
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err: any) {
+    throw new Error(`Malformed JSON: ${err.message}`);
+  }
+
+  if (parsed === null || typeof parsed !== 'object') {
+    throw new Error('JSON response must be a single object.');
+  }
+
+  if (Array.isArray(parsed)) {
+    throw new Error('JSON response cannot be an array.');
+  }
+
+  // Reject unknown execution fields
+  assertNoForbiddenExecutionFields(parsed);
+
+  return parsed;
+}
+
+export function validateTaskContractJson(input: unknown): TaskContract {
+  assertNoForbiddenExecutionFields(input);
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid TaskContract: must be an object.');
+  }
+
+  const obj = input as any;
+
+  if (typeof obj.task !== 'string' || obj.task.trim() === '') {
+    throw new Error('Invalid TaskContract: "task" is required and must be a non-empty string.');
+  }
+  if (typeof obj.understanding !== 'string') {
+    throw new Error('Invalid TaskContract: "understanding" is required and must be a string.');
+  }
+  if (!Array.isArray(obj.assumptions) || obj.assumptions.some((x: any) => typeof x !== 'string')) {
+    throw new Error('Invalid TaskContract: "assumptions" must be an array of strings.');
+  }
+  if (!Array.isArray(obj.filesLikelyNeeded) || obj.filesLikelyNeeded.some((x: any) => typeof x !== 'string')) {
+    throw new Error('Invalid TaskContract: "filesLikelyNeeded" must be an array of strings.');
+  }
+  if (!Array.isArray(obj.forbiddenActions) || obj.forbiddenActions.some((x: any) => typeof x !== 'string')) {
+    throw new Error('Invalid TaskContract: "forbiddenActions" must be an array of strings.');
+  }
+  if (!Array.isArray(obj.successCriteria) || obj.successCriteria.length === 0 || obj.successCriteria.some((x: any) => typeof x !== 'string')) {
+    throw new Error('Invalid TaskContract: "successCriteria" must be a non-empty array of strings.');
+  }
+  if (obj.riskLevel !== 'low' && obj.riskLevel !== 'medium' && obj.riskLevel !== 'high') {
+    throw new Error('Invalid TaskContract: "riskLevel" must be "low", "medium", or "high".');
+  }
+  if (typeof obj.requiresApproval !== 'boolean') {
+    throw new Error('Invalid TaskContract: "requiresApproval" must be a boolean.');
+  }
+  if (typeof obj.createdAt !== 'string') {
+    throw new Error('Invalid TaskContract: "createdAt" is required and must be a string.');
+  }
+  if (obj.mode !== 'strict' && obj.mode !== 'lax') {
+    throw new Error('Invalid TaskContract: "mode" must be "strict" or "lax".');
+  }
+
+  return obj as TaskContract;
+}
+
+export function validatePatchProposalJson(input: unknown): PatchProposal {
+  assertNoForbiddenExecutionFields(input);
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid PatchProposal: must be an object.');
+  }
+
+  const obj = input as any;
+
+  if (typeof obj.summary !== 'string' || obj.summary.trim() === '') {
+    throw new Error('Invalid PatchProposal: "summary" is required and must be a non-empty string.');
+  }
+
+  if (!Array.isArray(obj.files)) {
+    throw new Error('Invalid PatchProposal: "files" is required and must be an array.');
+  }
+
+  if (obj.files.length === 0) {
+    if (obj.noChangeNeeded !== true) {
+      throw new Error('Invalid PatchProposal: empty files array is blocked unless "noChangeNeeded" is true.');
+    }
+    if (typeof obj.noChangeReason !== 'string' || obj.noChangeReason.trim() === '') {
+      throw new Error('Invalid PatchProposal: "noChangeReason" is required and must be a non-empty string when "noChangeNeeded" is true.');
+    }
+  }
+
+  for (let i = 0; i < obj.files.length; i++) {
+    const f = obj.files[i];
+    if (!f || typeof f !== 'object' || Array.isArray(f)) {
+      throw new Error(`Invalid PatchProposal: "files[${i}]" must be an object.`);
+    }
+    if (typeof f.filePath !== 'string' || f.filePath.trim() === '') {
+      throw new Error(`Invalid PatchProposal: "files[${i}].filePath" is required and must be a non-empty string.`);
+    }
+    if (typeof f.content !== 'string') {
+      throw new Error(`Invalid PatchProposal: "files[${i}].content" is required and must be a string.`);
+    }
+    if (typeof f.reason !== 'string' || f.reason.trim() === '') {
+      throw new Error(`Invalid PatchProposal: "files[${i}].reason" is required and must be a non-empty string.`);
+    }
+  }
+
+  if (!Array.isArray(obj.notes) || obj.notes.some((x: any) => typeof x !== 'string')) {
+    throw new Error('Invalid PatchProposal: "notes" must be an array of strings.');
+  }
+
+  if (obj.riskLevel !== 'low' && obj.riskLevel !== 'medium' && obj.riskLevel !== 'high') {
+    throw new Error('Invalid PatchProposal: "riskLevel" must be "low", "medium", or "high".');
+  }
+
+  if (obj.noChangeNeeded !== undefined && typeof obj.noChangeNeeded !== 'boolean') {
+    throw new Error('Invalid PatchProposal: "noChangeNeeded" must be a boolean.');
+  }
+
+  if (obj.noChangeReason !== undefined && typeof obj.noChangeReason !== 'string') {
+    throw new Error('Invalid PatchProposal: "noChangeReason" must be a string.');
+  }
+
+  return obj as PatchProposal;
+}
+
+export function validateReviewResultJson(input: unknown): ReviewResult {
+  assertNoForbiddenExecutionFields(input);
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid ReviewResult: must be an object.');
+  }
+
+  const obj = input as any;
+
+  if (obj.status !== 'PASS' && obj.status !== 'WARN' && obj.status !== 'BLOCK') {
+    throw new Error('Invalid ReviewResult: "status" must be "PASS", "WARN", or "BLOCK".');
+  }
+
+  if (!Array.isArray(obj.findings) || obj.findings.some((x: any) => typeof x !== 'string')) {
+    throw new Error('Invalid ReviewResult: "findings" must be an array of strings.');
+  }
+
+  return obj as ReviewResult;
+}

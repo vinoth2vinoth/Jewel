@@ -54,6 +54,9 @@ exports.DEFAULT_CONFIG = {
     model: '',
     temperature: 0,
     maxOutputTokens: 4000,
+    llmTimeoutMs: 60000,
+    llmMaxRetries: 2,
+    llmStrictJson: true,
     commands: {
         lint: '',
         typecheck: '',
@@ -108,7 +111,7 @@ function validateAndMergeConfig(parsed) {
         }
         config.mode = parsed.mode;
     }
-    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged'];
+    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries'];
     for (const field of numericFields) {
         if (parsed[field] !== undefined) {
             const val = Number(parsed[field]);
@@ -124,7 +127,8 @@ function validateAndMergeConfig(parsed) {
         'allowNewDependencies',
         'allowProtectedFileChanges',
         'allowGitPush',
-        'requireHumanDiffApproval'
+        'requireHumanDiffApproval',
+        'llmStrictJson'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {
