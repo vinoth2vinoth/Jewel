@@ -112,7 +112,7 @@ export function runReleaseCheck(cwd: string = process.cwd()): void {
   // 7 & 8. npm pack --dry-run succeeds and contains no test files
   let packFilesList: string[] = [];
   try {
-    const output = execSync('npm pack --dry-run', { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const output = execSync('npm pack --dry-run 2>&1', { cwd, encoding: 'utf8' });
     report('PASS', 'npm pack --dry-run command executed successfully.');
     
     // Parse pack files list
@@ -128,16 +128,12 @@ export function runReleaseCheck(cwd: string = process.cwd()): void {
         continue;
       }
       if (isListing && line.trim() !== '') {
-        // E.g. "npm notice 10.0kB README.md"
-        const cleanLine = line.replace(/npm notice\s+\d+(\.\d+)?[a-zA-Z]+\s+/g, '').trim();
-        // Remove notice tag
-        const parts = cleanLine.split(/\s+/);
-        if (parts[0] === 'npm' && parts[1] === 'notice') {
-          // line looks like: "npm notice 10.0kB README.md" or "npm notice bin/jewel.js"
-          // We remove the first two tokens and size token
-          const remaining = cleanLine.substring(cleanLine.indexOf('notice') + 6).trim();
-          const filename = remaining.replace(/^\d+(\.\d+)?[a-zA-Z]+\s+/, '').trim();
-          if (filename) packFilesList.push(filename);
+        const match = line.match(/npm\s+notice\s+(?:\d+(?:\.\d+)?[a-zA-Z]+\s+)?(.*)/);
+        if (match) {
+          const filename = match[1].trim();
+          if (filename) {
+            packFilesList.push(filename);
+          }
         }
       }
     }
