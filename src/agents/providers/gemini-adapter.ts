@@ -158,7 +158,17 @@ export class GeminiAdapter implements AgentAdapter {
 
       requestBody.generationConfig.responseMimeType = 'application/json';
       if (schema) {
-        requestBody.generationConfig.responseSchema = schema;
+        const cleanSchema = (s: any): any => {
+          if (s === null || typeof s !== 'object') return s;
+          if (Array.isArray(s)) return s.map(cleanSchema);
+          const cleaned: any = {};
+          for (const [k, v] of Object.entries(s)) {
+            if (k === '$schema' || k === 'additionalProperties') continue;
+            cleaned[k] = cleanSchema(v);
+          }
+          return cleaned;
+        };
+        requestBody.generationConfig.responseSchema = cleanSchema(schema);
       }
     } else if (config.llmStrictJson) {
       requestBody.generationConfig.responseMimeType = 'application/json';
