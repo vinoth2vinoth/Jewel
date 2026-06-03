@@ -1,3 +1,4 @@
+// Mock implementation for: Update math calculations
 function add(a, b) {
   return a + b;
 }

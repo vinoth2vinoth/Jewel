@@ -1,12 +1,12 @@
 {
   "projectName": "demo-project",
-  "date": "2026-06-03T09:37:27.312Z",
+  "date": "2026-06-03T09:39:03.049Z",
   "mode": "strict",
-  "overallStatus": "SKIPPED",
+  "overallStatus": "PASS",
   "stats": {
-    "passed": 0,
+    "passed": 1,
     "failed": 0,
-    "skipped": 5,
+    "skipped": 4,
     "blocked": 0
   },
   "results": [
@@ -26,9 +26,10 @@
     },
     {
       "commandKey": "test",
-      "commandLine": "",
-      "status": "SKIPPED",
-      "stdout": "",
+      "commandLine": "npm test",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "\n> jewel-demo-project@1.0.0 test\n> node math.test.js\n\nRunning math tests...\n  [PASS] add(2, 3) should equal 5\n  [PASS] divide(10, 0) should throw exception\n\nAll tests executed successfully.\n",
       "stderr": ""
     },
     {
