@@ -1,6 +1,6 @@
 # Jewel: Strict AI Coding Safety Harness
 
-Jewel is a strict, verification-first AI coding harness CLI designed to force AI coding agents to follow disciplined software engineering principles. 
+Jewel is a strict, verification-first AI coding harness CLI designed to force AI coding agents to follow disciplined software engineering principles.
 
 Inspired by Andrej Karpathy's style of coding:
 1. Think before coding
@@ -26,6 +26,7 @@ Inspired by Andrej Karpathy's style of coding:
 - **Strict about file scope**: Ensures LLM agent proposals never write to files outside the declared task scope.
 - **Safe-patch-writer protected**: Validates all incoming patch proposals for path escapes, traversal, absolute targets, and UNC targets before editing files.
 - **Human-review friendly**: Prompts users with clean side-by-side git diff previews before applying any changes.
+- **Built-in Secret Audit**: Scans reports and runs verification audits to identify and block leaked credentials.
 
 ## What Jewel IS NOT
 - **A full Claude Code clone**: Jewel focuses specifically on the safety harness, checkpoint, and verification runner layers, not on building autonomous multi-agent loops.
@@ -55,14 +56,15 @@ You can package and install Jewel globally from a local tarball to verify its be
    ```bash
    npm pack
    ```
-   This generates a file like `jewel-cli-0.4.0.tgz`.
+   This generates a file like `jewel-cli-0.7.0.tgz`.
 2. Install the package globally from the local tarball:
    ```bash
-   npm install -g ./jewel-cli-0.4.0.tgz
+   npm install -g ./jewel-cli-0.7.0.tgz
    ```
 3. Verify that the global command is available:
    ```bash
    jewel --help
+   jewel version
    ```
 4. Diagnose the workspace environment:
    ```bash
@@ -96,6 +98,9 @@ npm uninstall -g jewel-cli
 | `jewel rollback` | Revert the workspace to the latest session checkpoint state. |
 | `jewel audit` | Inspect repository configuration quality and security. |
 | `jewel doctor` | Diagnose environment dependencies, Node, Git, API keys, and configuration. |
+| `jewel release-check` | Run public release readiness checks (verifies version, dist files, documentation, package files list, no test packaging, and performs leaked credentials checks). |
+| `jewel smoke-provider --provider <name>` | Verify connection and message format with a selected LLM provider. |
+| `jewel version` | Output package and Node version information. |
 
 ---
 
@@ -181,12 +186,13 @@ jewel run "Update endpoint documentation" -f README.md -m
 
 ---
 
-## Safety & Security Model (Phase 19)
+## Safety & Security Model
 
 1. **Destructive Commands Blocked**: Under `block` policy, dangerous commands (e.g., `rm -rf`, `del /s`, `format`, `shutdown`, `reboot`, remote script piping) are immediately caught and blocked.
 2. **Environment Protection**: Direct prints or writes to `.env` files are blocked to prevent credential exposure.
 3. **Secret Redaction**: Verification logs and reports automatically redact API keys, tokens, and credentials.
-4. **Surgical Enforcement**: If an agent modifies files outside of the task contract `filesLikelyNeeded`, the Critic or Diff Guard blocks the run.
+4. **Report Leak Audits**: The `release-check` command automatically scans report artifacts for sensitive keys (`sk-`, GitHub tokens, etc.) to ensure no leaks occur before code sharing.
+5. **Surgical Enforcement**: If an agent modifies files outside of the task contract `filesLikelyNeeded`, the Critic or Diff Guard blocks the run.
 
 ---
 
@@ -196,7 +202,7 @@ jewel run "Update endpoint documentation" -f README.md -m
 
 ---
 
-## LLM Adapter Integration (v0.4.0)
+## LLM Adapter Integration
 
 Jewel supports running tasks using real LLM providers via a provider-neutral adapter layer:
 - **none**: Runs in mock/dry-run mode using local mock files.
@@ -222,8 +228,8 @@ jewel run "Fix math divide test" --provider openai --model gpt-4o --temperature 
 jewel run "Implement array helpers" --provider gemini --model gemini-1.5-pro --max-output-tokens 2000
 ```
 
-### Cost & Token Reporting
-When running tasks using real LLM providers, Jewel records input, output, and total token usage directly in the reports. These are stored at `.jewel/reports/latest-run.json` under the `usage` block.
+### Cost & Token Usage Reporting
+When running tasks using real LLM providers, Jewel records input, output, and total token usage directly in the reports. These are stored at `.jewel/reports/latest-run.json` under the `usage` block. When provider is `none` or mock is run, usage is reported as unavailable or mock without faking costs.
 
 ---
 
@@ -256,12 +262,16 @@ To test Jewel inside it:
 
 ---
 
-## Real Provider Smoke Tests
-To run live API provider smoke tests against live endpoints:
+## Real Provider Smoke & Integration Tests
+To run live API provider smoke tests against live endpoints manually:
 1. Configure your API keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.).
 2. Set the smoke test flag to true:
    ```bash
-   $env:JEWEL_RUN_REAL_LLM_TESTS="true"
+   $env:JEWEL_RUN_REAL_LLM_TESTS="true" # Windows PowerShell
+   # or export JEWEL_RUN_REAL_LLM_TESTS="true" (Unix/Git Bash)
    ```
-3. Execute `npm test` to run both the mocked test suite and the real provider connection checks.
-
+3. Use the validator helper script:
+   ```bash
+   node scripts/manual-real-provider-smoke.js openai gpt-4o-mini --schema
+   ```
+4. Read the guidelines in [docs/manual-real-provider-validation.md](file:///C:/Users/vinot/Documents/IM%2FActive%20Projects%2FProject%20Jewel%2Fdocs%2Fmanual-real-provider-validation.md) for full details.
