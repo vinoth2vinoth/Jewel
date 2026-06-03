@@ -4,7 +4,7 @@ import * as readline from 'readline';
 import { execSync } from 'child_process';
 import { loadConfig } from '../../core/config';
 import { loadSkills } from '../../skills/loader';
-import { createSession, TaskContract, validateContract } from '../../core/session';
+import { createSession, TaskContract, validateContract, generateLocalContract } from '../../core/session';
 import { createCheckpoint, rollbackCheckpoint, CheckpointMetadata } from '../../storage/git';
 import { runDiffGuard } from '../../safety/diff-guard';
 import { runVerification, VerificationReport } from '../../verification/runner';
@@ -61,7 +61,8 @@ export async function runTask(
     model?: string;
     temperature?: number;
     maxOutputTokens?: number;
-  }
+  },
+  dryRun: boolean = false
 ): Promise<void> {
   if (!task || task.trim() === '') {
     console.error('Error: Task description cannot be empty.');
@@ -69,6 +70,9 @@ export async function runTask(
   }
 
   console.log(`Starting Jewel Harness for task: "${task}"`);
+
+  let reviewRequired = false;
+  let approved = true;
 
   // 1. Load config & skills
   let config;
@@ -96,6 +100,23 @@ export async function runTask(
     if (cliOverrides.maxOutputTokens !== undefined) {
       config.maxOutputTokens = cliOverrides.maxOutputTokens;
     }
+  }
+
+  if (dryRun) {
+    const contract = generateLocalContract(task, config, filesNeeded);
+    console.log('\n======================================');
+    console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
+    console.log('======================================');
+    console.log(`Task: "${task}"`);
+    console.log(`Provider: ${config.provider}`);
+    console.log(`Model: ${config.model || 'N/A'}`);
+    console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
+    console.log(`Risk Level: ${contract.riskLevel}`);
+    console.log('Success Criteria:');
+    contract.successCriteria.forEach((c: string) => console.log(`  - ${c}`));
+    console.log('\n[Dry-Run] No checkpoints will be created, no LLM provider will be called, and no files will be written or verified.');
+    console.log('======================================\n');
+    process.exit(0);
   }
 
   const skills = loadSkills(cwd);
@@ -136,27 +157,7 @@ export async function runTask(
       });
     } catch (err: any) {
       console.error(`[-] Adapter planning failed: ${err.message}`);
-      
-      const finalReport = {
-        sessionId,
-        task,
-        status: 'FAIL',
-        date: new Date().toISOString(),
-        error: err.message,
-        provider: config.provider,
-        model: config.model
-      };
-      const reportsDir = path.join(cwd, '.jewel', 'reports');
-      if (!fs.existsSync(reportsDir)) {
-        fs.mkdirSync(reportsDir, { recursive: true });
-      }
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-
-      const md = redactSecrets(`# Jewel Run Report: FAIL\n\n**Session:** ${sessionId}\n**Task:** ${task}\n**Result:** FAIL\n**Error:** ${err.message}\n`);
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), md, 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), md, 'utf8');
-      
+      writeRunReport(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
       process.exit(1);
     }
 
@@ -164,27 +165,7 @@ export async function runTask(
       validateTaskContractJson(contractFromAdapter);
     } catch (err: any) {
       console.error(`[-] Task contract validation failed: ${err.message}`);
-      
-      const finalReport = {
-        sessionId,
-        task,
-        status: 'BLOCKED',
-        date: new Date().toISOString(),
-        error: `Task contract validation failed: ${err.message}`,
-        provider: config.provider,
-        model: config.model
-      };
-      const reportsDir = path.join(cwd, '.jewel', 'reports');
-      if (!fs.existsSync(reportsDir)) {
-        fs.mkdirSync(reportsDir, { recursive: true });
-      }
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-
-      const md = redactSecrets(`# Jewel Run Report: BLOCKED\n\n**Session:** ${sessionId}\n**Task:** ${task}\n**Result:** BLOCKED\n**Error:** Task contract validation failed: ${err.message}\n`);
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), md, 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), md, 'utf8');
-
+      writeRunReport(cwd, sessionPath, sessionId, task, 'BLOCKED', config, adapter, { error: `Task contract validation failed: ${err.message}` });
       process.exit(1);
     }
 
@@ -293,8 +274,8 @@ export async function runTask(
   if (!patchBlocked && !noChangeNeeded) {
     const diffAnalysisForReview = runDiffGuard(checkpoint, config, cwd);
     
-    let approved = true;
-    let reviewRequired = config.requireHumanDiffApproval;
+    approved = true;
+    reviewRequired = config.requireHumanDiffApproval;
     if (noReview) {
       if (config.requireHumanDiffApproval) {
         console.log('[!] --no-review is ignored because requireHumanDiffApproval is enabled in configuration.');
@@ -350,39 +331,12 @@ export async function runTask(
       console.error('\n[-] Patch proposal rejected by human reviewer.');
       const reportStatus = 'REJECTED';
       
-      const finalReport = {
-        sessionId,
-        task,
-        status: reportStatus,
-        date: new Date().toISOString(),
-        provider: config.provider,
-        model: config.model,
-        diffSummary: {
-          filesChanged: diffAnalysisForReview.changedFilesCount,
-          linesAdded: diffAnalysisForReview.addedLinesCount,
-          linesRemoved: diffAnalysisForReview.removedLinesCount,
-          files: diffAnalysisForReview.changedFiles
-        }
-      };
-      
-      const reportsDir = path.join(cwd, '.jewel', 'reports');
-      if (!fs.existsSync(reportsDir)) {
-        fs.mkdirSync(reportsDir, { recursive: true });
-      }
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-      
-      let md = `# Jewel Run Report: REJECTED\n\n`;
-      md += `**Session:** ${sessionId}\n`;
-      md += `**Task:** ${task}\n`;
-      md += `**Result:** REJECTED\n`;
-      md += `**Provider:** ${config.provider}\n`;
-      md += `**Model:** ${config.model || 'N/A'}\n`;
-      md += `**Date:** ${finalReport.date}\n\n`;
-      md += `Patch proposal was rejected during human diff review.\n`;
-      
-      fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), redactSecrets(md), 'utf8');
-      fs.writeFileSync(path.join(sessionPath, 'run-report.md'), redactSecrets(md), 'utf8');
+      writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
+        diffAnalysis: diffAnalysisForReview,
+        reviewRequired,
+        approved,
+        keepFailed
+      });
       
       if (!keepFailed) {
         console.log('Rolling back changes to restore original state...');
@@ -469,91 +423,18 @@ export async function runTask(
         : (passedAll ? 'PASS' : (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK' ? 'BLOCKED' : 'FAIL'))
       );
 
-  const finalReport = {
-    sessionId,
-    task,
-    status: reportStatus,
-    date: new Date().toISOString(),
-    provider: config.provider,
-    model: config.model,
-    usage: adapter?.usage ? {
-      inputTokens: adapter.usage.inputTokens,
-      outputTokens: adapter.usage.outputTokens,
-      totalTokens: adapter.usage.totalTokens,
-      estimatedCostUsd: adapter.usage.estimatedCostUsd
-    } : "usage unavailable",
-    blockReasons: patchBlocked ? blockReasons : undefined,
-    noChangeReason: noChangeNeeded ? noChangeReason : undefined,
-    diffSummary: diffAnalysis ? {
-      filesChanged: diffAnalysis.changedFilesCount,
-      linesAdded: diffAnalysis.addedLinesCount,
-      linesRemoved: diffAnalysis.removedLinesCount,
-      files: diffAnalysis.changedFiles
-    } : null,
-    verification: verification ? {
-      overall: verification.overallStatus,
-      passed: verification.stats.passed,
-      failed: verification.stats.failed,
-      blocked: verification.stats.blocked,
-      skipped: verification.stats.skipped
-    } : null,
-    critic: critic ? {
-      status: critic.status,
-      confidence: critic.confidence,
-      findings: critic.findings
-    } : null
-  };
-
-  // Save report
-  const reportsDir = path.join(cwd, '.jewel', 'reports');
-  if (!fs.existsSync(reportsDir)) {
-    fs.mkdirSync(reportsDir, { recursive: true });
-  }
-  fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-  fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-
-  // Markdown run report
-  let md = `# Jewel Run Report: ${reportStatus}\n\n`;
-  md += `**Session:** ${sessionId}\n`;
-  md += `**Task:** ${task}\n`;
-  md += `**Result:** ${reportStatus}\n`;
-  md += `**Provider:** ${config.provider}\n`;
-  md += `**Model:** ${config.model || 'N/A'}\n`;
-  if (adapter?.usage) {
-    md += `**Token Usage:** Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}\n`;
-  } else {
-    md += `**Token Usage:** usage unavailable\n`;
-  }
-  md += `**Date:** ${finalReport.date}\n\n`;
-
-  if (noChangeNeeded) {
-    md += `## No Changes Needed\n\n`;
-    md += `The LLM adapter indicated that no changes are needed for this task.\n`;
-    md += `**Reason:** ${noChangeReason}\n\n`;
-  }
-
-  if (patchBlocked) {
-    md += `## Blocked Patch Details\n\n`;
-    md += `The patch proposed by the adapter was blocked for the following safety reasons:\n\n`;
-    md += blockReasons.map(r => ` - ${r}`).join('\n') + '\n\n';
-  }
-
-  if (diffAnalysis) {
-    md += `## Changes Summary\n\n`;
-    md += `- Files changed: ${diffAnalysis.changedFilesCount}\n`;
-    md += `- Lines added: ${diffAnalysis.addedLinesCount}\n`;
-    md += `- Lines removed: ${diffAnalysis.removedLinesCount}\n\n`;
-    md += `Modified files: \n` + diffAnalysis.changedFiles.map(f => ` - \`${f}\``).join('\n') + '\n\n';
-  }
-
-  if (critic) {
-    md += `## Critic Findings\n\n`;
-    md += `Status: **${critic.status}**\n`;
-    md += critic.findings.map(f => ` - ${f}`).join('\n') + '\n\n';
-  }
-
-  fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), redactSecrets(md), 'utf8');
-  fs.writeFileSync(path.join(sessionPath, 'run-report.md'), redactSecrets(md), 'utf8');
+  writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
+    noChangeNeeded,
+    noChangeReason,
+    patchBlocked,
+    blockReasons,
+    diffAnalysis,
+    verification,
+    critic,
+    reviewRequired,
+    approved,
+    keepFailed
+  });
 
   if (passedAll || (noChangeNeeded && !patchBlocked)) {
     console.log(`\n[+] Success! Task verified and finalized. Report written to .jewel/reports/latest-run.md`);
@@ -569,4 +450,193 @@ export async function runTask(
     }
     process.exit(1);
   }
+}
+
+function getPackageVersion(cwd: string): string {
+  try {
+    const pkgPath = path.join(__dirname, '../../../package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      return pkg.version || '0.5.0-dev';
+    }
+    const devPkgPath = path.join(__dirname, '../../package.json');
+    if (fs.existsSync(devPkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(devPkgPath, 'utf8'));
+      return pkg.version || '0.5.0-dev';
+    }
+  } catch {}
+  return '0.5.0-dev';
+}
+
+function writeRunReport(
+  cwd: string,
+  sessionPath: string,
+  sessionId: string,
+  task: string,
+  status: string,
+  config: any,
+  adapter: any,
+  options: {
+    error?: string;
+    noChangeNeeded?: boolean;
+    noChangeReason?: string;
+    patchBlocked?: boolean;
+    blockReasons?: string[];
+    diffAnalysis?: any;
+    verification?: any;
+    critic?: any;
+    reviewRequired?: boolean;
+    approved?: boolean;
+    keepFailed?: boolean;
+  }
+) {
+  const version = getPackageVersion(cwd);
+  const provider = config.provider;
+  const model = config.model || 'N/A';
+  const adapterName = adapter?.name || 'N/A';
+  const verificationCommandsRun = options.verification 
+    ? options.verification.results.filter((r: any) => r.status !== 'SKIPPED').map((r: any) => r.commandLine)
+    : [];
+  
+  const diffGuardStatus = options.diffAnalysis ? options.diffAnalysis.status : 'N/A';
+  const safePatchWriterStatus = options.patchBlocked ? 'BLOCKED' : (options.noChangeNeeded ? 'SKIPPED' : (options.diffAnalysis ? 'PASS' : 'N/A'));
+  
+  let humanReviewStatus = 'SKIPPED';
+  if (options.reviewRequired) {
+    humanReviewStatus = options.approved ? 'APPROVED' : 'REJECTED';
+  }
+  
+  let rollbackStatus = 'N/A';
+  if (status === 'REJECTED' || status === 'FAIL' || status === 'BLOCKED') {
+    if (options.diffAnalysis || options.patchBlocked || status === 'REJECTED') {
+      rollbackStatus = options.keepFailed ? 'KEPT_FAILED' : 'ROLLED_BACK';
+    }
+  }
+
+  const filesChanged = options.diffAnalysis ? options.diffAnalysis.changedFiles : [];
+  const filesProposedButBlocked = options.patchBlocked ? (options.blockReasons || []) : [];
+
+  let tokenUsage = 'usage unavailable';
+  if (adapter?.usage) {
+    tokenUsage = `Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}`;
+  }
+
+  const finalReport: any = {
+    sessionId,
+    task,
+    status,
+    date: new Date().toISOString(),
+    jewelVersion: version,
+    provider,
+    model,
+    adapterName,
+    verificationCommandsRun,
+    diffGuardStatus,
+    safePatchWriterStatus,
+    humanReviewStatus,
+    rollbackStatus,
+    filesChanged,
+    filesProposedButBlocked,
+    usage: adapter?.usage ? {
+      inputTokens: adapter.usage.inputTokens,
+      outputTokens: adapter.usage.outputTokens,
+      totalTokens: adapter.usage.totalTokens,
+      estimatedCostUsd: adapter.usage.estimatedCostUsd
+    } : 'usage unavailable',
+    error: options.error,
+    blockReasons: options.patchBlocked ? options.blockReasons : undefined,
+    noChangeReason: options.noChangeNeeded ? options.noChangeReason : undefined,
+    diffSummary: options.diffAnalysis ? {
+      filesChanged: options.diffAnalysis.changedFilesCount,
+      linesAdded: options.diffAnalysis.addedLinesCount,
+      linesRemoved: options.diffAnalysis.removedLinesCount,
+      files: options.diffAnalysis.changedFiles
+    } : null,
+    verification: options.verification ? {
+      overall: options.verification.overallStatus,
+      passed: options.verification.stats.passed,
+      failed: options.verification.stats.failed,
+      blocked: options.verification.stats.blocked,
+      skipped: options.verification.stats.skipped
+    } : null,
+    critic: options.critic ? {
+      status: options.critic.status,
+      confidence: options.critic.confidence,
+      findings: options.critic.findings
+    } : null
+  };
+
+  const reportsDir = path.join(cwd, '.jewel', 'reports');
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
+  }
+  fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+  fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
+
+  let md = `# Jewel Run Report: ${status}\n\n`;
+  md += `**Jewel Version:** ${version}\n`;
+  md += `**Session:** ${sessionId}\n`;
+  md += `**Task:** ${task}\n`;
+  md += `**Result:** ${status}\n`;
+  md += `**Provider:** ${provider}\n`;
+  md += `**Model:** ${model}\n`;
+  md += `**Adapter Name:** ${adapterName}\n`;
+  
+  if (verificationCommandsRun.length > 0) {
+    md += `**Verification Commands Run:**\n` + verificationCommandsRun.map((c: string) => ` - \`${c}\``).join('\n') + '\n';
+  } else {
+    md += `**Verification Commands Run:** None\n`;
+  }
+
+  md += `**Diff Guard Status:** ${diffGuardStatus}\n`;
+  md += `**Safe Patch Writer Status:** ${safePatchWriterStatus}\n`;
+  md += `**Human Review Status:** ${humanReviewStatus}\n`;
+  md += `**Rollback Status:** ${rollbackStatus}\n`;
+  
+  if (filesChanged.length > 0) {
+    md += `**Files Changed:**\n` + filesChanged.map((f: string) => ` - \`${f}\``).join('\n') + '\n';
+  } else {
+    md += `**Files Changed:** None\n`;
+  }
+
+  if (filesProposedButBlocked.length > 0) {
+    md += `**Files Proposed But Blocked:**\n` + filesProposedButBlocked.map((f: string) => ` - ${f}`).join('\n') + '\n';
+  } else {
+    md += `**Files Proposed But Blocked:** None\n`;
+  }
+
+  md += `**Token Usage:** ${tokenUsage}\n`;
+  md += `**Date:** ${finalReport.date}\n\n`;
+
+  if (options.error) {
+    md += `## Error Details\n\n${options.error}\n\n`;
+  }
+
+  if (options.noChangeNeeded) {
+    md += `## No Changes Needed\n\n`;
+    md += `The LLM adapter indicated that no changes are needed for this task.\n`;
+    md += `**Reason:** ${options.noChangeReason}\n\n`;
+  }
+
+  if (options.patchBlocked && options.blockReasons) {
+    md += `## Blocked Patch Details\n\n`;
+    md += `The patch proposed by the adapter was blocked for the following safety reasons:\n\n`;
+    md += options.blockReasons.map((r: string) => ` - ${r}`).join('\n') + '\n\n';
+  }
+
+  if (options.diffAnalysis) {
+    md += `## Changes Details\n\n`;
+    md += `- Files changed: ${options.diffAnalysis.changedFilesCount}\n`;
+    md += `- Lines added: ${options.diffAnalysis.addedLinesCount}\n`;
+    md += `- Lines removed: ${options.diffAnalysis.removedLinesCount}\n\n`;
+  }
+
+  if (options.critic) {
+    md += `## Critic Findings\n\n`;
+    md += `Status: **${options.critic.status}**\n`;
+    md += options.critic.findings.map((f: string) => ` - ${f}`).join('\n') + '\n\n';
+  }
+
+  fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), redactSecrets(md), 'utf8');
+  fs.writeFileSync(path.join(sessionPath, 'run-report.md'), redactSecrets(md), 'utf8');
 }

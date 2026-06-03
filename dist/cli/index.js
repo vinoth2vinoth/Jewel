@@ -8,6 +8,7 @@ const rollback_1 = require("./commands/rollback");
 const doctor_1 = require("./commands/doctor");
 const audit_1 = require("./commands/audit");
 const run_1 = require("./commands/run");
+const version_1 = require("./commands/version");
 function printHelp() {
     console.log(`
 Jewel CLI - AI Coding Safety Harness (Karpathy-inspired)
@@ -24,6 +25,7 @@ Commands:
   diff [session-id]          Show proposed changes and diff preview for a session.
   audit                      Perform a safety and repository quality check.
   doctor                     Run local environment health and configuration checks.
+  version                    Print the version info.
 
 Options:
   -f, --files <file1,file2>  Declare files likely needed for the task contract (used with 'run').
@@ -35,6 +37,7 @@ Options:
   --model <model>            Override model name.
   --temperature <temp>       Override temperature.
   --max-output-tokens <n>    Override max output tokens.
+  --dry-run                  Preview the task contract and files scope without creating a session or applying changes.
   -h, --help                 Print this help menu.
 `);
 }
@@ -48,6 +51,10 @@ async function main() {
     switch (command) {
         case 'init': {
             (0, init_1.runInit)();
+            break;
+        }
+        case 'version': {
+            (0, version_1.runVersion)();
             break;
         }
         case 'verify': {
@@ -93,6 +100,7 @@ async function main() {
             let modelOverride;
             let temperatureOverride;
             let maxOutputTokensOverride;
+            let dryRun = false;
             const remainingArgs = args.slice(2);
             for (let i = 0; i < remainingArgs.length; i++) {
                 const arg = remainingArgs[i];
@@ -143,6 +151,9 @@ async function main() {
                         i++;
                     }
                 }
+                else if (arg === '--dry-run') {
+                    dryRun = true;
+                }
             }
             const overrides = {
                 provider: providerOverride,
@@ -150,7 +161,7 @@ async function main() {
                 temperature: temperatureOverride,
                 maxOutputTokens: maxOutputTokensOverride
             };
-            await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides);
+            await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun);
             break;
         }
         default: {

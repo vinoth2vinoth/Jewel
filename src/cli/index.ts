@@ -5,6 +5,7 @@ import { runRollback } from './commands/rollback';
 import { runDoctor } from './commands/doctor';
 import { runAudit } from './commands/audit';
 import { runTask } from './commands/run';
+import { runVersion } from './commands/version';
 
 function printHelp(): void {
   console.log(`
@@ -22,6 +23,7 @@ Commands:
   diff [session-id]          Show proposed changes and diff preview for a session.
   audit                      Perform a safety and repository quality check.
   doctor                     Run local environment health and configuration checks.
+  version                    Print the version info.
 
 Options:
   -f, --files <file1,file2>  Declare files likely needed for the task contract (used with 'run').
@@ -33,6 +35,7 @@ Options:
   --model <model>            Override model name.
   --temperature <temp>       Override temperature.
   --max-output-tokens <n>    Override max output tokens.
+  --dry-run                  Preview the task contract and files scope without creating a session or applying changes.
   -h, --help                 Print this help menu.
 `);
 }
@@ -50,6 +53,11 @@ export async function main(): Promise<void> {
   switch (command) {
     case 'init': {
       runInit();
+      break;
+    }
+
+    case 'version': {
+      runVersion();
       break;
     }
 
@@ -103,6 +111,7 @@ export async function main(): Promise<void> {
       let modelOverride: string | undefined;
       let temperatureOverride: number | undefined;
       let maxOutputTokensOverride: number | undefined;
+      let dryRun = false;
 
       const remainingArgs = args.slice(2);
       for (let i = 0; i < remainingArgs.length; i++) {
@@ -145,6 +154,8 @@ export async function main(): Promise<void> {
             maxOutputTokensOverride = parseInt(val, 10);
             i++;
           }
+        } else if (arg === '--dry-run') {
+          dryRun = true;
         }
       }
 
@@ -155,7 +166,7 @@ export async function main(): Promise<void> {
         maxOutputTokens: maxOutputTokensOverride
       };
 
-      await runTask(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides);
+      await runTask(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun);
       break;
     }
 

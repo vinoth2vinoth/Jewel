@@ -20,17 +20,18 @@ Inspired by Andrej Karpathy's style of coding:
 ---
 
 ## What Jewel IS
-- A local CLI harness that intercepts agent modifications.
-- A strict guardrail checking command safety, file scoping, line change thresholds, and dependency additions.
-- An automated runner for verification suites (lint, test, build, typecheck, e2e) that captures stdout/stderr.
-- A rollback engine that leverages Git or backup snapshots to automatically revert changes when verification fails.
-- An instruction generator (`AGENTS.md`) and safety skills suite (`.jewel/skills/`).
+- **A verification-first AI coding safety harness**: Jewel wraps LLM executions in rigorous checkpoints, diff guards, and verification tests.
+- **Provider-neutral**: Supports OpenAI, Gemini, Anthropic, OpenRouter, and a mock adapter out of the box.
+- **Local-first**: Runs locally on your machine, managing your working directory via Git commits or copy snapshots.
+- **Strict about file scope**: Ensures LLM agent proposals never write to files outside the declared task scope.
+- **Safe-patch-writer protected**: Validates all incoming patch proposals for path escapes, traversal, absolute targets, and UNC targets before editing files.
+- **Human-review friendly**: Prompts users with clean side-by-side git diff previews before applying any changes.
 
 ## What Jewel IS NOT
-- A cloud dashboard or SaaS.
-- A VS Code or editor extension.
-- A multi-agent framework or swarm.
-- A full Claude Code or Aider clone.
+- **A full Claude Code clone**: Jewel focuses specifically on the safety harness, checkpoint, and verification runner layers, not on building autonomous multi-agent loops.
+- **A replacement for git**: Jewel relies on your existing git workflow for checkpoints and rollbacks.
+- **A guarantee that AI code is perfect**: While Jewel enforces tests, compiling, and lint checks, it does not guarantee logical correctness.
+- **A tool that should be run blindly on production repos**: Users should always review proposals and run tests before final commits.
 
 ---
 
@@ -48,10 +49,38 @@ To run Jewel locally:
 node dist/cli/index.js --help
 ```
 
-You can link it locally to expose the `jewel` binary:
+### Global Local Installation & Verification
+You can package and install Jewel globally from a local tarball to verify its behavior:
+1. Package the project into a tarball:
+   ```bash
+   npm pack
+   ```
+   This generates a file like `jewel-cli-0.4.0.tgz`.
+2. Install the package globally from the local tarball:
+   ```bash
+   npm install -g ./jewel-cli-0.4.0.tgz
+   ```
+3. Verify that the global command is available:
+   ```bash
+   jewel --help
+   ```
+4. Diagnose the workspace environment:
+   ```bash
+   jewel doctor
+   ```
+5. Initialize Jewel in a test directory:
+   ```bash
+   jewel init
+   ```
+6. Run verification checks:
+   ```bash
+   jewel verify
+   ```
+
+### Uninstalling
+To completely uninstall the globally installed Jewel CLI:
 ```bash
-npm link
-jewel --help
+npm uninstall -g jewel-cli
 ```
 
 ---

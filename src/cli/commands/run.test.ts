@@ -758,3 +758,34 @@ test('run command - OpenRouter integration safe patch and unsafe blocking', asyn
     cleanupWorkspace(tempDir);
   }
 });
+
+test('run command - dry-run does not write files, create checkpoints, or call providers', async () => {
+  const tempDir = createTempWorkspace();
+  const originalExit = process.exit;
+  
+  let exitCode: number | null = null;
+  process.exit = ((code?: number) => {
+    exitCode = code !== undefined ? code : 0;
+    throw new Error(`exit-${exitCode}`);
+  }) as any;
+
+  try {
+    try {
+      await runTask('dry run task', ['math.js'], false, tempDir, true, true, true, { provider: 'openai', model: 'gpt-4o-mini' }, true);
+    } catch (err: any) {
+      if (!err.message.includes('exit-0')) {
+        throw err;
+      }
+    }
+
+    assert.strictEqual(exitCode, 0);
+    // Verify no files are written
+    assert.ok(!fs.existsSync(path.join(tempDir, 'math.js')));
+    // Verify no session folder or reports folder is created
+    assert.ok(!fs.existsSync(path.join(tempDir, '.jewel')));
+  } finally {
+    process.exit = originalExit;
+    cleanupWorkspace(tempDir);
+  }
+});
+
