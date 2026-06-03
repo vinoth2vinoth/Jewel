@@ -1,0 +1,49 @@
+{
+  "projectName": "demo-project",
+  "date": "2026-06-03T09:37:27.312Z",
+  "mode": "strict",
+  "overallStatus": "SKIPPED",
+  "stats": {
+    "passed": 0,
+    "failed": 0,
+    "skipped": 5,
+    "blocked": 0
+  },
+  "results": [
+    {
+      "commandKey": "lint",
+      "commandLine": "",
+      "status": "SKIPPED",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commandKey": "typecheck",
+      "commandLine": "",
+      "status": "SKIPPED",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commandKey": "test",
+      "commandLine": "",
+      "status": "SKIPPED",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commandKey": "build",
+      "commandLine": "",
+      "status": "SKIPPED",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "commandKey": "e2e",
+      "commandLine": "",
+      "status": "SKIPPED",
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

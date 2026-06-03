@@ -1,0 +1,11 @@
+{
+  "name": "jewel-demo-project",
+  "version": "1.0.0",
+  "description": "A demo repository for Jewel safety harness",
+  "main": "math.js",
+  "scripts": {
+    "test": "node math.test.js",
+    "build": "echo 'Building...'"
+  },
+  "dependencies": {}
+}

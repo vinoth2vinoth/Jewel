@@ -1,0 +1,39 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const node_test_1 = __importDefault(require("node:test"));
+const node_assert_1 = __importDefault(require("node:assert"));
+const config_1 = require("./config");
+(0, node_test_1.default)('config loader - default config', () => {
+    const result = (0, config_1.validateAndMergeConfig)({});
+    node_assert_1.default.deepStrictEqual(result, config_1.DEFAULT_CONFIG);
+});
+(0, node_test_1.default)('config loader - valid partial config overrides defaults', () => {
+    const result = (0, config_1.validateAndMergeConfig)({
+        projectName: 'MyTestProject',
+        maxRetries: 5,
+        commands: {
+            test: 'npm run test-ci'
+        }
+    });
+    node_assert_1.default.strictEqual(result.projectName, 'MyTestProject');
+    node_assert_1.default.strictEqual(result.maxRetries, 5);
+    node_assert_1.default.strictEqual(result.commands.test, 'npm run test-ci');
+    node_assert_1.default.strictEqual(result.commands.build, ''); // should fall back to default
+});
+(0, node_test_1.default)('config loader - invalid types throw error', () => {
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ projectName: 123 });
+    }, /projectName.*must be a string/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ mode: 'unsafe' });
+    }, /mode.*must be "strict" or "lax"/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ maxRetries: -1 });
+    }, /maxRetries.*must be a non-negative number/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ requirePlanBeforeEdit: 'yes' });
+    }, /requirePlanBeforeEdit.*must be a boolean/);
+});

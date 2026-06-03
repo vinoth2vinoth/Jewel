@@ -1,0 +1,25 @@
+{
+  "task": "Update math calculations",
+  "understanding": "Implement the requested task: Update math calculations",
+  "assumptions": [
+    "The repository is initialized and building locally.",
+    "No remote actions (git push, deployment) are required unless explicitly specified."
+  ],
+  "filesLikelyNeeded": [
+    "math.js"
+  ],
+  "forbiddenActions": [
+    "Do not make broad unrelated formatting or code changes.",
+    "Do not bypass the command safety policy.",
+    "Do not install new packages unless approved by configuration."
+  ],
+  "successCriteria": [
+    "The task \"Update math calculations\" is implemented fully.",
+    "All configured verification commands run successfully with zero errors.",
+    "Code changes are surgical and restricted to the declared file scope."
+  ],
+  "riskLevel": "low",
+  "requiresApproval": false,
+  "createdAt": "2026-06-03T09:37:40.672Z",
+  "mode": "strict"
+}
