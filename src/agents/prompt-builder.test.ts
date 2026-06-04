@@ -48,3 +48,88 @@ test('prompt-builder - diff review prompt contains diff', () => {
   assert.ok(prompt.includes('JSON'), 'Mentions JSON');
   assert.ok(prompt.includes('commands'), 'Mentions commands');
 });
+
+test('prompt-builder - patch proposal prompt contains verification logs and critic feedback on repair', () => {
+  const contract = generateLocalContract('Fix division', DEFAULT_CONFIG, ['math.js']);
+  contract.preserveExistingTests = true;
+  
+  const verificationResult = {
+    projectName: 'test-project',
+    date: new Date().toISOString(),
+    mode: 'strict' as const,
+    overallStatus: 'FAIL' as const,
+    results: [
+      {
+        commandKey: 'test',
+        commandLine: 'npm run test',
+        status: 'FAIL' as const,
+        stdout: '',
+        stderr: '',
+        errorMsg: 'AssertionError: expected 2 to be 3'
+      }
+    ],
+    stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
+  };
+
+  const testCriticResult = {
+    verdict: 'BAD_GENERATED_TEST' as const,
+    confidence: 'high' as const,
+    explanation: 'Expected 2x2 * 2x3 to fail, but it is valid.',
+    suspectedRootCause: 'Wrong math dimensions',
+    suggestedFix: 'Fix dimensions in test',
+    canAutoRetry: true,
+    requiresHumanReview: false
+  };
+
+  const prompt = buildPatchProposalPrompt({
+    taskContract: contract,
+    allowedFiles: contract.filesLikelyNeeded,
+    repoContext: 'some code context',
+    verificationResult,
+    testCriticResult,
+    config: {
+      ...DEFAULT_CONFIG,
+      maxFilesChanged: 5,
+      maxLinesChanged: 250
+    }
+  });
+
+  assert.ok(prompt.includes('AssertionError: expected 2 to be 3'), 'Contains failure logs');
+  assert.ok(prompt.includes('BAD_GENERATED_TEST'), 'Contains critic verdict');
+  assert.ok(prompt.includes('Expected 2x2 * 2x3 to fail'), 'Contains critic explanation');
+  assert.ok(prompt.includes('Fix dimensions in test'), 'Contains critic suggested fix');
+  assert.ok(prompt.includes('CRITICAL WARNING: The user requested to keep existing tests exactly as they are'), 'Contains preserve warning');
+  assert.ok(prompt.includes('no more than 5 files'), 'Contains max files limit');
+  assert.ok(prompt.includes('must not exceed 250 lines'), 'Contains max lines limit');
+});
+
+test('prompt-builder - buildTestCriticPrompt contains diff and verification results', () => {
+  const contract = generateLocalContract('Fix division', DEFAULT_CONFIG, ['math.js']);
+  const verificationResult = {
+    projectName: 'test-project',
+    date: new Date().toISOString(),
+    mode: 'strict' as const,
+    overallStatus: 'FAIL' as const,
+    results: [
+      {
+        commandKey: 'test',
+        commandLine: 'npm run test',
+        status: 'FAIL' as const,
+        stdout: '',
+        stderr: '',
+        errorMsg: 'AssertionError: expected 2 to be 3'
+      }
+    ],
+    stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
+  };
+
+  const prompt = buildDiffReviewPrompt({
+    diff: '+ added lines',
+    verificationResult,
+    taskContract: contract
+  });
+
+  assert.ok(prompt.includes('+ added lines'), 'Contains diff');
+  assert.ok(prompt.includes('AssertionError: expected 2 to be 3'), 'Contains verification failures');
+});
+

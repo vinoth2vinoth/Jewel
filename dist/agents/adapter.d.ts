@@ -15,6 +15,7 @@ export interface PatchInput {
     allowedFiles: string[];
     repoContext: string;
     verificationResult: VerificationReport | null;
+    testCriticResult?: TestCriticResult;
     config?: JewelConfig;
     sessionPath?: string;
 }
@@ -41,6 +42,15 @@ export interface ReviewResult {
     status: 'PASS' | 'WARN' | 'BLOCK';
     findings: string[];
 }
+export interface TestCriticResult {
+    verdict: 'BAD_GENERATED_TEST' | 'BAD_IMPLEMENTATION' | 'FLAKY_TEST_SUSPECT' | 'ENVIRONMENT_FAILURE' | 'INSUFFICIENT_CONTEXT' | 'UNKNOWN';
+    confidence: 'high' | 'medium' | 'low';
+    explanation: string;
+    suspectedRootCause: string;
+    suggestedFix: string;
+    canAutoRetry: boolean;
+    requiresHumanReview: boolean;
+}
 export interface LLMMessage {
     role: 'system' | 'user' | 'assistant';
     content: string;
@@ -66,6 +76,7 @@ export interface AgentAdapter {
     plan(input: PlanInput): Promise<TaskContract>;
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;
+    reviewTestCorrectness?(input: ReviewInput): Promise<TestCriticResult>;
     usage?: {
         inputTokens?: number;
         outputTokens?: number;
@@ -87,4 +98,5 @@ export declare class MockAgentAdapter implements AgentAdapter {
     plan(input: PlanInput): Promise<TaskContract>;
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;
+    reviewTestCorrectness(input: ReviewInput): Promise<TestCriticResult>;
 }

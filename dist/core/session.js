@@ -92,6 +92,11 @@ function generateLocalContract(task, config, filesNeeded = []) {
         'Do not bypass the command safety policy.',
         'Do not install new packages unless approved by configuration.'
     ];
+    const normalized = task.toLowerCase();
+    const preserveExistingTests = normalized.includes('keep existing tests exactly as they are') ||
+        normalized.includes('do not change existing tests') ||
+        normalized.includes('do not modify existing tests') ||
+        normalized.includes('preserve existing tests');
     return {
         task,
         understanding: `Implement the requested task: ${task}`,
@@ -102,7 +107,8 @@ function generateLocalContract(task, config, filesNeeded = []) {
         riskLevel: risk,
         requiresApproval: risk === 'high',
         createdAt: new Date().toISOString(),
-        mode: config.mode
+        mode: config.mode,
+        preserveExistingTests
     };
 }
 function createSession(task, config, filesNeeded = [], cwd = process.cwd()) {

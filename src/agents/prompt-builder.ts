@@ -14,6 +14,9 @@ CRITICAL SAFETY RULES:
 - You must NEVER use absolute paths (e.g., "/tmp/file", "C:\\file") or parent traversal paths containing ".." (e.g., "../file").
 - Make surgical, minimal changes. Do not touch files outside of the planned files.
 - Avoid proposing new dependencies unless absolutely necessary.
+- You must estimate the scope of changes:
+  - estimatedFilesChangedCount: The number of files you plan to modify or create (e.g. 1, 2, 3, etc.)
+  - estimatedLinesChangedCount: The total number of lines (additions + deletions) you plan to modify or create (e.g. 50, 150, 200, etc.)
 
 Available Skills in the harness:
 ${skillsStr || 'None'}
@@ -39,7 +42,10 @@ You must respond with a single valid JSON object adhering to the TaskContract sc
   "riskLevel": "low | medium | high",
   "requiresApproval": true_or_false,
   "createdAt": "Current ISO timestamp",
-  "mode": "${input.config.mode}"
+  "mode": "${input.config.mode}",
+  "estimatedFilesChangedCount": 3,
+  "estimatedLinesChangedCount": 150,
+  "preserveExistingTests": true_or_false
 }
 `;
 }
@@ -50,6 +56,17 @@ export function buildPatchProposalPrompt(input: PatchInput): string {
   const verificationStr = input.verificationResult 
     ? `Test runner output from previous attempt:\nStatus: ${input.verificationResult.overallStatus}\nResults:\n${input.verificationResult.results.map(r => `- ${r.commandKey} (${r.status}): ${r.errorMsg || ''}`).join('\n')}`
     : 'No previous test runs.';
+
+  const criticFeedbackStr = input.testCriticResult
+    ? `\nCritic Feedback on previous failure:\nVerdict: ${input.testCriticResult.verdict}\nExplanation: ${input.testCriticResult.explanation}\nSuggested Fix: ${input.testCriticResult.suggestedFix}\n`
+    : '';
+
+  const protectReminder = contract.preserveExistingTests
+    ? `\nCRITICAL WARNING: The user requested to keep existing tests exactly as they are. You must NOT modify, rename, delete or refactor any existing test cases or assertions. You may only append new tests if necessary, and only add imports if required for the new tests. Violating this will block execution with an EXISTING_TEST_MODIFIED failure.\n`
+    : '';
+
+  const maxFiles = input.config?.maxFilesChanged ?? 3;
+  const maxLines = input.config?.maxLinesChanged ?? 150;
 
   return `You are an AI coding agent operating inside Jewel, a safety and security harness CLI.
 Your task is to generate a patch proposal to solve the user's coding goal.
@@ -63,7 +80,8 @@ CRITICAL SAFETY RULES:
 - Make surgical, minimal changes. Only modify or create files that are listed in the task contract filesLikelyNeeded.
 - Avoid introducing new dependencies.
 - You must write a clear reason for each file modified or created.
-
+- Scope limits: You must modify or create no more than ${maxFiles} files, and the total lines changed (additions + deletions) must not exceed ${maxLines} lines.
+${protectReminder}
 Task Contract:
 - Task: ${contract.task}
 - Understanding: ${contract.understanding}
@@ -74,6 +92,7 @@ ${contract.successCriteria.map(c => `- ${c}`).join('\n')}
 
 Previous Verification:
 ${verificationStr}
+${criticFeedbackStr}
 
 Repository Context:
 ${input.repoContext}
@@ -127,5 +146,58 @@ You must respond with a single valid JSON object adhering to the ReviewResult sc
   "status": "PASS | WARN | BLOCK",
   "findings": ["List of safety, security, and verification findings"]
 }
+`;
+}
+
+export function buildTestCriticPrompt(input: ReviewInput): string {
+  const contract = input.taskContract;
+  const verificationStr = input.verificationResult 
+    ? `Test run status: ${input.verificationResult.overallStatus}\nResults:\n${input.verificationResult.results.map(r => `- ${r.commandKey} (${r.status}): ${r.errorMsg || ''}`).join('\n')}`
+    : 'No test runs performed yet.';
+
+  return `You are a test correctness critic operating inside Jewel.
+Your task is to analyze the test failures resulting from the proposed changes and determine if they are due to:
+1. BAD_GENERATED_TEST: The generated test case contains incorrect expectations, invalid logic, or wrong domain rules (for example, expecting a valid matrix multiplication to throw a dimension mismatch error).
+2. BAD_IMPLEMENTATION: The implementation code contains bugs or doesn't satisfy correct tests.
+3. UNKNOWN: The failure root cause is unclear, or you are unsure.
+
+Other valid verdicts (use only if appropriate):
+- FLAKY_TEST_SUSPECT: The test fails intermittently.
+- ENVIRONMENT_FAILURE: Infrastructure, network, or file system errors.
+- INSUFFICIENT_CONTEXT: Not enough info to diagnose.
+
+CRITICAL DOMAIN RULES CHECK:
+- Verify mathematical, data structure, or algorithm constraints carefully.
+- For Matrix Multiplication: Matrix A (m x n) multiplied by Matrix B (p x q) is valid if and only if n === p. The resulting matrix will have size m x q. Any test asserting that a valid multiplication (like 2x2 * 2x3) should fail is logically incorrect!
+- Examine all assertions and verify if their assumptions match standard domain specifications and task requirements.
+
+Task Contract:
+- Task: ${contract.task}
+- Success criteria:
+${contract.successCriteria.map(c => `- ${c}`).join('\n')}
+
+Proposed Diff:
+\`\`\`diff
+${input.diff}
+\`\`\`
+
+Verification Failure details:
+${verificationStr}
+
+You must respond with a single valid JSON object adhering to the TestCriticResult schema:
+{
+  "verdict": "BAD_GENERATED_TEST | BAD_IMPLEMENTATION | FLAKY_TEST_SUSPECT | ENVIRONMENT_FAILURE | INSUFFICIENT_CONTEXT | UNKNOWN",
+  "confidence": "high | medium | low",
+  "explanation": "Detailed explanation of your analysis, outlining if the test logic or the implementation is at fault, and why.",
+  "suspectedRootCause": "The suspected root cause of the verification failure.",
+  "suggestedFix": "Detailed description of what needs to be changed in the code/test to resolve the error",
+  "canAutoRetry": true_or_false,
+  "requiresHumanReview": true_or_false
+}
+
+Instructions:
+- Only set "canAutoRetry" to true if confidence is high and the verdict allows auto-fixing.
+- If confidence is low or medium, or if verdict is UNKNOWN, you must set "requiresHumanReview" to true and "canAutoRetry" to false.
+- Do not claim to be always correct; default to UNKNOWN if unsure.
 `;
 }

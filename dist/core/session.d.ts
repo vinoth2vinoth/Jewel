@@ -10,6 +10,9 @@ export interface TaskContract {
     requiresApproval: boolean;
     createdAt: string;
     mode: 'strict' | 'lax';
+    estimatedFilesChangedCount?: number;
+    estimatedLinesChangedCount?: number;
+    preserveExistingTests?: boolean;
 }
 export declare function validateContract(contract: any): string[];
 export declare function assessRiskLevel(task: string, filesNeeded: string[], config: JewelConfig): 'low' | 'medium' | 'high';

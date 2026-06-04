@@ -14,6 +14,9 @@ export interface TaskContract {
   requiresApproval: boolean;
   createdAt: string;
   mode: 'strict' | 'lax';
+  estimatedFilesChangedCount?: number;
+  estimatedLinesChangedCount?: number;
+  preserveExistingTests?: boolean;
 }
 
 export function validateContract(contract: any): string[] {
@@ -82,6 +85,13 @@ export function generateLocalContract(task: string, config: JewelConfig, filesNe
     'Do not install new packages unless approved by configuration.'
   ];
 
+  const normalized = task.toLowerCase();
+  const preserveExistingTests = 
+    normalized.includes('keep existing tests exactly as they are') ||
+    normalized.includes('do not change existing tests') ||
+    normalized.includes('do not modify existing tests') ||
+    normalized.includes('preserve existing tests');
+
   return {
     task,
     understanding: `Implement the requested task: ${task}`,
@@ -92,7 +102,8 @@ export function generateLocalContract(task: string, config: JewelConfig, filesNe
     riskLevel: risk,
     requiresApproval: risk === 'high',
     createdAt: new Date().toISOString(),
-    mode: config.mode
+    mode: config.mode,
+    preserveExistingTests
   };
 }
 

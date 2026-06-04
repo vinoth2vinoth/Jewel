@@ -4,7 +4,8 @@ import {
   extractJsonObject,
   validateTaskContractJson,
   validatePatchProposalJson,
-  validateReviewResultJson
+  validateReviewResultJson,
+  validateTestCriticResultJson
 } from './json-response';
 
 test('json-response - extractJsonObject cases', () => {
@@ -216,5 +217,65 @@ test('json-response - empty patch validation cases', () => {
 
   const parsed = validatePatchProposalJson(validNoChange);
   assert.deepStrictEqual(parsed, validNoChange);
+});
+
+test('json-response - validateTestCriticResultJson cases', () => {
+  const valid = {
+    verdict: 'BAD_GENERATED_TEST',
+    confidence: 'high',
+    explanation: 'The test had invalid logic.',
+    suspectedRootCause: 'Wrong bounds.',
+    suggestedFix: 'Correct the assertions.',
+    canAutoRetry: true,
+    requiresHumanReview: false
+  };
+
+  const parsed = validateTestCriticResultJson(valid);
+  assert.deepStrictEqual(parsed, valid);
+
+  // Invalid verdict
+  assert.throws(() => {
+    validateTestCriticResultJson({ ...valid, verdict: 'WRONG' });
+  }, /verdict/);
+
+  // Missing explanation
+  assert.throws(() => {
+    validateTestCriticResultJson({ ...valid, explanation: '' });
+  }, /explanation/);
+
+  // Rejects forbidden execution fields
+  assert.throws(() => {
+    validateTestCriticResultJson({ ...valid, command: 'dangerous' });
+  }, /Forbidden execution field "command" detected/);
+});
+
+test('json-response - validateTaskContractJson optional scope estimation validation', () => {
+  const contractWithEstimations = {
+    task: 'test task',
+    understanding: 'test understanding',
+    assumptions: ['assumption 1'],
+    filesLikelyNeeded: ['file1.ts'],
+    forbiddenActions: ['no push'],
+    successCriteria: ['pass tests'],
+    riskLevel: 'low',
+    requiresApproval: false,
+    createdAt: '2026-06-03T00:00:00.000Z',
+    mode: 'strict',
+    estimatedFilesChangedCount: 3,
+    estimatedLinesChangedCount: 150
+  };
+
+  const parsed = validateTaskContractJson(contractWithEstimations);
+  assert.deepStrictEqual(parsed, contractWithEstimations);
+
+  // Invalid estimatedFilesChangedCount type
+  assert.throws(() => {
+    validateTaskContractJson({ ...contractWithEstimations, estimatedFilesChangedCount: 'three' });
+  }, /estimatedFilesChangedCount/);
+
+  // Invalid estimatedLinesChangedCount type
+  assert.throws(() => {
+    validateTaskContractJson({ ...contractWithEstimations, estimatedLinesChangedCount: 'many' });
+  }, /estimatedLinesChangedCount/);
 });
 

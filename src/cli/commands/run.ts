@@ -14,6 +14,8 @@ import { applyPatchProposalSafely } from '../../safety/safe-patch-writer';
 import { validateTaskContractJson, validatePatchProposalJson } from '../../agents/json-response';
 import { redactSecrets } from '../../safety/secret-redactor';
 import { JewelError, toJewelError } from '../errors';
+import { checkTestChangePolicy, getOriginalFileContent } from '../../verification/test-change-policy';
+import { createRetryState, recordRetryAttempt, shouldStopRetry, StopDecision } from '../../core/retry-policy';
 
 function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
@@ -176,6 +178,38 @@ export async function runTask(
   console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
   console.log('Success Criteria:');
   contract.successCriteria.forEach(c => console.log(`  - ${c}`));
+  // Preflight Scope Estimator
+  const estimatedFiles = typeof contract.estimatedFilesChangedCount === 'number' 
+    ? contract.estimatedFilesChangedCount 
+    : contract.filesLikelyNeeded.length;
+  const estimatedLines = typeof contract.estimatedLinesChangedCount === 'number'
+    ? contract.estimatedLinesChangedCount
+    : 0;
+
+  if (estimatedFiles > config.maxFilesChanged || estimatedLines > config.maxLinesChanged) {
+    console.warn(`\n[!] Preflight warning: Estimated scope exceeds configured limits.`);
+    console.warn(`    Estimated files: ${estimatedFiles} (limit: ${config.maxFilesChanged})`);
+    console.warn(`    Estimated lines: ${estimatedLines} (limit: ${config.maxLinesChanged})`);
+    
+    if (yesFlag || useMock) {
+      console.log(`[+] Auto-approving scope expansion (automated/yes mode).`);
+      config.maxFilesChanged = Math.max(config.maxFilesChanged, estimatedFiles + 1);
+      config.maxLinesChanged = Math.max(config.maxLinesChanged, estimatedLines + 50);
+    } else {
+      const response = await askQuestion('Would you like to expand the scope limits to accommodate this task? (y/n): ');
+      if (response.toLowerCase().trim() === 'y') {
+        config.maxFilesChanged = Math.max(config.maxFilesChanged, estimatedFiles + 1);
+        config.maxLinesChanged = Math.max(config.maxLinesChanged, estimatedLines + 50);
+        console.log(`[+] Scope expanded. New limits -> Files: ${config.maxFilesChanged}, Lines: ${config.maxLinesChanged}`);
+      } else {
+        throw new JewelError(
+          'NEEDS_APPROVAL_FOR_SCOPE_EXPANSION',
+          'Preflight scope check failed: user declined to expand scope limits.',
+          'Increase maxFilesChanged or maxLinesChanged in jewel.config.json or approve the scope expansion during CLI execution.'
+        );
+      }
+    }
+  }
 
   // 3. Create Checkpoint
   console.log('\nCreating checkpoint...');
@@ -367,9 +401,18 @@ export async function runTask(
   let retries = 0;
   const maxRetries = config.maxRetries;
   let verification: VerificationReport | null = null;
-  let diffAnalysis = null;
-  let critic = null;
+  let diffAnalysis: any = null;
+  let critic: any = null;
   let passedAll = false;
+  let lastTestCriticVerdict: string | undefined;
+  let lastTestCriticExplanation: string | undefined;
+  let testCriticResult: any = null;
+
+  const retryState = createRetryState(maxRetries);
+  let finalStopDecision: StopDecision | null = null;
+  let existingTestModified = false;
+  const testChangeFindings: string[] = [];
+  const testProvenanceRecords: any[] = [];
 
   if (!patchBlocked && !noChangeNeeded) {
     while (retries <= maxRetries) {
@@ -384,7 +427,45 @@ export async function runTask(
       console.log(`Lines added: ${diffAnalysis.addedLinesCount}, removed: ${diffAnalysis.removedLinesCount}`);
       if (diffAnalysis.findings.length > 0) {
         console.log('Findings:');
-        diffAnalysis.findings.forEach(f => console.log(`  - ${f}`));
+        diffAnalysis.findings.forEach((f: string) => console.log(`  - ${f}`));
+      }
+
+      // Check test-change-policy
+      existingTestModified = false;
+      testChangeFindings.length = 0;
+      testProvenanceRecords.length = 0;
+      for (const file of diffAnalysis.changedFiles) {
+        const isTestFile = file.endsWith('.test.ts') || file.endsWith('.test.js') || 
+                           file.endsWith('.spec.ts') || file.endsWith('.spec.js') ||
+                           file.includes('/test/') || file.includes('/tests/');
+        if (isTestFile) {
+          const fullPath = path.resolve(cwd, file);
+          const currentContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+          const originalContent = getOriginalFileContent(file, checkpoint, cwd);
+          
+          const policyReport = checkTestChangePolicy(originalContent, currentContent, file, contract.preserveExistingTests ?? false);
+          if (policyReport.invasive) {
+            existingTestModified = true;
+          }
+          if (policyReport.findings.length > 0) {
+            testChangeFindings.push(...policyReport.findings);
+          }
+          
+          testProvenanceRecords.push({
+            testFile: file,
+            addedTestNames: policyReport.testProvenance.appendedTestNames,
+            modifiedTestNames: policyReport.testProvenance.modifiedTestNames,
+            removedTestNames: policyReport.testProvenance.removedTestNames,
+            isAppended: policyReport.appendOnly,
+            isInvasive: policyReport.invasive,
+            existingTestsPreserved: policyReport.success
+          });
+        }
+      }
+
+      if (testChangeFindings.length > 0) {
+        console.log(`\n--- Test Modification Policy Findings ---`);
+        testChangeFindings.forEach(f => console.log(`  - ${f}`));
       }
 
       // B. Run verification commands
@@ -397,41 +478,178 @@ export async function runTask(
       console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
       if (critic.findings.length > 0) {
         console.log('Findings:');
-        critic.findings.forEach(f => console.log(`  - ${f}`));
+        critic.findings.forEach((f: string) => console.log(`  - ${f}`));
       }
       if (critic.requiredActions.length > 0) {
         console.log('Required Actions:');
-        critic.requiredActions.forEach(a => console.log(`  - ${a}`));
+        critic.requiredActions.forEach((a: string) => console.log(`  - ${a}`));
       }
 
-      if (critic.status === 'PASS') {
+      if (critic.status === 'PASS' && !((contract.preserveExistingTests ?? false) && existingTestModified)) {
         passedAll = true;
         break;
       }
 
-      // If verification/critic failed, allow interactive fix or automatic failure
-      if (useMock) {
-        console.log('Mock mode: Failures detected. Bypassing interactive retry.');
+      // Run Test Correctness Critic if verification failed or test policy failed
+      if (((verification && verification.overallStatus === 'FAIL') || existingTestModified) && isAgentMode && adapter && adapter.reviewTestCorrectness) {
+        console.log('\n[Critic] Analyzing test failure correctness...');
+        try {
+          const diffContent = checkpoint.isGit && checkpoint.gitCheckpointSha 
+            ? execSync(`git diff ${checkpoint.gitCheckpointSha}`, { cwd, encoding: 'utf8', env: { ...process.env, PAGER: 'cat' } })
+            : '';
+          testCriticResult = await adapter.reviewTestCorrectness({
+            taskContract: contract,
+            diff: diffContent,
+            verificationResult: verification!,
+            config,
+            sessionPath
+          });
+          lastTestCriticVerdict = testCriticResult.verdict;
+          lastTestCriticExplanation = testCriticResult.explanation;
+          console.log(`[Critic Verdict] ${lastTestCriticVerdict}: ${lastTestCriticExplanation}`);
+          console.log(`[Critic Suggestion] ${testCriticResult.suggestedFix}`);
+        } catch (err: any) {
+          console.error(`[Critic Error] Failed to run test correctness critic: ${err.message}`);
+        }
+      }
+
+      // Bounded retry checks
+      const verdict = testCriticResult?.verdict || (verification?.overallStatus === 'FAIL' ? 'BAD_IMPLEMENTATION' : 'UNKNOWN');
+      const confidence = testCriticResult?.confidence || (verification?.overallStatus === 'FAIL' ? 'high' : 'low');
+      const failureLog = verification?.results.map(r => r.errorMsg || r.stderr || r.stdout || '').join('\n') || '';
+
+      finalStopDecision = shouldStopRetry(
+        retryState,
+        failureLog,
+        verdict,
+        confidence,
+        (contract.preserveExistingTests ?? false) && existingTestModified
+      );
+
+      if (finalStopDecision.stop) {
+        console.log(`\n[Retry Stop] ${finalStopDecision.reason}`);
+        passedAll = false;
         break;
-      } else {
-        console.log('\n[!] Checks failed. Please fix the problems in your code.');
-        console.log(`Remaining retries: ${maxRetries - retries}`);
-        const answer = await askQuestion('Would you like to re-run verification now? (y/n): ');
-        if (answer.toLowerCase().trim() !== 'y') {
+      }
+
+      recordRetryAttempt(retryState, failureLog, verdict);
+
+      if (retries >= maxRetries) {
+        break;
+      }
+
+      if (isAgentMode && adapter) {
+        console.log(`\n[Retry ${retries + 1}/${maxRetries}] AI Adapter is auto-fixing the changes based on verification/critic feedback...`);
+        // Rollback current modifications to checkpoint to start with a clean workspace
+        console.log('Rolling back changes to checkpoint before re-proposing...');
+        try {
+          rollbackCheckpoint(checkpoint, cwd);
+        } catch (err: any) {
+          console.error(`[-] Pre-retry rollback failed: ${err.message}`);
+        }
+
+        // Re-read context
+        let repoContext = '';
+        for (const filePath of contract.filesLikelyNeeded) {
+          const fullPath = path.resolve(cwd, filePath);
+          if (fs.existsSync(fullPath)) {
+            const content = fs.readFileSync(fullPath, 'utf8');
+            repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
+          } else {
+            repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
+          }
+        }
+
+        // Ask model to propose new patch
+        try {
+          const patch = await adapter.proposePatch({
+            taskContract: contract,
+            allowedFiles: contract.filesLikelyNeeded,
+            repoContext,
+            verificationResult: verification,
+            testCriticResult: testCriticResult || undefined,
+            config,
+            sessionPath
+          });
+
+          validatePatchProposalJson(patch);
+
+          if (patch.noChangeNeeded === true) {
+            console.log(`\n[Adapter] Adapter indicated no changes are needed on retry.`);
+            break;
+          }
+
+          const patchResult = applyPatchProposalSafely(patch, contract, config, cwd, sessionPath);
+          if (!patchResult.success) {
+            console.error(`[-] Proposed patch was blocked by Safe Patch Writer on retry.`);
+            break;
+          } else {
+            for (const filePath of patchResult.appliedFiles) {
+              console.log(`  [+] Applied patch to: ${filePath}`);
+            }
+          }
+        } catch (err: any) {
+          console.error(`[-] Auto-fix patch proposal failed: ${err.message}`);
           break;
         }
+
         retries++;
+      } else {
+        if (useMock) {
+          console.log('Mock mode: Failures detected. Bypassing interactive retry.');
+          break;
+        } else {
+          console.log('\n[!] Checks failed. Please fix the problems in your code.');
+          console.log(`Remaining retries: ${maxRetries - retries}`);
+          const answer = await askQuestion('Would you like to re-run verification now? (y/n): ');
+          if (answer.toLowerCase().trim() !== 'y') {
+            break;
+          }
+          retries++;
+        }
       }
     }
   }
 
+  // Write provenance report if any test files were checked
+  if (testProvenanceRecords.length > 0) {
+    try {
+      const { writeTestProvenanceReport } = require('../../verification/test-provenance');
+      writeTestProvenanceReport(testProvenanceRecords.map(r => ({
+        ...r,
+        provider: adapter?.name || 'none',
+        criticVerdict: testCriticResult?.verdict || 'UNKNOWN',
+        verificationStatus: verification?.overallStatus || 'UNKNOWN'
+      })), cwd);
+      console.log(`[+] Test provenance report written to .jewel/reports/test-provenance.md`);
+    } catch (err: any) {
+      console.error(`[-] Failed to write test provenance report: ${err.message}`);
+    }
+  }
+
   // 6. Finalize (Success or Rollback)
-  const reportStatus = patchBlocked 
-    ? 'BLOCKED' 
-    : (noChangeNeeded 
-        ? 'NO_CHANGES_DETECTED' 
-        : (passedAll ? 'PASS' : (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK' ? 'BLOCKED' : 'FAIL'))
-      );
+  let reportStatus: string;
+  if (passedAll) {
+    reportStatus = 'PASS';
+  } else if (patchBlocked) {
+    reportStatus = 'BLOCKED';
+  } else if (noChangeNeeded) {
+    reportStatus = 'NO_CHANGES_DETECTED';
+  } else if (contract.preserveExistingTests && existingTestModified) {
+    reportStatus = 'EXISTING_TEST_MODIFIED';
+  } else if (finalStopDecision && finalStopDecision.status && finalStopDecision.status !== 'RETRY_LIMIT_REACHED') {
+    reportStatus = finalStopDecision.status;
+  } else if (lastTestCriticVerdict === 'BAD_GENERATED_TEST') {
+    reportStatus = 'GENERATED_TEST_SUSPECT';
+  } else if (finalStopDecision && finalStopDecision.status) {
+    reportStatus = finalStopDecision.status;
+  } else if (diffAnalysis?.status === 'BLOCK' || critic?.status === 'BLOCK') {
+    reportStatus = 'BLOCKED';
+  } else if (retries >= maxRetries) {
+    reportStatus = 'RETRY_LIMIT_REACHED';
+  } else {
+    reportStatus = 'FAIL';
+  }
 
   writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
     noChangeNeeded,
@@ -443,7 +661,9 @@ export async function runTask(
     critic,
     reviewRequired,
     approved,
-    keepFailed
+    keepFailed,
+    testChangeFindings,
+    preserveExistingTests: contract.preserveExistingTests
   });
 
   if (passedAll || (noChangeNeeded && !patchBlocked)) {
@@ -488,6 +708,70 @@ export async function runTask(
             'The LLM provider response did not match the expected schema. Retry the task or check model temperature/prompt settings.'
           );
         }
+      }
+    }
+
+    if (reportStatus === 'EXISTING_TEST_MODIFIED') {
+      if (rolledBack) {
+        throw new JewelError(
+          'EXISTING_TEST_MODIFIED',
+          'Verification failed because existing tests were modified or renamed, and changes were rolled back successfully.',
+          'Do not modify existing tests. You can append new tests if required.'
+        );
+      } else {
+        throw new JewelError(
+          'EXISTING_TEST_MODIFIED',
+          'Verification failed because existing tests were modified or renamed. Workspace kept as is.',
+          'Do not modify existing tests. You can append new tests if required.'
+        );
+      }
+    }
+
+    if (reportStatus === 'NEEDS_HUMAN_REVIEW') {
+      if (rolledBack) {
+        throw new JewelError(
+          'NEEDS_HUMAN_REVIEW',
+          'Verification failed and critic has low confidence or verdict is UNKNOWN. Rolled back successfully.',
+          'Please review the logs and proposed changes manually.'
+        );
+      } else {
+        throw new JewelError(
+          'NEEDS_HUMAN_REVIEW',
+          'Verification failed and critic has low confidence or verdict is UNKNOWN. Workspace kept as is.',
+          'Please review the logs and proposed changes manually.'
+        );
+      }
+    }
+
+    if (reportStatus === 'RETRY_LIMIT_REACHED') {
+      if (rolledBack) {
+        throw new JewelError(
+          'RETRY_LIMIT_REACHED',
+          'Verification failed and retry limit was reached. Rolled back successfully.',
+          'Refine the task explanation or fix implementation errors before retrying.'
+        );
+      } else {
+        throw new JewelError(
+          'RETRY_LIMIT_REACHED',
+          'Verification failed and retry limit was reached. Workspace kept as is.',
+          'Refine the task explanation or fix implementation errors before retrying.'
+        );
+      }
+    }
+
+    if (reportStatus === 'GENERATED_TEST_SUSPECT') {
+      if (rolledBack) {
+        throw new JewelError(
+          'GENERATED_TEST_SUSPECT',
+          'Verification failed because the generated tests contain logical errors, and changes were rolled back successfully.',
+          'Review the generated test logic, refine success criteria, or adjust constraints and try again.'
+        );
+      } else {
+        throw new JewelError(
+          'GENERATED_TEST_SUSPECT',
+          'Verification failed because the generated tests contain logical errors. Workspace kept as is.',
+          'Review the generated test logic, refine success criteria, or adjust constraints and try again.'
+        );
       }
     }
 
@@ -554,6 +838,8 @@ function writeRunReport(
     reviewRequired?: boolean;
     approved?: boolean;
     keepFailed?: boolean;
+    testChangeFindings?: string[];
+    preserveExistingTests?: boolean;
   }
 ) {
   const version = getPackageVersion(cwd);
@@ -573,8 +859,8 @@ function writeRunReport(
   }
   
   let rollbackStatus = 'N/A';
-  if (status === 'REJECTED' || status === 'FAIL' || status === 'BLOCKED') {
-    if (options.diffAnalysis || options.patchBlocked || status === 'REJECTED') {
+  if (status === 'REJECTED' || status === 'FAIL' || status === 'BLOCKED' || status === 'GENERATED_TEST_SUSPECT' || status === 'EXISTING_TEST_MODIFIED' || status === 'RETRY_LIMIT_REACHED' || status === 'NEEDS_HUMAN_REVIEW') {
+    if (options.diffAnalysis || options.patchBlocked || status === 'REJECTED' || status === 'GENERATED_TEST_SUSPECT' || status === 'EXISTING_TEST_MODIFIED') {
       rollbackStatus = options.keepFailed ? 'KEPT_FAILED' : 'ROLLED_BACK';
     }
   }
@@ -605,6 +891,8 @@ function writeRunReport(
     rollbackStatus,
     filesChanged,
     filesProposedButBlocked,
+    preserveExistingTests: options.preserveExistingTests || false,
+    testChangeFindings: options.testChangeFindings || [],
     usage: provider === 'none' ? 'usage unavailable (mock)' : (adapter?.usage ? {
       inputTokens: adapter.usage.inputTokens,
       outputTokens: adapter.usage.outputTokens,
@@ -660,6 +948,7 @@ function writeRunReport(
   md += `**Safe Patch Writer Status:** ${safePatchWriterStatus}\n`;
   md += `**Human Review Status:** ${humanReviewStatus}\n`;
   md += `**Rollback Status:** ${rollbackStatus}\n`;
+  md += `**Preserve Existing Tests Enforced:** ${options.preserveExistingTests ? 'Yes' : 'No'}\n`;
   
   if (filesChanged.length > 0) {
     md += `**Files Changed:**\n` + filesChanged.map((f: string) => ` - \`${f}\``).join('\n') + '\n';
@@ -673,8 +962,17 @@ function writeRunReport(
     md += `**Files Proposed But Blocked:** None\n`;
   }
 
+  if (fs.existsSync(path.join(reportsDir, 'test-provenance.md'))) {
+    md += `**Test Provenance Report:** [test-provenance.md](file:///${path.join(reportsDir, 'test-provenance.md').replace(/\\/g, '/')})\n`;
+  }
+
   md += `**Token Usage:** ${tokenUsage}\n`;
   md += `**Date:** ${finalReport.date}\n\n`;
+
+  if (options.testChangeFindings && options.testChangeFindings.length > 0) {
+    md += `## Test Modification Policy Violations\n\n`;
+    md += options.testChangeFindings.map((f: string) => ` - ${f}`).join('\n') + '\n\n';
+  }
 
   if (options.error) {
     md += `## Error Details\n\n${options.error}\n\n`;

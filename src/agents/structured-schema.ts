@@ -40,6 +40,18 @@ export const TaskContractSchema = {
       type: 'string',
       enum: ['strict', 'lax'],
       description: 'Configuration-enforced mode'
+    },
+    estimatedFilesChangedCount: {
+      type: 'integer',
+      description: 'Estimated number of files that will be modified or created by the patch'
+    },
+    estimatedLinesChangedCount: {
+      type: 'integer',
+      description: 'Estimated total lines (additions + deletions) that will be modified/added/created by the patch'
+    },
+    preserveExistingTests: {
+      type: 'boolean',
+      description: 'Set to true if the user instructs to keep existing tests exactly as they are'
     }
   },
   required: [
@@ -126,5 +138,45 @@ export const ReviewResultSchema = {
     }
   },
   required: ['status', 'findings'],
+  additionalProperties: false
+};
+
+export const TestCriticResultSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  title: 'TestCriticResult',
+  type: 'object',
+  properties: {
+    verdict: {
+      type: 'string',
+      enum: ['BAD_GENERATED_TEST', 'BAD_IMPLEMENTATION', 'FLAKY_TEST_SUSPECT', 'ENVIRONMENT_FAILURE', 'INSUFFICIENT_CONTEXT', 'UNKNOWN'],
+      description: 'Verdict classifying the failure'
+    },
+    confidence: {
+      type: 'string',
+      enum: ['high', 'medium', 'low'],
+      description: 'Critic confidence level'
+    },
+    explanation: {
+      type: 'string',
+      description: 'Detailed analysis of why the tests failed'
+    },
+    suspectedRootCause: {
+      type: 'string',
+      description: 'The suspected root cause of the verification failure'
+    },
+    suggestedFix: {
+      type: 'string',
+      description: 'Suggested fix to resolve the problem'
+    },
+    canAutoRetry: {
+      type: 'boolean',
+      description: 'Whether it is safe to automatically retry and fix based on this feedback'
+    },
+    requiresHumanReview: {
+      type: 'boolean',
+      description: 'Whether human intervention is required to resolve this failure'
+    }
+  },
+  required: ['verdict', 'confidence', 'explanation', 'suspectedRootCause', 'suggestedFix', 'canAutoRetry', 'requiresHumanReview'],
   additionalProperties: false
 };

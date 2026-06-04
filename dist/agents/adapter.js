@@ -74,5 +74,17 @@ module.exports = { add, divide };
             findings: ['Mock agent review passed successfully.']
         };
     }
+    async reviewTestCorrectness(input) {
+        this.accumulateMockUsage();
+        return {
+            verdict: 'BAD_IMPLEMENTATION',
+            confidence: 'high',
+            explanation: 'Mock analyzer explanation.',
+            suspectedRootCause: 'Mock root cause.',
+            suggestedFix: 'Mock suggested fix.',
+            canAutoRetry: true,
+            requiresHumanReview: false
+        };
+    }
 }
 exports.MockAgentAdapter = MockAgentAdapter;

@@ -17,6 +17,7 @@ export interface PatchInput {
   allowedFiles: string[];
   repoContext: string;
   verificationResult: VerificationReport | null;
+  testCriticResult?: TestCriticResult;
   config?: JewelConfig;
   sessionPath?: string;
 }
@@ -47,6 +48,16 @@ export interface ReviewResult {
   findings: string[];
 }
 
+export interface TestCriticResult {
+  verdict: 'BAD_GENERATED_TEST' | 'BAD_IMPLEMENTATION' | 'FLAKY_TEST_SUSPECT' | 'ENVIRONMENT_FAILURE' | 'INSUFFICIENT_CONTEXT' | 'UNKNOWN';
+  confidence: 'high' | 'medium' | 'low';
+  explanation: string;
+  suspectedRootCause: string;
+  suggestedFix: string;
+  canAutoRetry: boolean;
+  requiresHumanReview: boolean;
+}
+
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -73,6 +84,7 @@ export interface AgentAdapter {
   plan(input: PlanInput): Promise<TaskContract>;
   proposePatch(input: PatchInput): Promise<PatchProposal>;
   reviewDiff(input: ReviewInput): Promise<ReviewResult>;
+  reviewTestCorrectness?(input: ReviewInput): Promise<TestCriticResult>;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
@@ -163,6 +175,19 @@ module.exports = { add, divide };
     return {
       status: 'PASS',
       findings: ['Mock agent review passed successfully.']
+    };
+  }
+
+  async reviewTestCorrectness(input: ReviewInput): Promise<TestCriticResult> {
+    this.accumulateMockUsage();
+    return {
+      verdict: 'BAD_IMPLEMENTATION',
+      confidence: 'high',
+      explanation: 'Mock analyzer explanation.',
+      suspectedRootCause: 'Mock root cause.',
+      suggestedFix: 'Mock suggested fix.',
+      canAutoRetry: true,
+      requiresHumanReview: false
     };
   }
 }

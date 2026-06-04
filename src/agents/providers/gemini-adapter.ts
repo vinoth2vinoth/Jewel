@@ -1,9 +1,9 @@
-import { AgentAdapter, PlanInput, PatchInput, ReviewInput, PatchProposal, ReviewResult, LLMMessage } from '../adapter';
+import { AgentAdapter, PlanInput, PatchInput, ReviewInput, PatchProposal, ReviewResult, TestCriticResult, LLMMessage } from '../adapter';
 import { TaskContract } from '../../core/session';
-import { extractJsonObject, validateTaskContractJson, validatePatchProposalJson, validateReviewResultJson } from '../json-response';
-import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt } from '../prompt-builder';
+import { extractJsonObject, validateTaskContractJson, validatePatchProposalJson, validateReviewResultJson, validateTestCriticResultJson } from '../json-response';
+import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt, buildTestCriticPrompt } from '../prompt-builder';
 import { postJsonWithRetry } from './http-client';
-import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema } from '../structured-schema';
+import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema, TestCriticResultSchema } from '../structured-schema';
 import { getModelCapabilities } from '../model-capabilities';
 import { normalizeResponse } from './response-normalizer';
 
@@ -98,6 +98,33 @@ export class GeminiAdapter implements AgentAdapter {
     }
   }
 
+  async reviewTestCorrectness(input: ReviewInput): Promise<TestCriticResult> {
+    const prompt = buildTestCriticPrompt(input);
+    const systemPrompt = "You are a test correctness critic. You must return only a valid JSON object adhering to the TestCriticResult schema.";
+    
+    const config = input.config || {
+      model: 'gemini-1.5-flash',
+      temperature: 0,
+      maxOutputTokens: 4000,
+      llmTimeoutMs: 60000,
+      llmMaxRetries: 2,
+      llmStrictJson: true,
+      allowUnstructuredProviderFallback: false
+    } as any;
+
+    const response = await this.callLLM([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt }
+    ], config, 'reviewTestCorrectness', input.sessionPath);
+
+    try {
+      const parsed = extractJsonObject(response);
+      return validateTestCriticResultJson(parsed);
+    } catch (err: any) {
+      throw new Error(`BLOCKED: Invalid JSON in LLM response: ${err.message}`);
+    }
+  }
+
   private async callLLM(messages: LLMMessage[], config: any, method: string, sessionPath?: string): Promise<string> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -154,6 +181,8 @@ export class GeminiAdapter implements AgentAdapter {
         schema = PatchProposalSchema;
       } else if (method === 'reviewDiff') {
         schema = ReviewResultSchema;
+      } else if (method === 'reviewTestCorrectness') {
+        schema = TestCriticResultSchema;
       }
 
       requestBody.generationConfig.responseMimeType = 'application/json';

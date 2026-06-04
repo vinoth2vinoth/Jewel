@@ -1,5 +1,5 @@
 import { TaskContract } from '../core/session';
-import { PatchProposal, ReviewResult } from './adapter';
+import { PatchProposal, ReviewResult, TestCriticResult } from './adapter';
 
 export function assertNoForbiddenExecutionFields(input: unknown): void {
   const forbidden = [
@@ -116,6 +116,15 @@ export function validateTaskContractJson(input: unknown): TaskContract {
   if (obj.mode !== 'strict' && obj.mode !== 'lax') {
     throw new Error('Invalid TaskContract: "mode" must be "strict" or "lax".');
   }
+  if (obj.estimatedFilesChangedCount !== undefined && typeof obj.estimatedFilesChangedCount !== 'number') {
+    throw new Error('Invalid TaskContract: "estimatedFilesChangedCount" must be a number.');
+  }
+  if (obj.estimatedLinesChangedCount !== undefined && typeof obj.estimatedLinesChangedCount !== 'number') {
+    throw new Error('Invalid TaskContract: "estimatedLinesChangedCount" must be a number.');
+  }
+  if (obj.preserveExistingTests !== undefined && typeof obj.preserveExistingTests !== 'boolean') {
+    throw new Error('Invalid TaskContract: "preserveExistingTests" must be a boolean.');
+  }
 
   return obj as TaskContract;
 }
@@ -199,4 +208,45 @@ export function validateReviewResultJson(input: unknown): ReviewResult {
   }
 
   return obj as ReviewResult;
+}
+
+export function validateTestCriticResultJson(input: unknown): TestCriticResult {
+  assertNoForbiddenExecutionFields(input);
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid TestCriticResult: must be an object.');
+  }
+
+  const obj = input as any;
+
+  const validVerdicts = ['BAD_GENERATED_TEST', 'BAD_IMPLEMENTATION', 'FLAKY_TEST_SUSPECT', 'ENVIRONMENT_FAILURE', 'INSUFFICIENT_CONTEXT', 'UNKNOWN'];
+  if (!validVerdicts.includes(obj.verdict)) {
+    throw new Error(`Invalid TestCriticResult: "verdict" must be one of: ${validVerdicts.join(', ')}`);
+  }
+
+  if (obj.confidence !== 'high' && obj.confidence !== 'medium' && obj.confidence !== 'low') {
+    throw new Error('Invalid TestCriticResult: "confidence" must be "high", "medium", or "low".');
+  }
+
+  if (typeof obj.explanation !== 'string' || obj.explanation.trim() === '') {
+    throw new Error('Invalid TestCriticResult: "explanation" is required and must be a non-empty string.');
+  }
+
+  if (typeof obj.suspectedRootCause !== 'string' || obj.suspectedRootCause.trim() === '') {
+    throw new Error('Invalid TestCriticResult: "suspectedRootCause" is required and must be a non-empty string.');
+  }
+
+  if (typeof obj.suggestedFix !== 'string' || obj.suggestedFix.trim() === '') {
+    throw new Error('Invalid TestCriticResult: "suggestedFix" is required and must be a non-empty string.');
+  }
+
+  if (typeof obj.canAutoRetry !== 'boolean') {
+    throw new Error('Invalid TestCriticResult: "canAutoRetry" is required and must be a boolean.');
+  }
+
+  if (typeof obj.requiresHumanReview !== 'boolean') {
+    throw new Error('Invalid TestCriticResult: "requiresHumanReview" is required and must be a boolean.');
+  }
+
+  return obj as TestCriticResult;
 }
