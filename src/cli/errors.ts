@@ -77,6 +77,16 @@ export function toJewelError(err: any): JewelError {
     );
   }
 
+  // 6. Verification command failed due to coverage threshold
+  if (msg.includes('Coverage threshold violation') || msg.includes('coverage check failed') || msg.includes('COVERAGE_THRESHOLD_VIOLATION') || msg.includes('code coverage fell below')) {
+    return new JewelError(
+      'COVERAGE_THRESHOLD_VIOLATION',
+      msg,
+      'Increase test coverage for your modifications or adjust minCoverage requirements in jewel.config.json.',
+      err
+    );
+  }
+
   // 6. Verification command failed
   if (msg.includes('Verification failed') || msg.includes('verification command failed') || msg.includes('Safety or verification check failed')) {
     return new JewelError(

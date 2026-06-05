@@ -727,6 +727,22 @@ export async function runTask(
       }
     }
 
+    if (reportStatus === 'COVERAGE_THRESHOLD_VIOLATION') {
+      if (rolledBack) {
+        throw new JewelError(
+          'COVERAGE_THRESHOLD_VIOLATION',
+          'Verification failed because code coverage fell below the required threshold, and changes were rolled back successfully.',
+          'Increase test coverage for your modifications or adjust minCoverage requirements in jewel.config.json.'
+        );
+      } else {
+        throw new JewelError(
+          'COVERAGE_THRESHOLD_VIOLATION',
+          'Verification failed because code coverage fell below the required threshold. Workspace kept as is.',
+          'Increase test coverage for your modifications or adjust minCoverage requirements in jewel.config.json.'
+        );
+      }
+    }
+
     if (reportStatus === 'NEEDS_HUMAN_REVIEW') {
       if (rolledBack) {
         throw new JewelError(

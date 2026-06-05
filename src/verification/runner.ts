@@ -18,7 +18,7 @@ export interface VerificationReport {
   projectName: string;
   date: string;
   mode: 'strict' | 'lax';
-  overallStatus: 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED';
+  overallStatus: 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED' | 'COVERAGE_THRESHOLD_VIOLATION';
   stats: {
     passed: number;
     failed: number;
@@ -103,6 +103,31 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
     }
   }
 
+  // Check if everything else passed first before running coverage check
+  const initialFail = results.some(r => r.status === 'FAIL');
+  const initialBlocked = results.some(r => r.status === 'BLOCKED');
+
+  if (!initialFail && !initialBlocked && config.minCoverage) {
+    const covResult = checkCoverage(config, cwd);
+    if (!covResult.success) {
+      results.push({
+        commandKey: 'coverage',
+        commandLine: 'Check code coverage',
+        status: 'FAIL',
+        stdout: '',
+        stderr: covResult.findings.join('\n')
+      });
+    } else {
+      results.push({
+        commandKey: 'coverage',
+        commandLine: 'Check code coverage',
+        status: 'PASS',
+        stdout: 'All configured coverage thresholds satisfied.',
+        stderr: ''
+      });
+    }
+  }
+
   // Calculate stats
   let passed = 0;
   let failed = 0;
@@ -118,8 +143,10 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
 
   // Determine overall status
   let overallStatus: VerificationReport['overallStatus'] = 'PASS';
+  const hasCoverageFail = results.some(r => r.commandKey === 'coverage' && r.status === 'FAIL');
+
   if (failed > 0) {
-    overallStatus = 'FAIL';
+    overallStatus = hasCoverageFail ? 'COVERAGE_THRESHOLD_VIOLATION' : 'FAIL';
   } else if (blocked > 0) {
     overallStatus = 'BLOCKED';
   } else if (passed === 0 && skipped > 0) {
@@ -138,6 +165,71 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
   saveVerificationReports(report, cwd, config.reportFormat);
 
   return report;
+}
+
+interface CoverageSummary {
+  total?: {
+    [key: string]: {
+      pct?: number | string;
+    };
+  };
+}
+
+function checkCoverage(config: JewelConfig, cwd: string): { success: boolean; findings: string[] } {
+  const findings: string[] = [];
+  if (!config.minCoverage) {
+    return { success: true, findings };
+  }
+
+  const reportPath = config.coverageReportPath 
+    ? path.resolve(cwd, config.coverageReportPath)
+    : path.resolve(cwd, 'coverage/coverage-summary.json');
+
+  if (!fs.existsSync(reportPath)) {
+    findings.push(`Coverage report file not found at: ${reportPath}`);
+    return { success: false, findings };
+  }
+
+  try {
+    const content = fs.readFileSync(reportPath, 'utf8');
+    const data = JSON.parse(content) as CoverageSummary;
+    const total = data.total;
+    if (!total) {
+      findings.push('Invalid coverage report: "total" field missing.');
+      return { success: false, findings };
+    }
+
+    const metrics = ['lines', 'statements', 'functions', 'branches'] as const;
+    let failed = false;
+
+    for (const metric of metrics) {
+      const threshold = config.minCoverage[metric];
+      if (threshold === undefined) continue;
+
+      const metricData = total[metric];
+      if (!metricData) {
+        findings.push(`Coverage metric "${metric}" missing from report.`);
+        failed = true;
+        continue;
+      }
+
+      const pctVal = metricData.pct;
+      const pct = typeof pctVal === 'number' ? pctVal : parseFloat(pctVal as string);
+
+      if (isNaN(pct)) {
+        findings.push(`Coverage metric "${metric}" has invalid percentage: ${pctVal}`);
+        failed = true;
+      } else if (pct < threshold) {
+        findings.push(`Coverage for "${metric}" (${pct}%) is below the configured threshold (${threshold}%).`);
+        failed = true;
+      }
+    }
+
+    return { success: !failed, findings };
+  } catch (err: any) {
+    findings.push(`Failed to parse coverage report: ${err.message}`);
+    return { success: false, findings };
+  }
 }
 
 import { redactSecrets } from '../safety/secret-redactor';

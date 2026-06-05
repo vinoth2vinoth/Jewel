@@ -73,3 +73,68 @@ test('verification runner - full cycle', () => {
 
   cleanupSandbox();
 });
+
+test('verification runner - coverage validation', () => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  const coverageDir = path.join(sandboxDir, 'coverage');
+  fs.mkdirSync(coverageDir, { recursive: true });
+  const reportPath = path.join(coverageDir, 'coverage-summary.json');
+
+  // Case A: Coverage satisfies thresholds
+  const mockCoveragePass = {
+    total: {
+      lines: { pct: 85 },
+      branches: { pct: 80 }
+    }
+  };
+  fs.writeFileSync(reportPath, JSON.stringify(mockCoveragePass), 'utf8');
+
+  const configPass: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    minCoverage: { lines: 80, branches: 75 },
+    coverageReportPath: './coverage/coverage-summary.json',
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'node -e "process.exit(0)"'
+    }
+  };
+
+  const reportPass = runVerification(configPass, sandboxDir);
+  assert.strictEqual(reportPass.overallStatus, 'PASS');
+  
+  const covResultPass = reportPass.results.find(r => r.commandKey === 'coverage');
+  assert.ok(covResultPass);
+  assert.strictEqual(covResultPass.status, 'PASS');
+
+  // Case B: Coverage below thresholds
+  const mockCoverageFail = {
+    total: {
+      lines: { pct: 75 }, // below 80
+      branches: { pct: 80 }
+    }
+  };
+  fs.writeFileSync(reportPath, JSON.stringify(mockCoverageFail), 'utf8');
+
+  const reportFail = runVerification(configPass, sandboxDir);
+  assert.strictEqual(reportFail.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
+  
+  const covResultFail = reportFail.results.find(r => r.commandKey === 'coverage');
+  assert.ok(covResultFail);
+  assert.strictEqual(covResultFail.status, 'FAIL');
+  assert.ok(covResultFail.stderr.includes('"lines" (75%) is below'));
+
+  // Case C: Missing coverage report file
+  fs.unlinkSync(reportPath);
+  const reportMissing = runVerification(configPass, sandboxDir);
+  assert.strictEqual(reportMissing.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
+  
+  const covResultMissing = reportMissing.results.find(r => r.commandKey === 'coverage');
+  assert.ok(covResultMissing);
+  assert.strictEqual(covResultMissing.status, 'FAIL');
+  assert.ok(covResultMissing.stderr.includes('Coverage report file not found'));
+
+  cleanupSandbox();
+});
+

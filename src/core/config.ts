@@ -32,6 +32,13 @@ export interface JewelConfig {
   reportFormat: ('markdown' | 'json')[];
   allowUnstructuredProviderFallback: boolean;
   preferredProviders?: string[];
+  minCoverage?: {
+    lines?: number;
+    statements?: number;
+    functions?: number;
+    branches?: number;
+  };
+  coverageReportPath?: string;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -78,7 +85,9 @@ export const DEFAULT_CONFIG: JewelConfig = {
   dangerousCommandPolicy: 'block',
   reportFormat: ['markdown', 'json'],
   allowUnstructuredProviderFallback: false,
-  preferredProviders: []
+  preferredProviders: [],
+  minCoverage: undefined,
+  coverageReportPath: ''
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -232,6 +241,30 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
       }
       return item;
     });
+  }
+
+  if (parsed.minCoverage !== undefined) {
+    if (typeof parsed.minCoverage !== 'object' || parsed.minCoverage === null) {
+      throw new Error('Invalid config: "minCoverage" must be an object.');
+    }
+    config.minCoverage = {};
+    const coverageKeys = ['lines', 'statements', 'functions', 'branches'] as const;
+    for (const key of coverageKeys) {
+      if (parsed.minCoverage[key] !== undefined) {
+        const val = Number(parsed.minCoverage[key]);
+        if (isNaN(val) || val < 0 || val > 100) {
+          throw new Error(`Invalid config: "minCoverage.${key}" must be a number between 0 and 100.`);
+        }
+        config.minCoverage[key] = val;
+      }
+    }
+  }
+
+  if (parsed.coverageReportPath !== undefined) {
+    if (typeof parsed.coverageReportPath !== 'string') {
+      throw new Error('Invalid config: "coverageReportPath" must be a string.');
+    }
+    config.coverageReportPath = parsed.coverageReportPath;
   }
 
   return config;

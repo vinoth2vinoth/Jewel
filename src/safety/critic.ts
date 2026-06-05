@@ -30,6 +30,10 @@ export function runCriticReview(
       status = 'BLOCK';
       findings.push('Verification commands failed.');
       requiredActions.push('Fix failing tests/commands highlighted in the verification report.');
+    } else if (verification.overallStatus === 'COVERAGE_THRESHOLD_VIOLATION') {
+      status = 'BLOCK';
+      findings.push('Code coverage fell below the required threshold.');
+      requiredActions.push('Increase test coverage for your modifications or adjust minCoverage requirements in jewel.config.json.');
     } else if (verification.overallStatus === 'BLOCKED') {
       status = 'BLOCK';
       findings.push('Some verification commands were blocked due to safety policy.');
