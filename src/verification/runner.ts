@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { JewelConfig } from '../core/config';
@@ -28,11 +28,30 @@ export interface VerificationReport {
   results: CommandResult[];
 }
 
+export const dockerUtils = {
+  isDockerAvailable(): boolean {
+    try {
+      cp.execSync('docker info', { stdio: 'ignore', timeout: 3000 });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  executeDocker(args: string[], cwd: string, env: Record<string, string | undefined>) {
+    return cp.spawnSync('docker', args, { cwd, stdio: 'pipe', encoding: 'utf8', env });
+  }
+};
+
 export function runVerification(config: JewelConfig, cwd: string = process.cwd()): VerificationReport {
   const results: CommandResult[] = [];
   const commands = config.commands;
 
   const orderKeys: (keyof typeof commands)[] = ['lint', 'typecheck', 'test', 'build', 'e2e'];
+
+  const dockerAvailable = config.useSandbox ? dockerUtils.isDockerAvailable() : false;
+  const fallbackWarning = (config.useSandbox && !dockerAvailable)
+    ? "Sandbox verification: Docker not available or daemon is not running. Falling back to host execution.\n"
+    : "";
 
   for (const key of orderKeys) {
     const cmdLine = commands[key]?.trim() || '';
@@ -64,40 +83,152 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
 
     // Execute command
     try {
-      // Run with combined stdout & stderr or capture separately
-      // Using execSync is simple and captures stdout directly. 
-      // To capture both stdout and stderr, we can pass stdio: 'pipe' or similar.
       let stdout = '';
       let stderr = '';
       let exitCode = 0;
 
-      const execEnv = { ...process.env };
-      if (config.auditSpawnedProcesses) {
-        const auditConfig = {
-          allowGitPush: config.allowGitPush,
-          allowNewDependencies: config.allowNewDependencies,
-          dangerousCommandPolicy: config.dangerousCommandPolicy,
-          protectedFiles: config.protectedFiles
-        };
-        const preloadPath = path.resolve(__dirname, 'preload.js');
-        execEnv.JEWEL_AUDIT_CONFIG = JSON.stringify(auditConfig);
-        
-        const normalizedPreloadPath = preloadPath.replace(/\\/g, '/');
-        const requireOption = `--require "${normalizedPreloadPath}"`;
-        execEnv.NODE_OPTIONS = execEnv.NODE_OPTIONS
-          ? `${requireOption} ${execEnv.NODE_OPTIONS}`
-          : requireOption;
-      }
+      if (config.useSandbox) {
+        if (!dockerAvailable) {
+          if (config.sandboxFallbackToHost) {
+            // Fallback to host execution
+            const execEnv = { ...process.env };
+            if (config.auditSpawnedProcesses) {
+              const auditConfig = {
+                allowGitPush: config.allowGitPush,
+                allowNewDependencies: config.allowNewDependencies,
+                dangerousCommandPolicy: config.dangerousCommandPolicy,
+                protectedFiles: config.protectedFiles
+              };
+              const preloadPath = path.resolve(__dirname, 'preload.js');
+              execEnv.JEWEL_AUDIT_CONFIG = JSON.stringify(auditConfig);
+              
+              const normalizedPreloadPath = preloadPath.replace(/\\/g, '/');
+              const requireOption = `--require "${normalizedPreloadPath}"`;
+              execEnv.NODE_OPTIONS = execEnv.NODE_OPTIONS
+                ? `${requireOption} ${execEnv.NODE_OPTIONS}`
+                : requireOption;
+            }
 
-      try {
-        const output = execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
-        stdout = output;
-      } catch (err: any) {
-        exitCode = err.status !== undefined ? err.status : 1;
-        stdout = err.stdout || '';
-        stderr = err.stderr || '';
-        if (err.message && !stderr && !stdout) {
-          stderr = err.message;
+            try {
+              const output = cp.execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
+              stdout = output;
+            } catch (err: any) {
+              exitCode = err.status !== undefined ? err.status : 1;
+              stdout = err.stdout || '';
+              stderr = err.stderr || '';
+              if (err.message && !stderr && !stdout) {
+                stderr = err.message;
+              }
+            }
+            stderr = fallbackWarning + stderr;
+          } else {
+            // sandbox fallback is false -> FAIL immediately
+            exitCode = 1;
+            stderr = "Sandbox verification failed: Docker is not available or daemon is not running, and sandboxFallbackToHost is disabled.";
+          }
+        } else {
+          // Docker is available
+          const dockerArgs = [
+            'run',
+            '--rm',
+            '-i',
+            '-v', `${path.resolve(cwd).replace(/\\/g, '/')}:/workspace`,
+            '-w', '/workspace'
+          ];
+
+          if (process.getuid && process.getgid) {
+            dockerArgs.push('--user', `${process.getuid()}:${process.getgid()}`);
+          }
+
+          dockerArgs.push('-e', 'HOME');
+          const execEnv: Record<string, string | undefined> = { ...process.env, HOME: '/tmp' };
+
+          // Mount Jewel's dist
+          dockerArgs.push('-v', `${path.resolve(__dirname, '..').replace(/\\/g, '/')}:/opt/jewel/dist`);
+
+          if (config.auditSpawnedProcesses) {
+            const auditConfig = {
+              allowGitPush: config.allowGitPush,
+              allowNewDependencies: config.allowNewDependencies,
+              dangerousCommandPolicy: config.dangerousCommandPolicy,
+              protectedFiles: config.protectedFiles
+            };
+            execEnv.JEWEL_AUDIT_CONFIG = JSON.stringify(auditConfig);
+            execEnv.NODE_OPTIONS = '--require /opt/jewel/dist/verification/preload.js';
+            dockerArgs.push('-e', 'JEWEL_AUDIT_CONFIG', '-e', 'NODE_OPTIONS');
+          }
+
+          if (config.sandboxVolumes) {
+            for (const [host, container] of Object.entries(config.sandboxVolumes)) {
+              const absHost = path.resolve(cwd, host).replace(/\\/g, '/');
+              dockerArgs.push('-v', `${absHost}:${container}`);
+            }
+          }
+
+          if (config.sandboxEnv) {
+            for (const [key, val] of Object.entries(config.sandboxEnv)) {
+              let resolvedVal = val;
+              if (val.startsWith('$')) {
+                const hostEnvName = val.slice(1);
+                resolvedVal = process.env[hostEnvName] || '';
+              }
+              execEnv[key] = resolvedVal;
+              dockerArgs.push('-e', key);
+            }
+          }
+
+          const image = config.sandboxImage || 'node:18-slim';
+          dockerArgs.push(image);
+          dockerArgs.push('sh', '-c', cmdLine);
+
+          const spawnResult = dockerUtils.executeDocker(dockerArgs, cwd, execEnv);
+          stdout = spawnResult.stdout || '';
+          stderr = spawnResult.stderr || '';
+          if (spawnResult.status === null || spawnResult.status === undefined) {
+            exitCode = 1;
+            let errMsg = '';
+            if (spawnResult.error) {
+              errMsg = spawnResult.error.message;
+            } else if (spawnResult.signal) {
+              errMsg = `Docker process terminated by signal: ${spawnResult.signal}`;
+            } else {
+              errMsg = 'Unknown failure starting docker.';
+            }
+            stderr += (stderr ? '\n' : '') + `Docker execution error: ${errMsg}`;
+          } else {
+            exitCode = spawnResult.status;
+          }
+        }
+      } else {
+        // Normal host execution
+        const execEnv = { ...process.env };
+        if (config.auditSpawnedProcesses) {
+          const auditConfig = {
+            allowGitPush: config.allowGitPush,
+            allowNewDependencies: config.allowNewDependencies,
+            dangerousCommandPolicy: config.dangerousCommandPolicy,
+            protectedFiles: config.protectedFiles
+          };
+          const preloadPath = path.resolve(__dirname, 'preload.js');
+          execEnv.JEWEL_AUDIT_CONFIG = JSON.stringify(auditConfig);
+          
+          const normalizedPreloadPath = preloadPath.replace(/\\/g, '/');
+          const requireOption = `--require "${normalizedPreloadPath}"`;
+          execEnv.NODE_OPTIONS = execEnv.NODE_OPTIONS
+            ? `${requireOption} ${execEnv.NODE_OPTIONS}`
+            : requireOption;
+        }
+
+        try {
+          const output = cp.execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
+          stdout = output;
+        } catch (err: any) {
+          exitCode = err.status !== undefined ? err.status : 1;
+          stdout = err.stdout || '';
+          stderr = err.stderr || '';
+          if (err.message && !stderr && !stdout) {
+            stderr = err.message;
+          }
         }
       }
 

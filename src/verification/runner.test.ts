@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { runVerification } from './runner';
+import { runVerification, dockerUtils } from './runner';
 import { DEFAULT_CONFIG, JewelConfig } from '../core/config';
 
 const sandboxDir = path.join(__dirname, '../../sandbox-test-verification');
@@ -186,6 +186,205 @@ test('verification runner - process auditing', () => {
   const testResultNoAudit = reportWithoutAudit.results.find(r => r.commandKey === 'test');
   assert.ok(testResultNoAudit);
   assert.ok(!testResultNoAudit.stderr.includes('Jewel Process Auditor'));
+
+  cleanupSandbox();
+});
+
+test('verification runner - sandbox fallback to host when docker is unavailable', (t) => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  // 1. Stub isDockerAvailable to return false
+  t.mock.method(dockerUtils, 'isDockerAvailable', () => false);
+
+  // Case A: fallback is allowed (sandboxFallbackToHost: true)
+  const configFallback: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    sandboxFallbackToHost: true,
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'node -e "console.log(\'host ran\'); process.exit(0)"'
+    }
+  };
+
+  const reportFallback = runVerification(configFallback, sandboxDir);
+  assert.strictEqual(reportFallback.overallStatus, 'PASS');
+  const testResultFallback = reportFallback.results.find(r => r.commandKey === 'test');
+  assert.ok(testResultFallback);
+  assert.strictEqual(testResultFallback.status, 'PASS');
+  assert.ok(testResultFallback.stderr.includes('Docker not available'));
+  assert.ok(testResultFallback.stdout.includes('host ran'));
+
+  // Case B: fallback is blocked (sandboxFallbackToHost: false)
+  const configNoFallback: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    sandboxFallbackToHost: false,
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'node -e "console.log(\'should not run\')"'
+    }
+  };
+
+  const reportNoFallback = runVerification(configNoFallback, sandboxDir);
+  assert.strictEqual(reportNoFallback.overallStatus, 'FAIL');
+  const testResultNoFallback = reportNoFallback.results.find(r => r.commandKey === 'test');
+  assert.ok(testResultNoFallback);
+  assert.strictEqual(testResultNoFallback.status, 'FAIL');
+  assert.strictEqual(testResultNoFallback.exitCode, 1);
+  assert.ok(testResultNoFallback.stderr.includes('sandboxFallbackToHost is disabled'));
+
+  cleanupSandbox();
+});
+
+test('verification runner - sandbox docker execution and command assembly', (t) => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  // 1. Stub isDockerAvailable to return true
+  t.mock.method(dockerUtils, 'isDockerAvailable', () => true);
+
+  // 2. Stub executeDocker to capture arguments and environment, returning success mock
+  let capturedArgs: string[] = [];
+  let capturedCwd = '';
+  let capturedEnv: any = null;
+
+  t.mock.method(dockerUtils, 'executeDocker', (args: string[], cwd: string, env: any) => {
+    capturedArgs = args;
+    capturedCwd = cwd;
+    capturedEnv = env;
+    return {
+      status: 0,
+      stdout: 'Docker command output',
+      stderr: 'Docker warnings',
+      error: undefined
+    };
+  });
+
+  process.env.TEST_HOST_SECRET = 'my_super_secret_value';
+
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    sandboxImage: 'node:custom',
+    sandboxVolumes: { './my-host-data': '/opt/data' },
+    sandboxEnv: {
+      'SECRET': '$TEST_HOST_SECRET',
+      'STATIC_VAL': 'hello-sandbox'
+    },
+    auditSpawnedProcesses: true,
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'npm run test'
+    }
+  };
+
+  const report = runVerification(config, sandboxDir);
+
+  // Check verification report status
+  assert.strictEqual(report.overallStatus, 'PASS');
+  const testResult = report.results.find(r => r.commandKey === 'test');
+  assert.ok(testResult);
+  assert.strictEqual(testResult.status, 'PASS');
+  assert.strictEqual(testResult.stdout, 'Docker command output');
+
+  // Verify command line parameters assembly
+  assert.strictEqual(capturedCwd, sandboxDir);
+  
+  // Docker run parameters
+  assert.ok(capturedArgs.includes('run'));
+  assert.ok(capturedArgs.includes('--rm'));
+  assert.ok(capturedArgs.includes('-i'));
+
+  // Host mount directory normalized to use forward slashes
+  const expectedCwdMount = path.resolve(sandboxDir).replace(/\\/g, '/');
+  assert.ok(capturedArgs.includes(`${expectedCwdMount}:/workspace`));
+
+  // Custom volumes
+  const expectedCustomHostMount = path.resolve(sandboxDir, './my-host-data').replace(/\\/g, '/');
+  assert.ok(capturedArgs.includes(`${expectedCustomHostMount}:/opt/data`));
+
+  // Default slim node image override
+  assert.ok(capturedArgs.includes('node:custom'));
+
+  // Commands passed inside container sh -c shell wrapping
+  assert.strictEqual(capturedArgs[capturedArgs.length - 3], 'sh');
+  assert.strictEqual(capturedArgs[capturedArgs.length - 2], '-c');
+  assert.strictEqual(capturedArgs[capturedArgs.length - 1], 'npm run test');
+
+  // Secret environment variable mapping and export without exposing in command line arguments list
+  assert.ok(capturedArgs.includes('SECRET'));
+  assert.ok(capturedArgs.includes('STATIC_VAL'));
+  assert.ok(capturedArgs.includes('HOME'));
+  
+  // Verify that secrets are NOT exposed as KEY=VALUE on the command line arguments
+  assert.ok(!capturedArgs.some(arg => arg.includes('my_super_secret_value')));
+  assert.ok(!capturedArgs.some(arg => arg.includes('hello-sandbox')));
+
+  // Verify that env values are correctly bound in the execution env object
+  assert.strictEqual(capturedEnv.SECRET, 'my_super_secret_value');
+  assert.strictEqual(capturedEnv.STATIC_VAL, 'hello-sandbox');
+  assert.strictEqual(capturedEnv.HOME, '/tmp');
+  assert.ok(capturedEnv.JEWEL_AUDIT_CONFIG);
+  assert.strictEqual(capturedEnv.NODE_OPTIONS, '--require /opt/jewel/dist/verification/preload.js');
+
+  delete process.env.TEST_HOST_SECRET;
+  cleanupSandbox();
+});
+
+test('verification runner - sandbox process error and signal handling', (t) => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  t.mock.method(dockerUtils, 'isDockerAvailable', () => true);
+
+  // Case A: spawnSync fails with error (status: null, error info present)
+  t.mock.method(dockerUtils, 'executeDocker', () => {
+    return {
+      status: null,
+      signal: undefined,
+      stdout: '',
+      stderr: '',
+      error: new Error('Docker daemon connection refused')
+    };
+  });
+
+  const configErr: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'npm test'
+    }
+  };
+
+  const reportErr = runVerification(configErr, sandboxDir);
+  assert.strictEqual(reportErr.overallStatus, 'FAIL');
+  const testResultErr = reportErr.results.find(r => r.commandKey === 'test');
+  assert.ok(testResultErr);
+  assert.strictEqual(testResultErr.status, 'FAIL');
+  assert.strictEqual(testResultErr.exitCode, 1);
+  assert.ok(testResultErr.stderr.includes('Docker daemon connection refused'));
+
+  // Case B: process terminated by signal (status: null, signal present)
+  t.mock.method(dockerUtils, 'executeDocker', () => {
+    return {
+      status: null,
+      signal: 'SIGKILL',
+      stdout: '',
+      stderr: '',
+      error: undefined
+    };
+  });
+
+  const reportSig = runVerification(configErr, sandboxDir);
+  assert.strictEqual(reportSig.overallStatus, 'FAIL');
+  const testResultSig = reportSig.results.find(r => r.commandKey === 'test');
+  assert.ok(testResultSig);
+  assert.strictEqual(testResultSig.status, 'FAIL');
+  assert.strictEqual(testResultSig.exitCode, 1);
+  assert.ok(testResultSig.stderr.includes('SIGKILL'));
 
   cleanupSandbox();
 });

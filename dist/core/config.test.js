@@ -78,3 +78,45 @@ const config_1 = require("./config");
     });
     node_assert_1.default.deepStrictEqual(configWithCritics.critics, ['security', 'linter', 'architect']);
 });
+(0, node_test_1.default)('config loader - sandbox parameters validation', () => {
+    const defaults = (0, config_1.validateAndMergeConfig)({});
+    node_assert_1.default.strictEqual(defaults.useSandbox, false);
+    node_assert_1.default.strictEqual(defaults.sandboxFallbackToHost, false);
+    node_assert_1.default.strictEqual(defaults.sandboxImage, 'node:18-slim');
+    node_assert_1.default.deepStrictEqual(defaults.sandboxVolumes, {});
+    node_assert_1.default.deepStrictEqual(defaults.sandboxEnv, {});
+    const valid = (0, config_1.validateAndMergeConfig)({
+        useSandbox: true,
+        sandboxFallbackToHost: true,
+        sandboxImage: 'node:20',
+        sandboxVolumes: { './my-host': '/my-container' },
+        sandboxEnv: { 'API_KEY': '$API_KEY' }
+    });
+    node_assert_1.default.strictEqual(valid.useSandbox, true);
+    node_assert_1.default.strictEqual(valid.sandboxFallbackToHost, true);
+    node_assert_1.default.strictEqual(valid.sandboxImage, 'node:20');
+    node_assert_1.default.deepStrictEqual(valid.sandboxVolumes, { './my-host': '/my-container' });
+    node_assert_1.default.deepStrictEqual(valid.sandboxEnv, { 'API_KEY': '$API_KEY' });
+    // Invalid types
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ useSandbox: 'not-a-bool' });
+    }, /useSandbox.*must be a boolean/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxFallbackToHost: 'not-a-bool' });
+    }, /sandboxFallbackToHost.*must be a boolean/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxImage: 123 });
+    }, /sandboxImage.*must be a string/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxVolumes: 'not-an-object' });
+    }, /sandboxVolumes.*must be an object/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxVolumes: [] }); // array is an object in JS
+    }, /sandboxVolumes.*must be an object/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxVolumes: { '/host': 'relative/container' } });
+    }, /sandboxVolumes.*destination path.*must be absolute/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxEnv: 'not-an-object' });
+    }, /sandboxEnv.*must be an object/);
+});

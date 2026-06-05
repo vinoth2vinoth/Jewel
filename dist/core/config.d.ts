@@ -41,6 +41,11 @@ export interface JewelConfig {
     maxSessionCost?: number;
     critics?: ('security' | 'linter' | 'architect')[];
     useASTDiffGuard?: boolean;
+    useSandbox?: boolean;
+    sandboxFallbackToHost?: boolean;
+    sandboxImage?: string;
+    sandboxVolumes?: Record<string, string>;
+    sandboxEnv?: Record<string, string>;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

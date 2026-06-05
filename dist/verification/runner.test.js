@@ -193,3 +193,169 @@ function cleanupSandbox() {
     node_assert_1.default.ok(!testResultNoAudit.stderr.includes('Jewel Process Auditor'));
     cleanupSandbox();
 });
+(0, node_test_1.default)('verification runner - sandbox fallback to host when docker is unavailable', (t) => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    // 1. Stub isDockerAvailable to return false
+    t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => false);
+    // Case A: fallback is allowed (sandboxFallbackToHost: true)
+    const configFallback = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        sandboxFallbackToHost: true,
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'node -e "console.log(\'host ran\'); process.exit(0)"'
+        }
+    };
+    const reportFallback = (0, runner_1.runVerification)(configFallback, sandboxDir);
+    node_assert_1.default.strictEqual(reportFallback.overallStatus, 'PASS');
+    const testResultFallback = reportFallback.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResultFallback);
+    node_assert_1.default.strictEqual(testResultFallback.status, 'PASS');
+    node_assert_1.default.ok(testResultFallback.stderr.includes('Docker not available'));
+    node_assert_1.default.ok(testResultFallback.stdout.includes('host ran'));
+    // Case B: fallback is blocked (sandboxFallbackToHost: false)
+    const configNoFallback = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        sandboxFallbackToHost: false,
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'node -e "console.log(\'should not run\')"'
+        }
+    };
+    const reportNoFallback = (0, runner_1.runVerification)(configNoFallback, sandboxDir);
+    node_assert_1.default.strictEqual(reportNoFallback.overallStatus, 'FAIL');
+    const testResultNoFallback = reportNoFallback.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResultNoFallback);
+    node_assert_1.default.strictEqual(testResultNoFallback.status, 'FAIL');
+    node_assert_1.default.strictEqual(testResultNoFallback.exitCode, 1);
+    node_assert_1.default.ok(testResultNoFallback.stderr.includes('sandboxFallbackToHost is disabled'));
+    cleanupSandbox();
+});
+(0, node_test_1.default)('verification runner - sandbox docker execution and command assembly', (t) => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    // 1. Stub isDockerAvailable to return true
+    t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => true);
+    // 2. Stub executeDocker to capture arguments and environment, returning success mock
+    let capturedArgs = [];
+    let capturedCwd = '';
+    let capturedEnv = null;
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', (args, cwd, env) => {
+        capturedArgs = args;
+        capturedCwd = cwd;
+        capturedEnv = env;
+        return {
+            status: 0,
+            stdout: 'Docker command output',
+            stderr: 'Docker warnings',
+            error: undefined
+        };
+    });
+    process.env.TEST_HOST_SECRET = 'my_super_secret_value';
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        sandboxImage: 'node:custom',
+        sandboxVolumes: { './my-host-data': '/opt/data' },
+        sandboxEnv: {
+            'SECRET': '$TEST_HOST_SECRET',
+            'STATIC_VAL': 'hello-sandbox'
+        },
+        auditSpawnedProcesses: true,
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'npm run test'
+        }
+    };
+    const report = (0, runner_1.runVerification)(config, sandboxDir);
+    // Check verification report status
+    node_assert_1.default.strictEqual(report.overallStatus, 'PASS');
+    const testResult = report.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResult);
+    node_assert_1.default.strictEqual(testResult.status, 'PASS');
+    node_assert_1.default.strictEqual(testResult.stdout, 'Docker command output');
+    // Verify command line parameters assembly
+    node_assert_1.default.strictEqual(capturedCwd, sandboxDir);
+    // Docker run parameters
+    node_assert_1.default.ok(capturedArgs.includes('run'));
+    node_assert_1.default.ok(capturedArgs.includes('--rm'));
+    node_assert_1.default.ok(capturedArgs.includes('-i'));
+    // Host mount directory normalized to use forward slashes
+    const expectedCwdMount = path.resolve(sandboxDir).replace(/\\/g, '/');
+    node_assert_1.default.ok(capturedArgs.includes(`${expectedCwdMount}:/workspace`));
+    // Custom volumes
+    const expectedCustomHostMount = path.resolve(sandboxDir, './my-host-data').replace(/\\/g, '/');
+    node_assert_1.default.ok(capturedArgs.includes(`${expectedCustomHostMount}:/opt/data`));
+    // Default slim node image override
+    node_assert_1.default.ok(capturedArgs.includes('node:custom'));
+    // Commands passed inside container sh -c shell wrapping
+    node_assert_1.default.strictEqual(capturedArgs[capturedArgs.length - 3], 'sh');
+    node_assert_1.default.strictEqual(capturedArgs[capturedArgs.length - 2], '-c');
+    node_assert_1.default.strictEqual(capturedArgs[capturedArgs.length - 1], 'npm run test');
+    // Secret environment variable mapping and export without exposing in command line arguments list
+    node_assert_1.default.ok(capturedArgs.includes('SECRET'));
+    node_assert_1.default.ok(capturedArgs.includes('STATIC_VAL'));
+    node_assert_1.default.ok(capturedArgs.includes('HOME'));
+    // Verify that secrets are NOT exposed as KEY=VALUE on the command line arguments
+    node_assert_1.default.ok(!capturedArgs.some(arg => arg.includes('my_super_secret_value')));
+    node_assert_1.default.ok(!capturedArgs.some(arg => arg.includes('hello-sandbox')));
+    // Verify that env values are correctly bound in the execution env object
+    node_assert_1.default.strictEqual(capturedEnv.SECRET, 'my_super_secret_value');
+    node_assert_1.default.strictEqual(capturedEnv.STATIC_VAL, 'hello-sandbox');
+    node_assert_1.default.strictEqual(capturedEnv.HOME, '/tmp');
+    node_assert_1.default.ok(capturedEnv.JEWEL_AUDIT_CONFIG);
+    node_assert_1.default.strictEqual(capturedEnv.NODE_OPTIONS, '--require /opt/jewel/dist/verification/preload.js');
+    delete process.env.TEST_HOST_SECRET;
+    cleanupSandbox();
+});
+(0, node_test_1.default)('verification runner - sandbox process error and signal handling', (t) => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => true);
+    // Case A: spawnSync fails with error (status: null, error info present)
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', () => {
+        return {
+            status: null,
+            signal: undefined,
+            stdout: '',
+            stderr: '',
+            error: new Error('Docker daemon connection refused')
+        };
+    });
+    const configErr = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'npm test'
+        }
+    };
+    const reportErr = (0, runner_1.runVerification)(configErr, sandboxDir);
+    node_assert_1.default.strictEqual(reportErr.overallStatus, 'FAIL');
+    const testResultErr = reportErr.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResultErr);
+    node_assert_1.default.strictEqual(testResultErr.status, 'FAIL');
+    node_assert_1.default.strictEqual(testResultErr.exitCode, 1);
+    node_assert_1.default.ok(testResultErr.stderr.includes('Docker daemon connection refused'));
+    // Case B: process terminated by signal (status: null, signal present)
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', () => {
+        return {
+            status: null,
+            signal: 'SIGKILL',
+            stdout: '',
+            stderr: '',
+            error: undefined
+        };
+    });
+    const reportSig = (0, runner_1.runVerification)(configErr, sandboxDir);
+    node_assert_1.default.strictEqual(reportSig.overallStatus, 'FAIL');
+    const testResultSig = reportSig.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResultSig);
+    node_assert_1.default.strictEqual(testResultSig.status, 'FAIL');
+    node_assert_1.default.strictEqual(testResultSig.exitCode, 1);
+    node_assert_1.default.ok(testResultSig.stderr.includes('SIGKILL'));
+    cleanupSandbox();
+});

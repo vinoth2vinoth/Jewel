@@ -89,7 +89,12 @@ exports.DEFAULT_CONFIG = {
     interactiveRetryMode: true,
     maxSessionCost: 0.0,
     critics: ['security'],
-    useASTDiffGuard: false
+    useASTDiffGuard: false,
+    useSandbox: false,
+    sandboxFallbackToHost: false,
+    sandboxImage: 'node:18-slim',
+    sandboxVolumes: {},
+    sandboxEnv: {}
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -141,7 +146,9 @@ function validateAndMergeConfig(parsed) {
         'allowUnstructuredProviderFallback',
         'auditSpawnedProcesses',
         'interactiveRetryMode',
-        'useASTDiffGuard'
+        'useASTDiffGuard',
+        'useSandbox',
+        'sandboxFallbackToHost'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {
@@ -263,6 +270,40 @@ function validateAndMergeConfig(parsed) {
             }
             return item;
         });
+    }
+    if (parsed.sandboxImage !== undefined) {
+        if (typeof parsed.sandboxImage !== 'string') {
+            throw new Error('Invalid config: "sandboxImage" must be a string.');
+        }
+        config.sandboxImage = parsed.sandboxImage;
+    }
+    const isPlainObject = (val) => typeof val === 'object' && val !== null && !Array.isArray(val);
+    if (parsed.sandboxVolumes !== undefined) {
+        if (!isPlainObject(parsed.sandboxVolumes)) {
+            throw new Error('Invalid config: "sandboxVolumes" must be an object.');
+        }
+        config.sandboxVolumes = {};
+        for (const [key, val] of Object.entries(parsed.sandboxVolumes)) {
+            if (typeof key !== 'string' || typeof val !== 'string') {
+                throw new Error('Invalid config: "sandboxVolumes" keys and values must be strings.');
+            }
+            if (!val.startsWith('/')) {
+                throw new Error(`Invalid config: "sandboxVolumes" destination path "${val}" must be absolute (start with "/").`);
+            }
+            config.sandboxVolumes[key] = val;
+        }
+    }
+    if (parsed.sandboxEnv !== undefined) {
+        if (!isPlainObject(parsed.sandboxEnv)) {
+            throw new Error('Invalid config: "sandboxEnv" must be an object.');
+        }
+        config.sandboxEnv = {};
+        for (const [key, val] of Object.entries(parsed.sandboxEnv)) {
+            if (typeof key !== 'string' || typeof val !== 'string') {
+                throw new Error('Invalid config: "sandboxEnv" keys and values must be strings.');
+            }
+            config.sandboxEnv[key] = val;
+        }
     }
     return config;
 }

@@ -87,3 +87,55 @@ test('config loader - invalid types throw error', () => {
   });
   assert.deepStrictEqual(configWithCritics.critics, ['security', 'linter', 'architect']);
 });
+
+test('config loader - sandbox parameters validation', () => {
+  const defaults = validateAndMergeConfig({});
+  assert.strictEqual(defaults.useSandbox, false);
+  assert.strictEqual(defaults.sandboxFallbackToHost, false);
+  assert.strictEqual(defaults.sandboxImage, 'node:18-slim');
+  assert.deepStrictEqual(defaults.sandboxVolumes, {});
+  assert.deepStrictEqual(defaults.sandboxEnv, {});
+
+  const valid = validateAndMergeConfig({
+    useSandbox: true,
+    sandboxFallbackToHost: true,
+    sandboxImage: 'node:20',
+    sandboxVolumes: { './my-host': '/my-container' },
+    sandboxEnv: { 'API_KEY': '$API_KEY' }
+  });
+  assert.strictEqual(valid.useSandbox, true);
+  assert.strictEqual(valid.sandboxFallbackToHost, true);
+  assert.strictEqual(valid.sandboxImage, 'node:20');
+  assert.deepStrictEqual(valid.sandboxVolumes, { './my-host': '/my-container' });
+  assert.deepStrictEqual(valid.sandboxEnv, { 'API_KEY': '$API_KEY' });
+
+  // Invalid types
+  assert.throws(() => {
+    validateAndMergeConfig({ useSandbox: 'not-a-bool' });
+  }, /useSandbox.*must be a boolean/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxFallbackToHost: 'not-a-bool' });
+  }, /sandboxFallbackToHost.*must be a boolean/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxImage: 123 });
+  }, /sandboxImage.*must be a string/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxVolumes: 'not-an-object' });
+  }, /sandboxVolumes.*must be an object/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxVolumes: [] }); // array is an object in JS
+  }, /sandboxVolumes.*must be an object/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxVolumes: { '/host': 'relative/container' } });
+  }, /sandboxVolumes.*destination path.*must be absolute/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxEnv: 'not-an-object' });
+  }, /sandboxEnv.*must be an object/);
+});
+
