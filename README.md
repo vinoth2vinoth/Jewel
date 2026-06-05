@@ -215,7 +215,7 @@ Configure your safety parameters inside `jewel.config.json` at the root of your 
 | `model` | `string` | `""` | Base model selector name (e.g., `gpt-4o-mini`, `gemini-1.5-flash`). |
 | `temperature` | `number` | `0.0` | Model generation temperature (recommended `0.0` for deterministic outputs). |
 | `maxOutputTokens` | `number` | `4000` | Maximum token limit allowed in provider API responses. |
-| `maxSessionCost` | `number` | `0.0` | **Budget Guard**. Aborts execution if accumulative USD token cost exceeds this amount. `0.0` is disabled. |
+| `maxSessionCost` | `number` | `0.0` | **Budget Guard**. Aborts execution if cumulative USD token cost exceeds this amount. `0.0` is disabled. |
 | `commands` | `object` | *See block* | Map of key verification commands executed during preflight checks (`lint`, `typecheck`, `test`, `build`, `e2e`). |
 | `protectedFiles` | `string[]` | *See block* | Glob patterns of files protected from modification by default (e.g., `.env`, `package-lock.json`). |
 | `dangerousCommandPolicy` | `string` | `"block"` | Shell safety policy for script executions (`block` stops run, `warn` alerts, `allow` proceeds). |
@@ -298,11 +298,11 @@ description: Enforce safe migration and schema alteration patterns
 | `verify` | `jewel verify` | Manually trigger verification commands defined in config. |
 | `diff` | `jewel diff [session-id]`| Show proposed edits and diff previews for a session. |
 | `status` | `jewel status` | Display the current active session, checkpoint metadata, and repo status. |
-| `rollback` | `jewel rollback` | Revert the workspace to the state at the start of the latest session (**git checkpoint rollback**). |
+| `rollback` | `jewel rollback [session-id]` | Revert the workspace to the state at the start of the specified session (**git checkpoint rollback**). Defaults to the latest session if omitted. |
 | `audit` | `jewel audit` | Perform safety check verification on configuration and reports. |
 | `doctor` | `jewel doctor` | Diagnoses local env setup (Node, Git, package managers, and configured API keys). |
 | `provider-ready`| `jewel provider-ready`| Verifies provider integration config and checks capability registry. |
-| `smoke-provider`| `jewel smoke-provider [name]`| Run a quick network connectivity and credentials capability check on a provider. |
+| `smoke-provider`| `jewel smoke-provider`| Run a quick network connectivity and capability check on the configured provider (accepts `--provider` and `--model` overrides). |
 | `release-check`| `jewel release-check`| Run public package release checklist and secret redaction audit. |
 | `version` | `jewel version` | Prints the current package version and system info. |
 
