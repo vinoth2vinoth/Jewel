@@ -72,4 +72,18 @@ test('config loader - invalid types throw error', () => {
   assert.strictEqual(valid.llmTimeoutMs, 30000);
   assert.strictEqual(valid.llmMaxRetries, 3);
   assert.strictEqual(valid.llmStrictJson, false);
+
+  // Critics validation tests
+  assert.throws(() => {
+    validateAndMergeConfig({ critics: 'not_an_array' });
+  }, /critics.*must be an array/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ critics: ['invalid_critic'] });
+  }, /critics\[0\].*must be one of "security", "linter", or "architect"/);
+
+  const configWithCritics = validateAndMergeConfig({
+    critics: ['security', 'linter', 'architect']
+  });
+  assert.deepStrictEqual(configWithCritics.critics, ['security', 'linter', 'architect']);
 });

@@ -1,0 +1,13 @@
+import { JewelConfig } from '../core/config';
+export declare function hasWindowsDrivePrefix(inputPath: string): boolean;
+export declare function isWindowsUNCPath(inputPath: string): boolean;
+export declare function isAnyAbsolutePath(inputPath: string): boolean;
+export declare function normalizeRepoPath(inputPath: string, root?: string): string;
+export declare function isPathInsideRoot(root: string, candidate: string): boolean;
+export declare function assertPathInsideRoot(root: string, candidate: string): void;
+export declare function matchesProtectedPattern(repoPath: string, patterns: string[]): boolean;
+export declare function isProtectedPath(repoPath: string, config: JewelConfig): boolean;
+export declare function isDependencyPath(repoPath: string): boolean;
+export declare function isLockfilePath(repoPath: string): boolean;
+export declare function isAbsoluteOrEscapingPath(root: string, candidate: string): boolean;
+export declare function isSafeRepoRelativePath(candidate: string): boolean;

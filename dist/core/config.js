@@ -87,7 +87,8 @@ exports.DEFAULT_CONFIG = {
     coverageReportPath: '',
     auditSpawnedProcesses: true,
     interactiveRetryMode: true,
-    maxSessionCost: 0.0
+    maxSessionCost: 0.0,
+    critics: ['security']
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -249,6 +250,17 @@ function validateAndMergeConfig(parsed) {
             throw new Error('Invalid config: "coverageReportPath" must be a string.');
         }
         config.coverageReportPath = parsed.coverageReportPath;
+    }
+    if (parsed.critics !== undefined) {
+        if (!Array.isArray(parsed.critics)) {
+            throw new Error('Invalid config: "critics" must be an array.');
+        }
+        config.critics = parsed.critics.map((item, i) => {
+            if (typeof item !== 'string' || !['security', 'linter', 'architect'].includes(item)) {
+                throw new Error(`Invalid config: "critics[${i}]" must be one of "security", "linter", or "architect".`);
+            }
+            return item;
+        });
     }
     return config;
 }

@@ -2,6 +2,7 @@ import { JewelConfig } from '../core/config';
 import { TaskContract } from '../core/session';
 import { Skill } from '../skills/loader';
 import { VerificationReport } from '../verification/runner';
+import type { CriticResult } from '../safety/critic';
 export interface PlanInput {
     task: string;
     repoSummary: string;
@@ -19,6 +20,7 @@ export interface PatchInput {
     config?: JewelConfig;
     sessionPath?: string;
     customHint?: string;
+    criticResult?: CriticResult;
 }
 export interface PatchProposal {
     summary: string;
@@ -38,6 +40,7 @@ export interface ReviewInput {
     taskContract: TaskContract;
     config?: JewelConfig;
     sessionPath?: string;
+    criticType?: 'security' | 'linter' | 'architect';
 }
 export interface ReviewResult {
     status: 'PASS' | 'WARN' | 'BLOCK';

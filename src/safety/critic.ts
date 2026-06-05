@@ -2,6 +2,7 @@ import { JewelConfig } from '../core/config';
 import { TaskContract } from '../core/session';
 import { DiffAnalysis } from './diff-guard';
 import { VerificationReport } from '../verification/runner';
+import { AgentAdapter, ReviewInput } from '../agents/adapter';
 
 export interface CriticResult {
   status: 'PASS' | 'WARN' | 'BLOCK';
@@ -111,5 +112,75 @@ export function runCriticReview(
     findings,
     requiredActions,
     confidence
+  };
+}
+
+export async function runMultiAgentCriticReview(
+  contract: TaskContract,
+  diffAnalysis: DiffAnalysis,
+  verification: VerificationReport | null,
+  config: JewelConfig,
+  adapter: AgentAdapter | null,
+  sessionPath: string,
+  diffContent: string
+): Promise<CriticResult> {
+  // 1. Gather local heuristic check results
+  const localResult = runCriticReview(contract, diffAnalysis, verification, config);
+
+  if (!adapter || !config.critics || config.critics.length === 0) {
+    return localResult;
+  }
+
+  // 2. Perform parallel LLM critic runs
+  const llmPromises = config.critics.map(async (criticType) => {
+    try {
+      const reviewInput: ReviewInput = {
+        diff: diffContent,
+        verificationResult: verification,
+        taskContract: contract,
+        config,
+        sessionPath,
+        criticType
+      };
+      const result = await adapter.reviewDiff(reviewInput);
+      return { criticType, status: result.status, findings: result.findings, success: true };
+    } catch (err: any) {
+      // Catch individual critic errors to prevent loop crash
+      return {
+        criticType,
+        status: 'WARN' as const,
+        findings: [`Critic "${criticType}" failed to respond: ${err.message}`],
+        success: false
+      };
+    }
+  });
+
+  const llmResults = await Promise.all(llmPromises);
+
+  // 3. Aggregate results
+  let mergedStatus = localResult.status;
+  const mergedFindings = [...localResult.findings];
+  const mergedActions = [...localResult.requiredActions];
+
+  for (const r of llmResults) {
+    // Merge findings
+    if (r.findings && r.findings.length > 0) {
+      mergedFindings.push(...r.findings.map(f => `[Critic: ${r.criticType}] ${f}`));
+    }
+    
+    // Status precedence hierarchy: BLOCK > WARN > PASS
+    if (r.status === 'BLOCK') {
+      mergedStatus = 'BLOCK';
+      mergedActions.push(`Address blocking findings from the "${r.criticType}" critic.`);
+    } else if (r.status === 'WARN' && mergedStatus !== 'BLOCK') {
+      mergedStatus = 'WARN';
+    }
+  }
+
+  return {
+    status: mergedStatus,
+    findings: mergedFindings,
+    requiredActions: mergedActions,
+    confidence: localResult.confidence
   };
 }

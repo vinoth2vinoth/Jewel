@@ -103,6 +103,20 @@ test('run command - OpenAI integration safe patch writes successfully', async ()
           }]
         })
       };
+    } else if (lastMessage.includes('ReviewResult')) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                status: 'PASS',
+                findings: ['Mock review passed.']
+              })
+            }
+          }]
+        })
+      };
     } else {
       // Return a valid safe patch
       return {
@@ -194,6 +208,20 @@ test('run command - OpenAI integration blocked for parent traversal', async () =
           }]
         })
       };
+    } else if (lastMessage.includes('ReviewResult')) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                status: 'PASS',
+                findings: ['Mock review passed.']
+              })
+            }
+          }]
+        })
+      };
     } else {
       // Propose traversal path
       return {
@@ -273,6 +301,20 @@ test('run command - OpenAI integration blocked for absolute path', async () => {
                 requiresApproval: false,
                 createdAt: new Date().toISOString(),
                 mode: 'lax'
+              })
+            }
+          }]
+        })
+      };
+    } else if (lastMessage.includes('ReviewResult')) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                status: 'PASS',
+                findings: ['Mock review passed.']
               })
             }
           }]
@@ -377,6 +419,20 @@ test('run command - CLI provider overrides and validation', async () => {
           usage: { prompt_tokens: 50, completion_tokens: 25, total_tokens: 75 }
         })
       };
+    } else if (lastMessage.includes('ReviewResult')) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                status: 'PASS',
+                findings: ['Mock review passed.']
+              })
+            }
+          }]
+        })
+      };
     } else {
       return {
         ok: true,
@@ -466,6 +522,22 @@ test('run command - Gemini integration safe patch and unsafe blocking', async ()
                   requiresApproval: false,
                   createdAt: new Date().toISOString(),
                   mode: 'lax'
+                })
+              }]
+            }
+          }]
+        })
+      };
+    } else if (lastMessage.includes('ReviewResult')) {
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock Gemini review passed.']
                 })
               }]
             }
@@ -578,6 +650,19 @@ test('run command - Anthropic integration safe patch and unsafe blocking', async
               requiresApproval: false,
               createdAt: new Date().toISOString(),
               mode: 'lax'
+                })
+              }]
+            })
+          };
+    } else if (body.system && (body.system.includes('critic') || body.system.includes('auditor') || body.system.includes('architect'))) {
+      return {
+        ok: true,
+        json: async () => ({
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              status: 'PASS',
+              findings: ['Mock Anthropic review passed.']
             })
           }]
         })
@@ -686,6 +771,20 @@ test('run command - OpenRouter integration safe patch and unsafe blocking', asyn
                 requiresApproval: false,
                 createdAt: new Date().toISOString(),
                 mode: 'lax'
+              })
+            }
+          }]
+        })
+      };
+    } else if (lastMessage.includes('ReviewResult')) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                status: 'PASS',
+                findings: ['Mock review passed.']
               })
             }
           }]

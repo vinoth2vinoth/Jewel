@@ -79,7 +79,13 @@ export class OpenAIAdapter implements AgentAdapter {
 
   async reviewDiff(input: ReviewInput): Promise<ReviewResult> {
     const prompt = buildDiffReviewPrompt(input);
-    const systemPrompt = "You are a security critic. You must return only a valid JSON object adhering to the ReviewResult schema.";
+    const criticType = input.criticType || 'security';
+    const criticSystemPrompts = {
+      security: "You are a security critic. You must return only a valid JSON object adhering to the ReviewResult schema.",
+      linter: "You are a code quality and linting auditor. You must return only a valid JSON object adhering to the ReviewResult schema.",
+      architect: "You are a software architect. You must return only a valid JSON object adhering to the ReviewResult schema."
+    };
+    const systemPrompt = criticSystemPrompts[criticType];
     
     // Default config if not provided
     const config = input.config || {

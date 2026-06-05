@@ -463,7 +463,14 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 verification = (0, runner_1.runVerification)(config, cwd);
                 console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
                 // C. Run Critic Review
-                critic = (0, critic_1.runCriticReview)(contract, diffAnalysis, verification, config);
+                let diffContent = '';
+                if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+                    try {
+                        diffContent = (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, { cwd, encoding: 'utf8', env: { ...process.env, PAGER: 'cat' } });
+                    }
+                    catch { }
+                }
+                critic = await (0, critic_1.runMultiAgentCriticReview)(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
                 console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
                 if (critic.findings.length > 0) {
                     console.log('Findings:');
@@ -598,6 +605,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                             repoContext,
                             verificationResult: verification,
                             testCriticResult: testCriticResult || undefined,
+                            criticResult: critic || undefined,
                             config,
                             sessionPath,
                             customHint

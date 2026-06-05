@@ -82,9 +82,10 @@ module.exports = { add, divide };
     async reviewDiff(input) {
         this.accumulateMockUsage();
         this.checkBudget(input.config);
+        const criticName = input.criticType || 'security';
         return {
             status: 'PASS',
-            findings: ['Mock agent review passed successfully.']
+            findings: [`Mock agent review (${criticName}) passed successfully.`]
         };
     }
     async reviewTestCorrectness(input) {

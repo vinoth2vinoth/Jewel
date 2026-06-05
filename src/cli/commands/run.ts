@@ -8,7 +8,7 @@ import { createSession, TaskContract, validateContract, generateLocalContract } 
 import { createCheckpoint, rollbackCheckpoint, CheckpointMetadata } from '../../storage/git';
 import { runDiffGuard } from '../../safety/diff-guard';
 import { runVerification, VerificationReport } from '../../verification/runner';
-import { runCriticReview } from '../../safety/critic';
+import { runCriticReview, runMultiAgentCriticReview } from '../../safety/critic';
 import { createAgentAdapter } from '../../agents/provider-factory';
 import { applyPatchProposalSafely } from '../../safety/safe-patch-writer';
 import { validateTaskContractJson, validatePatchProposalJson } from '../../agents/json-response';
@@ -487,7 +487,13 @@ export async function runTask(
       console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
 
       // C. Run Critic Review
-      critic = runCriticReview(contract, diffAnalysis, verification, config);
+      let diffContent = '';
+      if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+        try {
+          diffContent = execSync(`git diff ${checkpoint.gitCheckpointSha}`, { cwd, encoding: 'utf8', env: { ...process.env, PAGER: 'cat' } });
+        } catch {}
+      }
+      critic = await runMultiAgentCriticReview(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
       console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
       if (critic.findings.length > 0) {
         console.log('Findings:');
@@ -636,6 +642,7 @@ export async function runTask(
             repoContext,
             verificationResult: verification,
             testCriticResult: testCriticResult || undefined,
+            criticResult: critic || undefined,
             config,
             sessionPath,
             customHint

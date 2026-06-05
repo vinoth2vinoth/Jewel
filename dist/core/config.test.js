@@ -66,4 +66,15 @@ const config_1 = require("./config");
     node_assert_1.default.strictEqual(valid.llmTimeoutMs, 30000);
     node_assert_1.default.strictEqual(valid.llmMaxRetries, 3);
     node_assert_1.default.strictEqual(valid.llmStrictJson, false);
+    // Critics validation tests
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ critics: 'not_an_array' });
+    }, /critics.*must be an array/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ critics: ['invalid_critic'] });
+    }, /critics\[0\].*must be one of "security", "linter", or "architect"/);
+    const configWithCritics = (0, config_1.validateAndMergeConfig)({
+        critics: ['security', 'linter', 'architect']
+    });
+    node_assert_1.default.deepStrictEqual(configWithCritics.critics, ['security', 'linter', 'architect']);
 });

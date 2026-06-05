@@ -7,6 +7,7 @@ const node_test_1 = __importDefault(require("node:test"));
 const node_assert_1 = __importDefault(require("node:assert"));
 const critic_1 = require("./critic");
 const config_1 = require("../core/config");
+const adapter_1 = require("../agents/adapter");
 const mockContract = {
     task: 'Fix auth session bug',
     understanding: 'Understanding...',
@@ -68,4 +69,58 @@ const mockVerificationPass = {
     const result = (0, critic_1.runCriticReview)(mockContract, diffUnplanned, mockVerificationPass, config_1.DEFAULT_CONFIG);
     node_assert_1.default.strictEqual(result.status, 'BLOCK');
     node_assert_1.default.ok(result.findings.some(f => f.includes('Changed files not declared')));
+});
+(0, node_test_1.default)('multi-agent critic - passing run aggregates critics', async () => {
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        critics: ['security', 'linter']
+    };
+    const adapter = new adapter_1.MockAgentAdapter();
+    const diff = { ...mockDiffAnalysisPass, changedFiles: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+    const contract = { ...mockContract, filesLikelyNeeded: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+    const result = await (0, critic_1.runMultiAgentCriticReview)(contract, diff, mockVerificationPass, config, adapter, '/tmp', 'diff content');
+    node_assert_1.default.strictEqual(result.status, 'PASS');
+    node_assert_1.default.ok(result.findings.some(f => f.includes('[Critic: security] Mock agent review (security) passed successfully.')));
+    node_assert_1.default.ok(result.findings.some(f => f.includes('[Critic: linter] Mock agent review (linter) passed successfully.')));
+});
+(0, node_test_1.default)('multi-agent critic - block result from one critic blocks overall', async () => {
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        critics: ['security', 'linter']
+    };
+    const diff = { ...mockDiffAnalysisPass, changedFiles: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+    const contract = { ...mockContract, filesLikelyNeeded: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+    class BlockingMockAdapter extends adapter_1.MockAgentAdapter {
+        async reviewDiff(input) {
+            if (input.criticType === 'linter') {
+                return { status: 'BLOCK', findings: ['Syntax error found'] };
+            }
+            return { status: 'PASS', findings: ['Security looks good'] };
+        }
+    }
+    const adapter = new BlockingMockAdapter();
+    const result = await (0, critic_1.runMultiAgentCriticReview)(contract, diff, mockVerificationPass, config, adapter, '/tmp', 'diff content');
+    node_assert_1.default.strictEqual(result.status, 'BLOCK');
+    node_assert_1.default.ok(result.findings.some(f => f.includes('[Critic: linter] Syntax error found')));
+    node_assert_1.default.ok(result.requiredActions.some(a => a.includes('Address blocking findings from the "linter" critic')));
+});
+(0, node_test_1.default)('multi-agent critic - error in one critic degrades to warn finding safely without crashing', async () => {
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        critics: ['security', 'linter']
+    };
+    const diff = { ...mockDiffAnalysisPass, changedFiles: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+    const contract = { ...mockContract, filesLikelyNeeded: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+    class ErrorMockAdapter extends adapter_1.MockAgentAdapter {
+        async reviewDiff(input) {
+            if (input.criticType === 'linter') {
+                throw new Error('Linter crashed connection reset');
+            }
+            return { status: 'PASS', findings: ['Security looks good'] };
+        }
+    }
+    const adapter = new ErrorMockAdapter();
+    const result = await (0, critic_1.runMultiAgentCriticReview)(contract, diff, mockVerificationPass, config, adapter, '/tmp', 'diff content');
+    node_assert_1.default.strictEqual(result.status, 'WARN');
+    node_assert_1.default.ok(result.findings.some(f => f.includes('[Critic: linter] Critic "linter" failed to respond: Linter crashed connection reset')));
 });

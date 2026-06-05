@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { runCriticReview } from './critic';
+import { runCriticReview, runMultiAgentCriticReview } from './critic';
 import { DEFAULT_CONFIG, JewelConfig } from '../core/config';
 import { TaskContract } from '../core/session';
 import { DiffAnalysis } from './diff-guard';
 import { VerificationReport } from '../verification/runner';
+import { MockAgentAdapter } from '../agents/adapter';
 
 const mockContract: TaskContract = {
   task: 'Fix auth session bug',
@@ -74,4 +75,93 @@ test('critic - unplanned file edits block in strict mode', () => {
   const result = runCriticReview(mockContract, diffUnplanned, mockVerificationPass, DEFAULT_CONFIG);
   assert.strictEqual(result.status, 'BLOCK');
   assert.ok(result.findings.some(f => f.includes('Changed files not declared')));
+});
+
+test('multi-agent critic - passing run aggregates critics', async () => {
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    critics: ['security', 'linter']
+  };
+  const adapter = new MockAgentAdapter();
+  const diff = { ...mockDiffAnalysisPass, changedFiles: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+  const contract = { ...mockContract, filesLikelyNeeded: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+  
+  const result = await runMultiAgentCriticReview(
+    contract,
+    diff,
+    mockVerificationPass,
+    config,
+    adapter,
+    '/tmp',
+    'diff content'
+  );
+  
+  assert.strictEqual(result.status, 'PASS');
+  assert.ok(result.findings.some(f => f.includes('[Critic: security] Mock agent review (security) passed successfully.')));
+  assert.ok(result.findings.some(f => f.includes('[Critic: linter] Mock agent review (linter) passed successfully.')));
+});
+
+test('multi-agent critic - block result from one critic blocks overall', async () => {
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    critics: ['security', 'linter']
+  };
+  const diff = { ...mockDiffAnalysisPass, changedFiles: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+  const contract = { ...mockContract, filesLikelyNeeded: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+  
+  class BlockingMockAdapter extends MockAgentAdapter {
+    async reviewDiff(input: any) {
+      if (input.criticType === 'linter') {
+        return { status: 'BLOCK' as const, findings: ['Syntax error found'] };
+      }
+      return { status: 'PASS' as const, findings: ['Security looks good'] };
+    }
+  }
+  const adapter = new BlockingMockAdapter();
+  
+  const result = await runMultiAgentCriticReview(
+    contract,
+    diff,
+    mockVerificationPass,
+    config,
+    adapter,
+    '/tmp',
+    'diff content'
+  );
+  
+  assert.strictEqual(result.status, 'BLOCK');
+  assert.ok(result.findings.some(f => f.includes('[Critic: linter] Syntax error found')));
+  assert.ok(result.requiredActions.some(a => a.includes('Address blocking findings from the "linter" critic')));
+});
+ 
+test('multi-agent critic - error in one critic degrades to warn finding safely without crashing', async () => {
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    critics: ['security', 'linter']
+  };
+  const diff = { ...mockDiffAnalysisPass, changedFiles: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+  const contract = { ...mockContract, filesLikelyNeeded: ['src/auth/session.ts', 'src/auth/session.test.ts'] };
+  
+  class ErrorMockAdapter extends MockAgentAdapter {
+    async reviewDiff(input: any) {
+      if (input.criticType === 'linter') {
+        throw new Error('Linter crashed connection reset');
+      }
+      return { status: 'PASS' as const, findings: ['Security looks good'] };
+    }
+  }
+  const adapter = new ErrorMockAdapter();
+  
+  const result = await runMultiAgentCriticReview(
+    contract,
+    diff,
+    mockVerificationPass,
+    config,
+    adapter,
+    '/tmp',
+    'diff content'
+  );
+  
+  assert.strictEqual(result.status, 'WARN');
+  assert.ok(result.findings.some(f => f.includes('[Critic: linter] Critic "linter" failed to respond: Linter crashed connection reset')));
 });

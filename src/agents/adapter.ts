@@ -2,6 +2,7 @@ import { JewelConfig } from '../core/config';
 import { TaskContract, generateLocalContract } from '../core/session';
 import { Skill } from '../skills/loader';
 import { VerificationReport } from '../verification/runner';
+import type { CriticResult } from '../safety/critic';
 
 export interface PlanInput {
   task: string;
@@ -21,6 +22,7 @@ export interface PatchInput {
   config?: JewelConfig;
   sessionPath?: string;
   customHint?: string;
+  criticResult?: CriticResult;
 }
 
 export interface PatchProposal {
@@ -42,6 +44,7 @@ export interface ReviewInput {
   taskContract: TaskContract;
   config?: JewelConfig;
   sessionPath?: string;
+  criticType?: 'security' | 'linter' | 'architect';
 }
 
 export interface ReviewResult {
@@ -187,9 +190,10 @@ module.exports = { add, divide };
   async reviewDiff(input: ReviewInput): Promise<ReviewResult> {
     this.accumulateMockUsage();
     this.checkBudget(input.config);
+    const criticName = input.criticType || 'security';
     return {
       status: 'PASS',
-      findings: ['Mock agent review passed successfully.']
+      findings: [`Mock agent review (${criticName}) passed successfully.`]
     };
   }
 

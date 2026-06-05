@@ -61,6 +61,10 @@ export function buildPatchProposalPrompt(input: PatchInput): string {
     ? `\nCritic Feedback on previous failure:\nVerdict: ${input.testCriticResult.verdict}\nExplanation: ${input.testCriticResult.explanation}\nSuggested Fix: ${input.testCriticResult.suggestedFix}\n`
     : '';
 
+  const generalCriticFeedbackStr = input.criticResult && input.criticResult.findings.length > 0
+    ? `\nLLM Critics Feedback on previous attempt:\nStatus: ${input.criticResult.status}\nFindings:\n${input.criticResult.findings.map(f => `- ${f}`).join('\n')}\n`
+    : '';
+
   const customHintStr = input.customHint
     ? `\nUser Custom Guidance Hint:\n${input.customHint}\n`
     : '';
@@ -97,6 +101,7 @@ ${contract.successCriteria.map(c => `- ${c}`).join('\n')}
 Previous Verification:
 ${verificationStr}
 ${criticFeedbackStr}
+${generalCriticFeedbackStr}
 ${customHintStr}
 
 Repository Context:
@@ -124,8 +129,20 @@ export function buildDiffReviewPrompt(input: ReviewInput): string {
     ? `Test run status: ${input.verificationResult.overallStatus}\nResults:\n${input.verificationResult.results.map(r => `- ${r.commandKey} (${r.status}): ${r.errorMsg || ''}`).join('\n')}`
     : 'No test runs performed yet.';
 
-  return `You are an AI security critic and safety review gate operating inside Jewel.
-Review the proposed diff and verification outcomes below to ensure they are safe, surgical, correct, and do not violate security constraints.
+  const criticType = input.criticType || 'security';
+  let criticRoleStr = 'AI security critic and safety review gate';
+  let focusInstructions = 'Review the proposed diff and verification outcomes below to ensure they are safe, surgical, correct, and do not violate security constraints.';
+
+  if (criticType === 'linter') {
+    criticRoleStr = 'code quality and linting auditor';
+    focusInstructions = 'Review the proposed diff for syntax errors, typing discrepancies, code formatting issues, and dead code.';
+  } else if (criticType === 'architect') {
+    criticRoleStr = 'software architect';
+    focusInstructions = 'Review the proposed diff for pattern compliance, file organization, coupling, scalability, and code readability.';
+  }
+
+  return `You are an ${criticRoleStr} operating inside Jewel.
+${focusInstructions}
 
 CRITICAL SAFETY RULES:
 - You must return strict JSON only. Do not include conversational text outside the JSON.

@@ -145,6 +145,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
             }]
           })
         };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
+                })
+              }
+            }]
+          })
+        };
       } else {
         attempt++;
         const content = attempt === 1 
@@ -246,6 +260,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
                   suggestedFix: 'Fix it.',
                   canAutoRetry: true,
                   requiresHumanReview: false
+                })
+              }
+            }]
+          })
+        };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
                 })
               }
             }]
@@ -355,6 +383,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
             }]
           })
         };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
+                })
+              }
+            }]
+          })
+        };
       } else {
         attempt++;
         // Propose exactly the same wrong content so verification produces same logs
@@ -457,6 +499,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
             }]
           })
         };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
+                })
+              }
+            }]
+          })
+        };
       } else {
         return {
           ok: true,
@@ -554,6 +610,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
             }]
           })
         };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
+                })
+              }
+            }]
+          })
+        };
       } else {
         return {
           ok: true,
@@ -637,6 +707,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
                   createdAt: new Date().toISOString(),
                   mode: 'lax',
                   preserveExistingTests: true
+                })
+              }
+            }]
+          })
+        };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
                 })
               }
             }]
@@ -764,6 +848,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
                   suggestedFix: 'Fix it.',
                   canAutoRetry: true,
                   requiresHumanReview: false
+                })
+              }
+            }]
+          })
+        };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
                 })
               }
             }]
@@ -912,6 +1010,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
             }]
           })
         };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
+                })
+              }
+            }]
+          })
+        };
       } else {
         return {
           ok: true,
@@ -1000,6 +1112,20 @@ describe('runTask Critic & Retry Integration Loops', () => {
                   createdAt: new Date().toISOString(),
                   mode: 'lax',
                   preserveExistingTests: false
+                })
+              }
+            }]
+          })
+        };
+      } else if (lastMessage.includes('ReviewResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  status: 'PASS',
+                  findings: ['Mock review passed.']
                 })
               }
             }]
