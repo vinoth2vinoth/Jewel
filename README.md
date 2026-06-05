@@ -8,14 +8,16 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 \__/ |  |_____|    \/      \/        |_____|  |_____|
 ```
   
-  **Strict, Verification-First AI Coding Safety Harness CLI**
+  **Secure AI Agent Workspace Safety Harness & LLM Verification Loop CLI**
+  
+  *Automate Git Checkpoint Rollback, Sandboxed LLM Code Execution, and API Budget Guards*
 
   [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
   [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
   [![License](https://img.shields.io/badge/license-MIT-slate?style=flat-square)](./LICENSE)
   [![Coverage](https://img.shields.io/badge/coverage-80%25-emerald?style=flat-square)](#)
 
-  *Jewel is a strict, verification-first AI coding harness CLI designed to force AI agents to follow disciplined software engineering principles, prevent runaway costs, and protect developer workspaces.*
+  *Jewel is a strict, verification-first AI coding safety harness and LLM verification loop CLI designed to secure your workspace. It protects developer files via sandboxed LLM code execution, automates git checkpoint rollback on test failures, and enforces cost-control budget guards.*
 </div>
 
 ---
@@ -33,9 +35,9 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 - [⚙️ Configuration Reference (`jewel.config.json`)](#️-configuration-reference-jewelconfigjson)
 - [🤖 Supported Models & Providers](#-supported-models--providers)
 - [🔒 Safety & Security Model](#-safety-security-model)
-  - [Docker Sandboxing](#docker-sandboxing)
-  - [Path Escape & Boundary Protection](#path-escape--boundary-protection)
-  - [Budget Guard & Cost Limits](#budget-guard--cost-limits)
+  - [Sandboxed LLM Code Execution](#sandboxed-llm-code-execution)
+  - [Path Escape Prevention & Workspace Boundary Protection](#path-escape-prevention--workspace-boundary-protection)
+  - [Budget Guards & Cost Limits](#budget-guards--cost-limits)
 - [🛠️ Custom Safety Skills](#️-custom-safety-skills)
 - [💻 CLI Command & Option Reference](#-cli-command--option-reference)
 - [❓ Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
@@ -48,16 +50,18 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 ## What Jewel IS / IS NOT
 
 ### What Jewel IS:
-- **A verification-first AI coding safety harness**: Jewel wraps LLM executions in transactional checkpoints, diff guards, and verification tests.
-- **A transaction manager**: Automatically snapshot-checks workspace files via Git commits or copy snapshots, and performs a complete rollback to the checkpoint if verification tests fail.
+- **An AI coding safety harness**: Wraps LLM generations in transactional checkpoints, diff guards, and verification tests to keep developer environments pristine.
+- **Automated git checkpoint rollback**: Automatically takes snapshot checkpoints of your workspace via Git commits or copy snapshots, and triggers a full rollback to the checkpoint if verification tests fail.
+- **Sandboxed LLM code execution**: Isolates and executes untrusted code patches and test suites inside containerized Docker environments to prevent host pollution or malicious shell commands.
+- **Budget guards & cost controls**: Tracks API spending in real-time and aborts runs before they exceed your predefined limits.
 - **Provider-neutral**: Implements a capability-aware adapter registry supporting OpenAI, Gemini, Anthropic, OpenRouter, and local dry-run modes.
-- **Safe-patch-writer protected**: All code changes are validated for path escapes, absolute routes, Windows drive prefix traversal, and null bytes before editing.
-- **Human-review friendly**: Serves an interactive local Web UI review modal with side-by-side git diffs, AST signature difference trees, and selective patch checklists.
+- **Path-escape protection**: Validates all proposed code changes for path traversal, absolute routes, Windows drive prefix escapes, and null bytes before editing.
+- **Developer-friendly UI**: Serves a local Web UI review modal with side-by-side git diffs, AST signature difference trees, and selective patch checklists.
 
 ### What Jewel IS NOT:
 - **An autonomous agent loop (like Claude Code)**: Jewel does not manage conversational chat loops. It is the *safety execution layer* that wraps patch proposals to ensure they compile, pass tests, and are approved before staging.
-- **A replacement for git**: Jewel builds on top of git for snapshotting.
-- **A sandboxed environment by default**: Verification tests run directly on the host shell by default. You must explicitly configure Docker sandboxing (`"useSandbox": true`) to isolate execution for untrusted AI proposals.
+- **A replacement for git**: Jewel builds on top of git for checkpointing.
+- **A sandbox-only tool**: By default, verification tests run directly on the host shell. To enable **sandboxed LLM code execution**, you must explicitly set `"useSandbox": true` in your configuration.
 
 ---
 
@@ -73,7 +77,7 @@ graph TD
     D --> E[Safe-Patch-Writer validates paths]
     E --> F[Run Verification Suite]
     F -- Pass --> G[Human Diff Review Gate / Dashboard]
-    F -- Fail --> H[Automatic Rollback]
+    F -- Fail --> H[Automatic Git Checkpoint Rollback]
     G -- Approved --> I[Commit Changes]
     G -- Rejected/Retry --> H
     H --> C
@@ -108,9 +112,9 @@ graph TD
      ```cmd
      npm install -g jewel-cli-0.9.0.tgz
      ```
-     
-     > [!IMPORTANT]
-     > **Windows CMD Environment Variable Tip**: When setting environment variables (like `GEMINI_API_KEY`) in CMD, use `set GEMINI_API_KEY=your_key_here` without quotes. Wrapping the value in quotes (e.g., `set GEMINI_API_KEY="key"`) forces Windows to ingest the quotes literally into Node's environment parser, causing authentication failures.
+      
+      > [!IMPORTANT]
+      > **Windows CMD Environment Variable Tip**: When setting environment variables (like `GEMINI_API_KEY`) in CMD, use `set GEMINI_API_KEY=your_key_here` without quotes. Wrapping the value in quotes (e.g., `set GEMINI_API_KEY="key"`) forces Windows to ingest the quotes literally into Node's environment parser, causing authentication failures.
 3. Initialize configuration in your coding project:
    ```bash
    jewel init
@@ -218,7 +222,7 @@ Configure your safety parameters inside `jewel.config.json` at the root of your 
 | `auditSpawnedProcesses` | `boolean` | `true` | Audits process trees spawned by unit tests to flag unrecognized network/filesystem activity. |
 | `interactiveRetryMode` | `boolean` | `true` | Prompts developers for interactive feedback/retry choices on command line on verification failures. |
 | `useASTDiffGuard` | `boolean` | `false` | Blocks commits if the patch alters class/function interfaces or signatures. |
-| `useSandbox` | `boolean` | `false` | Isolates all verification commands inside Docker containers. |
+| `useSandbox` | `boolean` | `false` | Enables **sandboxed LLM code execution** by isolating all verification commands inside Docker containers. |
 | `sandboxNetwork` | `string` | `"none"` | Docker container network mode (`none` blocks outbound connection for exfiltration protection). |
 | `sandboxReadOnlyRoot` | `boolean` | `true` | Mounts target workspace root as read-only (`:ro`) in Docker container. |
 | `sandboxWritePaths` | `string[]` | `[]` | Directories inside workspace granted read-write container mounting permissions. |
@@ -242,23 +246,23 @@ Jewel integrates with major LLM providers. Adapters validate capabilities (such 
 
 ## 🔒 Safety & Security Model
 
-### Docker Sandboxing
+### Sandboxed LLM Code Execution
 To protect your host machine from arbitrary code execution during verification (e.g. running unit tests or custom build scripts written by an LLM), Jewel supports running verification commands inside secure Docker containers. 
 - Mounts the project root read-only (`:ro`).
 - Grants write permissions exclusively to designated folders (`sandboxWritePaths`).
 - Network access is disabled by default (`sandboxNetwork: "none"`) to prevent private code and credentials from leaking.
 
 > [!WARNING]
-> Running Jewel with `useSandbox: false` executes verification commands directly on your host shell. Only turn sandboxing off if you fully trust the LLM completions or are running in a mock sandbox environment.
+> Running Jewel without **sandboxed LLM code execution** (`useSandbox: false`) executes verification commands directly on your host shell. Only turn sandboxing off if you fully trust the LLM completions or are running in a mock sandbox environment.
 
-### Path Escape & Boundary Protection
+### Path Escape Prevention & Workspace Boundary Protection
 All proposed edits undergo rigorous path audits in [safe-patch-writer.ts](./src/safety/safe-patch-writer.ts) to prevent traversal, escaping, and directory-clobbering attacks:
 - **Path Normalization**: Windows backslashes `\` are converted to forward slashes `/` before audits to prevent platform-specific check bypasses.
 - **Null Byte Guard**: Rejects segment strings containing null bytes (`\0`).
 - **Workspace Containment**: Absolute paths (including Windows drive prefixes `C:`), UNC paths (`\\`), and parent directory traversals (`..`) are blocked.
 - **Transactional Writes**: Patches are applied atomically. If any file write fails, the entire change is rolled back.
 
-### Budget Guard & Cost Limits
+### Budget Guards & Cost Limits
 Jewel estimates LLM execution costs in real-time according to registered model token prices. If the cumulative cost of planning, patching, and critic reviews exceeds `maxSessionCost`, the Budget Guard immediately aborts the run and rolls back all changes to prevent runaway API spend.
 
 ---
@@ -293,7 +297,7 @@ description: Enforce safe migration and schema alteration patterns
 | `verify` | `jewel verify` | Manually trigger verification commands defined in config. |
 | `diff` | `jewel diff [session-id]`| Show proposed edits and diff previews for a session. |
 | `status` | `jewel status` | Display the current active session, checkpoint metadata, and repo status. |
-| `rollback` | `jewel rollback` | Revert the workspace to the state at the start of the latest session. |
+| `rollback` | `jewel rollback` | Revert the workspace to the state at the start of the latest session (**git checkpoint rollback**). |
 | `audit` | `jewel audit` | Perform safety check verification on configuration and reports. |
 | `doctor` | `jewel doctor` | Diagnoses local env setup (Node, Git, package managers, and configured API keys). |
 | `provider-ready`| `jewel provider-ready`| Verifies provider integration config and checks capability registry. |
@@ -309,7 +313,7 @@ description: Enforce safe migration and schema alteration patterns
 | `--dry-run` | *None* | Perform preflight check, print task contract, and exit without invoking LLM or writing patches. |
 | `--yes` | *None* | Auto-approve planning and patch stages without prompting for human intervention. |
 | `--no-review` | *None* | Disables the visual HTML diff review step. |
-| `--keep-failed` | *None* | Bypasses automatic checkpoint rollback if verification tests fail. |
+| `--keep-failed` | *None* | Bypasses automatic **git checkpoint rollback** if verification tests fail. |
 | `--ui` | *None* | Launches the interactive local Web UI dashboard at http://127.0.0.1:3000. |
 | `--provider` | `<provider>` | Override the LLM provider configuration (`openai`, `gemini`, `anthropic`, `openrouter`). |
 | `--model` | `<model>` | Override the model name configuration (e.g. `gpt-4o-mini`). |
@@ -322,7 +326,7 @@ description: Enforce safe migration and schema alteration patterns
 
 ### How is Jewel different from coding assistants like Aider or Claude Code?
 * **Aider / Claude Code**: These are active, conversational editing agents. They manage chat context windows, request model edits, and sometimes run shell tests. They focus on *generation*.
-* **Jewel**: Jewel is an *execution-layer safety shield*. It does not interact in conversation. Instead, it wraps LLM/agent code proposals in transactional checkpoints, enforces file scopes, normalizes paths, redacts secrets, and rolls back the workspace to the pre-run state if tests fail.
+* **Jewel**: Jewel is an **AI coding safety harness** and execution-layer shield. It does not interact in conversation. Instead, it wraps LLM/agent code proposals in transactional checkpoints, enforces file scopes, normalizes paths, redacts secrets, and automatically performs a **git checkpoint rollback** if tests fail.
 
 ### Does Jewel execute raw shell scripts?
 Only if they are defined inside your project's `jewel.config.json` configuration block under `commands` (e.g. `npm test`). Jewel will reject arbitrary command executions if `dangerousCommandPolicy` is set to `"block"`.
@@ -342,12 +346,12 @@ If you receive the warning: `Harness warning: Git repository not initialized...`
 ### Docker Container Sandbox Failures
 If running `useSandbox: true` fails or hangs:
 * **Cause**: Docker is either inactive, or the current user lacks permissions to interact with the Docker socket (`/var/run/docker.sock` on Linux or Docker Desktop on Windows).
-* **Fix**: Verify that Docker is running (`docker info` in terminal). If Docker is not available and you want tests to run directly on the host shell, set `"sandboxFallbackToHost": true` or `"useSandbox": false` in your configuration.
+* **Fix**: Verify that Docker is running (`docker info` in terminal). If Docker is not available and you want tests to run directly on the host shell, set `"sandboxFallbackToHost": true` or `"useSandbox": false` in your configuration to disable **sandboxed LLM code execution**.
 
-### Budget Guard Aborting Runs
+### Budget Guards Aborting Runs
 If you receive the error `[Jewel Budget Guard] Session cost limit exceeded...`:
 * **Cause**: The accumulated prompt and output tokens used during planning, patching, and critic reviews exceeded the `maxSessionCost` limit defined in `jewel.config.json`.
-* **Fix**: Increase the limit in `jewel.config.json` (e.g., set to `0.05` for a 5-cent budget, or `0.0` to disable bounds), or run with a cheaper model like `gemini-1.5-flash` or `gpt-4o-mini`.
+* **Fix**: Increase the limit in `jewel.config.json` (e.g., set to `0.05` for a 5-cent budget, or `0.0` to disable the **budget guards**), or run with a cheaper model like `gemini-1.5-flash` or `gpt-4o-mini`.
 
 ---
 
