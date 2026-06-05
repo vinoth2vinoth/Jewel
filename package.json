@@ -11,7 +11,8 @@
     "dev": "tsc -w",
     "test": "node scripts/run-all-tests.js",
     "lint": "echo \"No linting configured\"",
-    "verify:dogfood-fixture": "node scripts/verify-dogfood-fixture.js"
+    "verify:dogfood-fixture": "node scripts/verify-dogfood-fixture.js",
+    "prepare": "npm run build"
   },
   "keywords": [
     "ai",

@@ -8,14 +8,14 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 \__/ |  |_____|    \/      \/        |_____|  |_____|
 ```
   
-  **Reliable AI coding through safe patches, tests, and repair loops.**
+  **Jewel is an autonomous, task-based AI coder that writes code and runs tests inside a secure transactional safety harness.**
 
   [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
   [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
   [![License](https://img.shields.io/badge/license-MIT-slate?style=flat-square)](./LICENSE)
   [![Coverage](https://img.shields.io/badge/coverage-80%25-emerald?style=flat-square)](#)
 
-  *An autonomous task-based AI coding agent that plans, patches, and verifies code using configured LLMs, wrapping all executions in a strict, sandboxed git transaction harness with auto-rollback protection.*
+  *Jewel is an autonomous AI coding agent. It takes your high-level tasks, designs implementation plans, generates precise code patches, and validates changes inside a strict sandboxed Git transaction loop with automatic rollback safety.*
 </div>
 
 ## 📖 Table of Contents
@@ -88,30 +88,41 @@ graph TD
 
 ### User Installation
 
-You can install Jewel globally from the npm registry using a single command:
+Install Jewel globally with a single command:
+
+#### Option A: Direct Installation from GitHub (Recommended for latest dev builds)
+Since Jewel is under active development, you can install the latest release directly from GitHub:
+```bash
+npm install -g https://github.com/vinoth2vinoth/Jewel
+```
+*Note: This command automatically fetches the repository and compiles the TypeScript code in one step.*
+
+#### Option B: Global Registry Installation
+Alternatively, if installing from the npm registry:
 ```bash
 npm install -g jewel-cli
 ```
 
-Alternatively, you can run tasks directly using the zero-install `npx` runner model:
+#### Option C: Zero-Install (On-the-fly execution via npx)
+Run tasks on the fly without installing Jewel permanently:
 ```bash
-npx -p jewel-cli jewel run "fix the failing math test" --mock
+npx -p https://github.com/vinoth2vinoth/Jewel jewel run "fix the failing math test" --mock
 ```
-
-> [!NOTE]
-> **Installing from Local Source**: If you are modifying or developing Jewel locally, build the package using `npm pack` and install from the generated tarball (e.g., `npm install -g ./jewel-cli-*.tgz`). Detailed local dev setup steps can be found in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 > [!IMPORTANT]
 > **Windows CMD Environment Variable Tip**: When setting environment variables (like `GEMINI_API_KEY`) in CMD, use `set GEMINI_API_KEY=your_key_here` without quotes. Wrapping the value in quotes (e.g., `set GEMINI_API_KEY="key"`) forces Windows to ingest the quotes literally into Node's environment parser, causing authentication failures.
-3. Initialize configuration in your coding project:
+
+### Get Started in 3 Steps:
+
+1. **Initialize configuration** in your project directory:
    ```bash
    jewel init
    ```
-4. Verify environment setup and configuration:
+2. **Verify environment setup** and diagnostics:
    ```bash
    jewel doctor
    ```
-5. Run a task with the mock adapter (safe dry-run simulation):
+3. **Execute a task** in mock mode (safe simulation without API calls):
    ```bash
    jewel run "Fix formatting in code" --mock --files "src/index.ts"
    ```
