@@ -8,7 +8,7 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 \__/ |  |_____|    \/      \/        |_____|  |_____|
 ```
   
-  **Transactional AI Coding Agent & Safe Execution Loop CLI**
+  **Reliable AI coding through safe patches, tests, and repair loops.**
 
   [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
   [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
@@ -17,13 +17,6 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 
   *An autonomous task-based AI coding agent that plans, patches, and verifies code using configured LLMs, wrapping all executions in a strict, sandboxed git transaction harness with auto-rollback protection.*
 </div>
-
----
-
-> [!IMPORTANT]
-> **Branding Notice**: Jewel is Karpathy-inspired (strict, simple, surgical, test-verified) but is *not* officially affiliated with or endorsed by Andrej Karpathy.
-
----
 
 ## 📖 Table of Contents
 - [What Jewel IS / IS NOT](#what-jewel-is--is-not)
