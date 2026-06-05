@@ -1,115 +1,140 @@
-# Jewel: Strict AI Coding Safety Harness
+<div align="center">
+  
+```text
+      ____  _____ _      _____ _      
+     / __ \| ____| |    |  ___| |     
+    | |  | | |__ | |    | |__ | |     
+    | |  | |  __|| |    |  __|| |     
+    | |__| | |___| |____| |___| |____ 
+     \____/|_____|______|_____|______|
+```
+  
+  **Strict, Verification-First AI Coding Safety Harness CLI**
 
-Jewel is a strict, verification-first AI coding harness CLI designed to force AI coding agents to follow disciplined software engineering principles.
+  [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
+  [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
+  [![License](https://img.shields.io/badge/license-MIT-slate?style=flat-square)](./LICENSE)
+  [![Coverage](https://img.shields.io/badge/coverage-80%25-emerald?style=flat-square)](#)
 
-Inspired by Andrej Karpathy's style of coding:
-1. Think before coding
-2. Simplicity first
-3. Surgical changes only
-4. Goal-driven execution
-5. Verify before declaring success
-6. Rollback safely if verification fails
-7. Never fake success
-8. Never make broad unrelated changes
-9. Never hide uncertainty
-10. Never proceed without proof
+  *Jewel is a strict, verification-first AI coding harness CLI designed to force AI agents to follow disciplined software engineering principles, prevent runaway costs, and protect developer workspaces.*
+</div>
+
+---
 
 > [!IMPORTANT]
-> **Branding Notice**: Jewel is Karpathy-inspired but is *not* officially affiliated with or endorsed by Andrej Karpathy.
+> **Branding Notice**: Jewel is Karpathy-inspired (strict, simple, surgical, test-verified) but is *not* officially affiliated with or endorsed by Andrej Karpathy.
 
 ---
 
-## What Jewel IS
-- **A verification-first AI coding safety harness**: Jewel wraps LLM executions in rigorous checkpoints, diff guards, and verification tests.
-- **Provider-neutral**: Supports OpenAI, Gemini, Anthropic, OpenRouter, and a mock adapter out of the box.
-- **Local-first**: Runs locally on your machine, managing your working directory via Git commits or copy snapshots.
-- **Strict about file scope**: Ensures LLM agent proposals never write to files outside the declared task scope.
-- **Safe-patch-writer protected**: Validates all incoming patch proposals for path escapes, traversal, absolute targets, and UNC targets before editing files.
-- **Human-review friendly**: Prompts users with clean side-by-side git diff previews before applying any changes.
-- **Built-in Secret Audit**: Scans reports and runs verification audits to identify and block leaked credentials.
-
-## What Jewel IS NOT
-- **A full Claude Code clone**: Jewel focuses specifically on the safety harness, checkpoint, and verification runner layers, not on building autonomous multi-agent loops.
-- **A replacement for git**: Jewel relies on your existing git workflow for checkpoints and rollbacks.
-- **A guarantee that AI code is perfect**: While Jewel enforces tests, compiling, and lint checks, it does not guarantee logical correctness.
-- **A tool that should be run blindly on production repos**: Users should always review proposals and run tests before final commits.
+## 📖 Table of Contents
+- [What Jewel IS / IS NOT](#what-jewel-is--is-not)
+- [🔄 How the Safety Loop Works](#-how-the-safety-loop-works)
+- [🚀 Quick Start](#-quick-start)
+- [🖥️ Local Web UI Dashboard (`--ui`)](#️-local-web-ui-dashboard---ui)
+- [⚙️ Configuration Reference (`jewel.config.json`)](#️-configuration-reference-jewelconfigjson)
+- [🔒 Safety & Security Model](#-safety-security-model)
+  - [Docker Sandboxing](#docker-sandboxing)
+  - [Path Escape & Boundary Protection](#path-escape--boundary-protection)
+  - [Budget Guard & Cost Limits](#budget-guard--cost-limits)
+- [🛠️ Custom Safety Skills](#️-custom-safety-skills)
+- [💻 CLI Command & Option Reference](#-cli-command--option-reference)
+- [🧪 Dogfooding Demo Project](#-dogfooding-demo-project)
+- [🤝 Contributing & License](#-contributing--license)
 
 ---
 
-## Installation & Setup
+## What Jewel IS / IS NOT
 
-### Local Development
-Clone this repository and set up dependencies:
-```bash
-npm install
-npm run build
+### What Jewel IS:
+- **A verification-first AI coding safety harness**: Jewel wraps LLM executions in transactional checkpoints, diff guards, and verification tests.
+- **A transaction manager**: Automatically snapshot-checks workspace files via Git commits or copy snapshots, and performs a complete rollback to the checkpoint if verification tests fail.
+- **Provider-neutral**: Implements a capability-aware adapter registry supporting OpenAI, Gemini, Anthropic, OpenRouter, and local dry-run modes.
+- **Safe-patch-writer protected**: All code changes are validated for path escapes, absolute routes, Windows drive prefix traversal, and null bytes before editing.
+- **Human-review friendly**: Serves an interactive local Web UI review modal with side-by-side git diffs, AST signature difference trees, and selective patch checklists.
+
+### What Jewel IS NOT:
+- **An autonomous agent loop (like Claude Code)**: Jewel does not manage conversational chat loops. It is the *safety execution layer* that wraps patch proposals to ensure they compile, pass tests, and are approved before staging.
+- **A replacement for git**: Jewel builds on top of git for snapshotting.
+- **A loose sandbox fallback**: Jewel does not blindly execute test scripts on the host unless sandboxing is explicitly disabled.
+
+---
+
+## 🔄 How the Safety Loop Works
+
+Jewel coordinates plan review, patch writes, testing, and approval in a strict transaction loop:
+
+```mermaid
+graph TD
+    A[jewel run] --> B[Create Git Checkpoint]
+    B --> C[Plan & Critic Audit]
+    C --> D[Run LLM Code patch]
+    D --> E[Safe-Patch-Writer validates paths]
+    E --> F[Run Verification Suite]
+    F -- Pass --> G[Human Diff Review Gate / Dashboard]
+    F -- Fail --> H[Automatic Rollback]
+    G -- Approved --> I[Commit Changes]
+    G -- Rejected/Retry --> H
 ```
 
-To run Jewel locally:
-```bash
-node dist/cli/index.js --help
-```
+---
 
-### Global Local Installation & Verification
-You can package and install Jewel globally from a local tarball to verify its behavior:
-1. Package the project into a tarball:
+## 🚀 Quick Start
+
+### Prerequisites
+- **Node.js**: `v18.x` or higher (Node `v20.x+` recommended).
+- **Git**: Git installed and initialized in target directory (strongly recommended for fast checkpointing).
+- **Docker**: Docker installed and active (optional, required if running tests inside a sandboxed container).
+
+### User Installation
+1. Pack the local repository:
    ```bash
    npm pack
    ```
-   This generates a file like `jewel-cli-0.9.0.tgz`.
+   This generates a tarball file (e.g. `jewel-cli-0.9.0.tgz`).
 2. Install the package globally from the local tarball:
    ```bash
-   npm install -g ./jewel-cli-0.9.0.tgz
+   npm install -g ./jewel-cli-*.tgz
    ```
-3. Verify that the global command is available:
-   ```bash
-   jewel --help
-   jewel version
-   ```
-4. Diagnose the workspace environment:
-   ```bash
-   jewel doctor
-   ```
-5. Initialize Jewel in a test directory:
+3. Initialize configuration in your coding project:
    ```bash
    jewel init
    ```
-6. Run verification checks:
+4. Verify environment setup and configuration:
    ```bash
-   jewel verify
+   jewel doctor
+   ```
+5. Run a task with the mock adapter (safe dry-run simulation):
+   ```bash
+   jewel run "Fix formatting in code" --mock --files "src/index.ts"
    ```
 
-### Uninstalling
-To completely uninstall the globally installed Jewel CLI:
+---
+
+## 🖥️ Local Web UI Dashboard (`--ui`)
+
+Jewel features a zero-dependency local Web UI dashboard. Instead of verifying patches via command line prompts, developers can monitor runs from their browser.
+
+To launch the dashboard alongside your task:
 ```bash
-npm uninstall -g jewel-cli
+jewel run "Implement arithmetic add helper" --ui
 ```
 
----
-
-## Command Reference
-
-| Command | Description |
-|---|---|
-| `jewel init` | Initialize the config file, `AGENTS.md`, and default safety skills. |
-| `jewel run "<task>"` | Execute a coding task wrapped in a session contract, checkpoint, validation, and critic check. |
-| `jewel verify` | Manually trigger all active verification commands. |
-| `jewel status` | Show current initialization status, git cleanliness, and recent sessions. |
-| `jewel rollback` | Revert the workspace to the latest session checkpoint state. |
-| `jewel audit` | Inspect repository configuration quality and security. |
-| `jewel doctor` | Diagnose environment dependencies, Node, Git, API keys, and configuration. |
-| `jewel release-check` | Run public release readiness checks (verifies version, dist files, documentation, package files list, no test packaging, and performs leaked credentials checks). |
-| `jewel smoke-provider --provider <name>` | Verify connection and message format with a selected LLM provider. |
-| `jewel version` | Output package and Node version information. |
+### Dashboard Capabilities:
+1. **Live Event Stream (SSE)**: Plan audits, shell outputs, and test logs stream live to the browser.
+2. **Interactive Decision Modal**: Approve, reject, override, or request retries directly.
+3. **AST Tree Diff Explorer**: Renders structural changes (additions vs deletions of class/function/type signatures) inside a collapsible details tree.
+4. **Selective Patch Checklist**: Checkboxes allow you to choose which file changes to apply. Reverting unselected files is done programmatically before validation.
+5. **Cumulative API Cost Gauge**: A visual SVG-based progress circle shows prompt/completion token count and total USD cost relative to your configured session limit.
 
 ---
 
-## Configuration: `jewel.config.json`
+## ⚙️ Configuration Reference (`jewel.config.json`)
 
-Default config contents:
+Configure your safety parameters inside `jewel.config.json` at the root of your workspace:
+
 ```json
 {
-  "projectName": "",
+  "projectName": "My App",
   "mode": "strict",
   "maxRetries": 3,
   "maxFilesChanged": 8,
@@ -119,11 +144,16 @@ Default config contents:
   "allowNewDependencies": false,
   "allowProtectedFileChanges": false,
   "allowGitPush": false,
+  "provider": "none",
+  "model": "",
+  "temperature": 0.0,
+  "maxOutputTokens": 4000,
+  "maxSessionCost": 0.0,
   "commands": {
-    "lint": "",
-    "typecheck": "",
-    "test": "",
-    "build": "",
+    "lint": "npm run lint",
+    "typecheck": "npm run typecheck",
+    "test": "npm test",
+    "build": "npm run build",
     "e2e": ""
   },
   "protectedFiles": [
@@ -131,159 +161,137 @@ Default config contents:
     ".env.local",
     ".env.*",
     "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "bun.lockb",
-    "schema.prisma",
-    "migrations/**",
     "src/auth/**",
-    "src/payments/**",
-    "src/billing/**",
-    "src/security/**"
+    "src/payments/**"
   ],
   "dangerousCommandPolicy": "block",
   "reportFormat": ["markdown", "json"],
   "auditSpawnedProcesses": true,
   "interactiveRetryMode": true,
-  "minCoverage": {
-    "lines": 80,
-    "statements": 80,
-    "functions": 80,
-    "branches": 75
-  },
-  "coverageReportPath": "./coverage/coverage-summary.json",
+  "useASTDiffGuard": false,
+  "useSandbox": false,
   "sandboxNetwork": "none",
   "sandboxReadOnlyRoot": true,
   "sandboxWritePaths": []
 }
 ```
 
+### Key Configuration Field Definitions
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `mode` | `string` | `"strict"` | Safety level. In `strict` mode, exceeding changed file limits or missing plans immediately blocks task commits. |
+| `maxFilesChanged` | `number` | `8` | Maximum number of files an agent can modify in one session. |
+| `maxLinesChanged` | `number` | `500` | Maximum lines modified limit before triggering a preflight check block. |
+| `allowProtectedFileChanges`| `boolean`| `false` | If false, blocks any writes to paths matching `protectedFiles` patterns. |
+| `dangerousCommandPolicy` | `string` | `"block"` | Policy for shell executions. Can be `"block"` (stops execution), `"warn"` (warns and logs), or `"allow"`. |
+| `provider` | `string` | `"none"` | LLM adapter provider (`none`, `openai`, `gemini`, `anthropic`, `openrouter`). |
+| `model` | `string` | `""` | Base model name (e.g. `gpt-4o-mini`, `gemini-1.5-flash`). |
+| `temperature` | `number` | `0.0` | Sampling temperature. `0.0` is recommended for deterministic JSON patches. |
+| `maxSessionCost` | `number` | `0.0` | **Budget Guard**. Maximum cumulative USD cost allowed for a single task run. `0.0` disables budget checks. |
+| `useSandbox` | `boolean` | `false` | Enable Docker container isolation for verification commands. |
+| `sandboxNetwork` | `string` | `"none"` | Network configuration for verification containers (defaults to `"none"` to prevent exfiltration). |
+| `sandboxReadOnlyRoot` | `boolean` | `true` | Mounts the project root workspace read-only inside the container to prevent unauthorized filesystem modification. |
+| `sandboxWritePaths` | `string[]`| `[]` | Directories in the workspace granted write permission (mounted `:rw`) during sandbox verification. |
+
 ---
 
-## Windows & Cross-Platform Usage Examples
+## 🔒 Safety & Security Model
 
-Jewel works out-of-the-box across **PowerShell, Command Prompt, Git Bash, and Unix terminals**.
+### Docker Sandboxing
+To protect your host machine from arbitrary code execution during verification (e.g. running unit tests or custom build scripts written by an LLM), Jewel supports running verification commands inside secure Docker containers. 
+- Mounts the project root read-only (`:ro`).
+- Grants write permissions exclusively to designated folders (`sandboxWritePaths`).
+- Network access is disabled by default (`sandboxNetwork: "none"`) to prevent private code and credentials from leaking.
 
-### 1. PowerShell Workflow
-```powershell
-# 1. Initialize Jewel
-jewel init
+> [!WARNING]
+> Running Jewel with `useSandbox: false` executes verification commands directly on your host shell. Only turn sandboxing off if you fully trust the LLM completions or are running in a mock sandbox environment.
 
-# 2. Diagnose setup
-jewel doctor
+### Path Escape & Boundary Protection
+All proposed edits undergo rigorous path audits in [safe-patch-writer.ts](./src/safety/safe-patch-writer.ts) to prevent traversal, escaping, and directory-clobbering attacks:
+- **Path Normalization**: Windows backslashes `\` are converted to forward slashes `/` before audits to prevent platform-specific check bypasses.
+- **Null Byte Guard**: Rejects segment strings containing null bytes (`\0`).
+- **Workspace Containment**: Absolute paths (including Windows drive prefixes `C:`), UNC paths (`\\`), and parent directory traversals (`..`) are blocked.
+- **Transactional Writes**: Patches are applied atomically. If any file write fails, the entire change is rolled back.
 
-# 3. Audit repository safety
-jewel audit
+### Budget Guard & Cost Limits
+Jewel estimates LLM execution costs in real-time according to registered model token prices. If the cumulative cost of planning, patching, and critic reviews exceeds `maxSessionCost`, the Budget Guard immediately aborts the run and rolls back all changes to prevent runaway API spend.
 
-# 4. Run a task with mock adapter (or manual edit)
-jewel run "Implement arithmetic add helper" --mock --files "src/math.ts"
+---
 
-# 5. Check session status
-jewel status
+## 🛠️ Custom Safety Skills
 
-# 6. Revert changes if verification fails
-jewel rollback
+You can define custom safety rules using **Safety Skills**. These are local Markdown files containing bulleted rules that Jewel merges into the LLM context to enforce codebase-specific rules.
+
+Skills are loaded from `.jewel/skills/<skill_name>/SKILL.md`.
+
+**Example Skill (`.jewel/skills/database-safety/SKILL.md`):**
+```markdown
+---
+name: database-safety
+description: Enforce safe migration and schema alteration patterns
+---
+
+- Do not modify database schemas without writing a corresponding rollback migration script.
+- Never write raw SQL queries; always use parameterized queries to prevent injection.
+- Do not modify files under the `migrations/` directory directly.
 ```
 
-### 2. Git Bash (Unix syntax)
-```bash
-# Initialize and verify
-jewel init
-jewel doctor
-jewel verify
+---
 
-# Run a specific task
-jewel run "Update endpoint documentation" -f README.md -m
-```
+## 💻 CLI Command & Option Reference
+
+### Commands
+| Command | Usage | Description |
+|---|---|---|
+| `init` | `jewel init` | Initialize default configuration, `AGENTS.md` rules, and baseline safety skills. |
+| `run` | `jewel run "<task>"` | Start a task wrapped in a session contract, git checkpoint, and verification check. |
+| `verify` | `jewel verify` | Manually trigger verification commands defined in config. |
+| `diff` | `jewel diff [session-id]`| Show proposed edits and diff previews for a session. |
+| `status` | `jewel status` | Display the current active session, checkpoint metadata, and repo status. |
+| `rollback` | `jewel rollback` | Revert the workspace to the state at the start of the latest session. |
+| `audit` | `jewel audit` | Perform safety check verification on configuration and reports. |
+| `doctor` | `jewel doctor` | Diagnoses local env setup (Node, Git, package managers, and configured API keys). |
+| `provider-ready`| `jewel provider-ready`| Verifies provider integration config and checks capability registry. |
+| `release-check`| `jewel release-check`| Run public package release checklist and secret redaction audit. |
+| `version` | `jewel version` | Prints the current package version and system info. |
+
+### Options & Flags
+- `-f, --files <list>`: Comma-separated list of files likely needed for the task contract.
+- `-m, --mock`: Use mock agent adapter to apply deterministic patches locally (forces provider to `none`).
+- `--yes`: Auto-approve planning and patch proposal stages without waiting for human review.
+- `--no-review`: Disable visual diff review step.
+- `--keep-failed`: Prevent automatic snapshot rollback if verification or human review fails.
+- `--ui`: Launch the interactive local Web UI dashboard (starts at http://127.0.0.1:3000).
 
 ---
 
-## Safety & Security Model
+## 🧪 Dogfooding Demo Project
 
-1. **Destructive Commands Blocked**: Under `block` policy, dangerous commands (e.g., `rm -rf`, `del /s`, `format`, `shutdown`, `reboot`, remote script piping) are immediately caught and blocked.
-2. **Environment Protection**: Direct prints or writes to `.env` files are blocked to prevent credential exposure.
-3. **Secret Redaction**: Verification logs and reports automatically redact API keys, tokens, and credentials.
-4. **Report Leak Audits**: The `release-check` command automatically scans report artifacts for sensitive keys (`sk-`, GitHub tokens, etc.) to ensure no leaks occur before code sharing.
-5. **Surgical Enforcement**: If an agent modifies files outside of the task contract `filesLikelyNeeded`, the Critic or Diff Guard blocks the run.
+We have included a small broken project under `examples/dogfood-broken-project`. You can use it to verify the harness:
 
----
-
-## Limitations
-- Only inspects CLI-driven actions; direct manual filesystem manipulation outside of standard session windows isn't intercepted.
-- Fallback backup copy-paste is used if Git is not installed, which might be slower on very large non-git folders. (Ensure Git is initialized for maximum performance).
-
----
-
-## LLM Adapter Integration
-
-Jewel supports running tasks using real LLM providers via a provider-neutral adapter layer:
-- **none**: Runs in mock/dry-run mode using local mock files.
-- **openai**: OpenAI Chat Completions adapter (`/v1/chat/completions`).
-- **gemini**: Google Gemini generateContent REST API.
-- **anthropic**: Anthropic Messages REST API.
-- **openrouter**: OpenRouter Chat Completions REST API.
-
-### Provider Environment Variables
-Make sure to configure the corresponding API key in your environment:
-- `OPENAI_API_KEY` (for OpenAI)
-- `GEMINI_API_KEY` (for Gemini)
-- `ANTHROPIC_API_KEY` (for Anthropic)
-- `OPENROUTER_API_KEY` (for OpenRouter)
-
-### CLI Overrides
-You can override the configured provider, model, temperature, and tokens directly from the CLI on a per-run basis:
-```bash
-# Override provider and model
-jewel run "Fix math divide test" --provider openai --model gpt-4o --temperature 0.2
-
-# Override Gemini parameters
-jewel run "Implement array helpers" --provider gemini --model gemini-1.5-pro --max-output-tokens 2000
-```
-
-### Cost & Token Usage Reporting
-When running tasks using real LLM providers, Jewel records input, output, and total token usage directly in the reports. These are stored at `.jewel/reports/latest-run.json` under the `usage` block. When provider is `none` or mock is run, usage is reported as unavailable or mock without faking costs.
-
----
-
-## Using Real LLM Providers Safely
-
-To ensure safety when integrating real LLM providers into your developer workflow, follow these guidelines:
-
-1. **Start with provider none**: Use the mock adapter (`provider: "none"`) or manual edits first to understand the harness mechanics.
-2. **Never paste secrets into prompts**: Do not input raw passwords, API keys, or database credentials in your task descriptions.
-3. **Secret Redaction**: While Jewel automatically redacts known API keys (e.g. `sk-`, `github_pat_`), tokens, bearer authentication, and private key blocks from reports and logs, users must still avoid exposing sensitive private data.
-4. **JSON Patches Only**: Real LLM adapters can only propose structured JSON patches containing file changes and plans. They never have direct write access to the filesystem.
-5. **Strict safe-patch-writer Guard**: Jewel's [safe-patch-writer.ts](file:///C:/Users/vinot/Documents/IM/Active%20Projects/Project%20Jewel/src/safety/safe-patch-writer.ts) is the *only* component authorized to apply changes to your workspace. All proposals are checked for path escape and traversal before writing.
-6. **Transactional Write Hardening**: Safe-patch-writer utilizes transactional snapshotting and rollback. If any file write fails during application (e.g. out of disk space, write block), all other files are restored to their original contents and newly created files are deleted.
-7. **Always review diffs**: Before approving, thoroughly review the preview diff shown by the human diff review gate.
-8. **Keep approval enabled**: Maintain `requireHumanDiffApproval: true` in your `jewel.config.json` when using real LLM providers.
-
----
-
-## Dogfooding Demo Project
-We have included a small broken dogfood project under `examples/dogfood-broken-project`.
-To test Jewel inside it:
-1. Navigate to the dogfood project directory.
-2. Run `npm install` and `npm run build`.
-3. Verify tests fail by running `npm test`.
-4. Run the Jewel CLI to resolve the issue:
+1. Navigate to the dogfood project:
    ```bash
-   node ../../dist/cli/index.js run "fix the failing math test" --provider none --mock --files src/math.ts --yes
+   cd examples/dogfood-broken-project
    ```
-5. Observe the successful build verification and output report under `.jewel/reports/latest-run.md`.
+2. Build the project:
+   ```bash
+   npm install && npm run build
+   ```
+3. Run tests (verify that they fail out-of-the-box):
+   ```bash
+   npm test
+   ```
+4. Run Jewel to automatically resolve the issue:
+   ```bash
+   jewel run "fix the failing math test" --mock --files src/math.ts --yes
+   ```
+5. Observe that Jewel creates a checkpoint, applies a deterministic patch to `src/math.ts`, runs verification tests (which now pass), and stages a clean git commit.
 
 ---
 
-## Real Provider Smoke & Integration Tests
-To run live API provider smoke tests against live endpoints manually:
-1. Configure your API keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.).
-2. Set the smoke test flag to true:
-   ```bash
-   $env:JEWEL_RUN_REAL_LLM_TESTS="true" # Windows PowerShell
-   # or export JEWEL_RUN_REAL_LLM_TESTS="true" (Unix/Git Bash)
-   ```
-3. Use the validator helper script:
-   ```bash
-   node scripts/manual-real-provider-smoke.js openai gpt-4o-mini --schema
-   ```
-4. Read the guidelines in [docs/manual-real-provider-validation.md](file:///C:/Users/vinot/Documents/IM%2FActive%20Projects%2FProject%20Jewel%2Fdocs%2Fmanual-real-provider-validation.md) for full details.
+## 🤝 Contributing & License
+
+For details on contributing code, styling guidelines, and opening pull requests, please read the [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md) guidelines.
+
+Licensed under the [MIT License](./LICENSE). Copyright (c) 2026 Vinoth Kumar.
