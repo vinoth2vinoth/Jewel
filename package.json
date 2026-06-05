@@ -4,7 +4,7 @@
   "description": "Jewel: AI Coding Safety Harness",
   "main": "dist/cli/index.js",
   "bin": {
-    "jewel": "./bin/jewel.js"
+    "jewel": "bin/jewel.js"
   },
   "scripts": {
     "build": "tsc",
