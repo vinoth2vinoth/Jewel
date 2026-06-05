@@ -17,14 +17,15 @@ export class OpenRouterAdapter implements AgentAdapter {
     retryCount?: number;
   };
 
-  private accumulateUsage(usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number; retryCount?: number }) {
+  private accumulateUsage(usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number; estimatedCostUsd?: number; retryCount?: number }) {
     if (!usage) return;
     if (!this.usage) {
-      this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, retryCount: 0 };
+      this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0.0, retryCount: 0 };
     }
     this.usage.inputTokens = (this.usage.inputTokens || 0) + (usage.inputTokens || 0);
     this.usage.outputTokens = (this.usage.outputTokens || 0) + (usage.outputTokens || 0);
     this.usage.totalTokens = (this.usage.totalTokens || 0) + (usage.totalTokens || 0);
+    this.usage.estimatedCostUsd = (this.usage.estimatedCostUsd || 0) + (usage.estimatedCostUsd || 0);
     this.usage.retryCount = (this.usage.retryCount || 0) + (usage.retryCount || 0);
   }
 
@@ -205,10 +206,24 @@ export class OpenRouterAdapter implements AgentAdapter {
     });
 
     const normalized = normalizeResponse(data, 'openrouter', model);
+    const inputCost = (normalized.usage?.inputTokens || 0) * (capabilities.inputCostPerMillionToken || 0) / 1000000;
+    const outputCost = (normalized.usage?.outputTokens || 0) * (capabilities.outputCostPerMillionToken || 0) / 1000000;
+    const callCost = inputCost + outputCost;
+
     this.accumulateUsage({
       ...normalized.usage,
-      retryCount: retryTracker.count
+      retryCount: retryTracker.count,
+      estimatedCostUsd: callCost
     });
+
+    const maxSessionCost = config?.maxSessionCost;
+    if (maxSessionCost !== undefined && maxSessionCost > 0) {
+      const currentCost = this.usage?.estimatedCostUsd || 0;
+      if (currentCost > maxSessionCost) {
+        throw new Error(`[Jewel Budget Guard] Session cost limit exceeded: Current cost $${currentCost.toFixed(4)} exceeds maximum allowed budget of $${maxSessionCost.toFixed(2)}.`);
+      }
+    }
+
     return normalized.text;
   }
 }

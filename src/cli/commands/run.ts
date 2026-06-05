@@ -67,6 +67,13 @@ export async function runTask(
   },
   dryRun: boolean = false
 ): Promise<void> {
+  let config: any = null;
+  let adapter: any = null;
+  let sessionId = '';
+  let sessionPath = '';
+  let contractPath = '';
+  let checkpoint: any = null;
+
   try {
     if (!task || task.trim() === '') {
       throw new JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
@@ -78,7 +85,6 @@ export async function runTask(
   let approved = true;
 
   // 1. Load config & skills
-  let config;
   try {
     config = loadConfig(cwd);
   } catch (err: any) {
@@ -132,9 +138,12 @@ export async function runTask(
   const isAgentMode = useMock || config.provider !== 'none';
 
   // 2. Initialize Session & Task Contract
-  const { sessionId, sessionPath, contractPath } = createSession(task, config, filesNeeded, cwd);
+  const sessionData = createSession(task, config, filesNeeded, cwd);
+  sessionId = sessionData.sessionId;
+  sessionPath = sessionData.sessionPath;
+  contractPath = sessionData.contractPath;
 
-  let adapter: any = null;
+  adapter = null;
   if (isAgentMode) {
     const adapterConfig = useMock ? { ...config, provider: 'none' as const } : config;
     try {
@@ -213,7 +222,7 @@ export async function runTask(
 
   // 3. Create Checkpoint
   console.log('\nCreating checkpoint...');
-  const checkpoint = createCheckpoint(sessionId, cwd);
+  checkpoint = createCheckpoint(sessionId, cwd);
   fs.writeFileSync(path.join(sessionPath, 'checkpoint.json'), JSON.stringify(checkpoint, null, 2), 'utf8');
   console.log(`[+] Checkpoint created. strategy: ${checkpoint.isGit ? 'Git commit' : 'Backup copy'}`);
 
@@ -248,6 +257,9 @@ export async function runTask(
         sessionPath
       });
     } catch (err: any) {
+      if (err.message && err.message.includes('[Jewel Budget Guard]')) {
+        throw err;
+      }
       console.error(`[-] Patch proposal failed: ${err.message}`);
       patchBlocked = true;
       blockReasons = [`Patch proposal failed: ${err.message}`];
@@ -510,6 +522,9 @@ export async function runTask(
           console.log(`[Critic Verdict] ${lastTestCriticVerdict}: ${lastTestCriticExplanation}`);
           console.log(`[Critic Suggestion] ${testCriticResult.suggestedFix}`);
         } catch (err: any) {
+          if (err.message && err.message.includes('[Jewel Budget Guard]')) {
+            throw err;
+          }
           console.error(`[Critic Error] Failed to run test correctness critic: ${err.message}`);
         }
       }
@@ -643,6 +658,9 @@ export async function runTask(
             }
           }
         } catch (err: any) {
+          if (err.message && err.message.includes('[Jewel Budget Guard]')) {
+            throw err;
+          }
           console.error(`[-] Auto-fix patch proposal failed: ${err.message}`);
           break;
         }
@@ -863,6 +881,20 @@ export async function runTask(
       throw err;
     }
     const jewelErr = toJewelError(err);
+    if (jewelErr.status === 'BUDGET_EXCEEDED') {
+      if (sessionPath && sessionId) {
+        writeRunReport(cwd, sessionPath, sessionId, task, 'BUDGET_EXCEEDED', config, adapter, { error: err.message });
+      }
+      if (checkpoint && !keepFailed) {
+        console.log('Rolling back changes due to budget limit breach...');
+        try {
+          rollbackCheckpoint(checkpoint, cwd);
+          console.log('[+] Rollback completed. Working files restored safely.');
+        } catch (rollbackErr: any) {
+          console.error(`[-] Rollback failed: ${rollbackErr.message}`);
+        }
+      }
+    }
     console.error(`\n======================================`);
     console.error(`Status: ${jewelErr.status}`);
     console.error(`Error: ${jewelErr.message}`);

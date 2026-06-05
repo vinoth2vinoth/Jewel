@@ -127,6 +127,16 @@ export function toJewelError(err: any): JewelError {
     );
   }
 
+  // 10. Budget Exceeded
+  if (msg.includes('Budget Guard') || msg.includes('Session cost limit exceeded') || msg.includes('BUDGET_EXCEEDED')) {
+    return new JewelError(
+      'BUDGET_EXCEEDED',
+      msg,
+      'Increase the maxSessionCost threshold in jewel.config.json or verify that the model is not caught in a runaway loop.',
+      err
+    );
+  }
+
   // Generic fallback
   return new JewelError(
     'UNKNOWN_FAILURE',

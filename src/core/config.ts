@@ -41,6 +41,7 @@ export interface JewelConfig {
   coverageReportPath?: string;
   auditSpawnedProcesses?: boolean;
   interactiveRetryMode?: boolean;
+  maxSessionCost?: number;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -91,7 +92,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
   minCoverage: undefined,
   coverageReportPath: '',
   auditSpawnedProcesses: true,
-  interactiveRetryMode: true
+  interactiveRetryMode: true,
+  maxSessionCost: 0.0
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -128,7 +130,7 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     config.mode = parsed.mode;
   }
 
-  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries'];
+  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost'];
   for (const field of numericFields) {
     if (parsed[field] !== undefined) {
       const val = Number(parsed[field]);

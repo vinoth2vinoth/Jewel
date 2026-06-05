@@ -955,4 +955,103 @@ describe('runTask Critic & Retry Integration Loops', () => {
       cleanupWorkspace(tempDir);
     }
   });
+
+  test('repair loop aborts immediately on budget limit breach with BUDGET_EXCEEDED and rolls back', async () => {
+    const tempDir = createTempWorkspace();
+    
+    // Write jewel.config.json with a low maxSessionCost of 0.01
+    const configPath = path.join(tempDir, 'jewel.config.json');
+    const existingConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    existingConfig.maxSessionCost = 0.01;
+    fs.writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), 'utf8');
+
+    // Commit config change to keep git clean
+    execSync('git add jewel.config.json', { cwd: tempDir, stdio: 'ignore' });
+    execSync('git commit -m "update config"', { cwd: tempDir, stdio: 'ignore' });
+
+    const originalExit = process.exit;
+    const originalFetch = globalThis.fetch;
+    
+    let exitCode: number | null = null;
+    process.exit = ((code?: number) => {
+      exitCode = code !== undefined ? code : 0;
+      throw new Error(`exit-${exitCode}`);
+    }) as any;
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      const body = JSON.parse(options.body);
+      const lastMessage = body.messages[body.messages.length - 1].content;
+
+      if (lastMessage.includes('TaskContract')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  task: 'Fix math logic',
+                  understanding: 'math plan',
+                  assumptions: [],
+                  filesLikelyNeeded: ['math.js'],
+                  forbiddenActions: [],
+                  successCriteria: ['math.js contains correct implementation'],
+                  riskLevel: 'low',
+                  requiresApproval: false,
+                  createdAt: new Date().toISOString(),
+                  mode: 'lax',
+                  preserveExistingTests: false
+                })
+              }
+            }]
+          })
+        };
+      } else {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  summary: 'patch proposal',
+                  files: [{ filePath: 'math.js', content: 'console.log("correct implementation");', reason: 'implement math' }],
+                  notes: [],
+                  riskLevel: 'low'
+                })
+              }
+            }],
+            usage: {
+              prompt_tokens: 100000,
+              completion_tokens: 100000,
+              total_tokens: 200000
+            }
+          })
+        };
+      }
+    }) as any;
+
+    process.env.OPENAI_API_KEY = 'sk-mock-key';
+
+    try {
+      try {
+        await runTask('Fix math logic', ['math.js'], false, tempDir, true, true, false);
+      } catch (err: any) {
+        if (!err.message.includes('exit-1')) throw err;
+      }
+
+      assert.strictEqual(exitCode, 1);
+      
+      const report = JSON.parse(fs.readFileSync(path.join(tempDir, '.jewel', 'reports', 'latest-run.json'), 'utf8'));
+      assert.strictEqual(report.status, 'BUDGET_EXCEEDED');
+      
+      // Git status should be clean because rollback was triggered
+      const gitStatus = execSync('git status --porcelain', { cwd: tempDir, encoding: 'utf8' }).trim();
+      assert.strictEqual(gitStatus, '');
+    } finally {
+      process.exit = originalExit;
+      globalThis.fetch = originalFetch;
+      delete process.env.OPENAI_API_KEY;
+      cleanupWorkspace(tempDir);
+    }
+  });
 });
+

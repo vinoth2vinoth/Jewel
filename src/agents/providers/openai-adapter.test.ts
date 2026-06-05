@@ -290,3 +290,61 @@ test('openai-adapter - permits unsupported models when fallback is allowed', asy
   }
 });
 
+test('openai-adapter - throws error when maxSessionCost is exceeded', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+
+  globalThis.fetch = (async (url: string, options: any) => {
+    fetchCount++;
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                task: 'Add hello world',
+                understanding: 'mock plan from OpenAI',
+                assumptions: ['none'],
+                filesLikelyNeeded: ['src/index.ts'],
+                forbiddenActions: ['none'],
+                successCriteria: ['compile'],
+                riskLevel: 'low',
+                requiresApproval: false,
+                createdAt: new Date().toISOString(),
+                mode: 'strict'
+              })
+            }
+          }
+        ],
+        usage: {
+          prompt_tokens: 1000000,
+          completion_tokens: 1000000,
+          total_tokens: 2000000
+        }
+      })
+    };
+  }) as any;
+
+  process.env.OPENAI_API_KEY = 'sk-mock-key';
+
+  try {
+    const adapter = new OpenAIAdapter();
+    const config = { ...DEFAULT_CONFIG, provider: 'openai' as const, maxSessionCost: 0.50 };
+    
+    await assert.rejects(async () => {
+      await adapter.plan({
+        task: 'Add hello world',
+        repoSummary: 'Test repo',
+        config,
+        skills: []
+      });
+    }, /\[Jewel Budget Guard\] Session cost limit exceeded/);
+
+    assert.strictEqual(fetchCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.OPENAI_API_KEY;
+  }
+});
+

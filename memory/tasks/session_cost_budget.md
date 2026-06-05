@@ -1,0 +1,26 @@
+# Checklist: Session Cost & Budget Guard (Phase 4)
+
+- [x] Add `maxSessionCost` configuration settings
+  - [x] Add `maxSessionCost?: number` to `JewelConfig` in `src/core/config.ts`
+  - [x] Add default `maxSessionCost: 0.0` in `DEFAULT_CONFIG`
+  - [x] Validate non-negative numbers in `validateAndMergeConfig`
+- [x] Add pricing properties and parsing to capabilities registry
+  - [x] Update `ModelCapabilities` interface in `src/agents/model-capabilities.ts`
+  - [x] Add standard costs per 1M tokens for OpenAI, Anthropic, Gemini, and OpenRouter
+  - [x] Implement OpenRouter model name prefix/basename resolver
+  - [x] Add console warnings for missing pricing fallbacks
+- [x] Implement cost tracking and budget guard checks in provider adapters
+  - [x] Implement `estimatedCostUsd` accumulation in openai-adapter
+  - [x] Implement `estimatedCostUsd` accumulation in anthropic-adapter
+  - [x] Implement `estimatedCostUsd` accumulation in gemini-adapter
+  - [x] Implement `estimatedCostUsd` accumulation in openrouter-adapter
+  - [x] Update `MockAgentAdapter` to simulate cost tracking and budget enforcement
+- [x] Implement error handling and mapping in CLI runner
+  - [x] Add `BUDGET_EXCEEDED` parsing in `src/cli/errors.ts`
+  - [x] Rethrow budget errors in `src/cli/commands/run.ts` catch blocks to prevent error masking
+  - [x] Map execution failure to `BUDGET_EXCEEDED` report status in top-level handler of `src/cli/commands/run.ts`
+- [x] Verification
+  - [x] Compile changes (`npm run build`)
+  - [x] Run test suite (`npm test`)
+  - [x] Add unit test case verifying that budget guard blocks execution in LLM adapters
+  - [x] Add E2E test verifying that budget guard exits with status `BUDGET_EXCEEDED` and triggers rollback
