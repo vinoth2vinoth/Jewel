@@ -29,6 +29,15 @@ export interface JewelConfig {
     reportFormat: ('markdown' | 'json')[];
     allowUnstructuredProviderFallback: boolean;
     preferredProviders?: string[];
+    minCoverage?: {
+        lines?: number;
+        statements?: number;
+        functions?: number;
+        branches?: number;
+    };
+    coverageReportPath?: string;
+    auditSpawnedProcesses?: boolean;
+    interactiveRetryMode?: boolean;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

@@ -18,6 +18,7 @@ export interface PatchInput {
     testCriticResult?: TestCriticResult;
     config?: JewelConfig;
     sessionPath?: string;
+    customHint?: string;
 }
 export interface PatchProposal {
     summary: string;

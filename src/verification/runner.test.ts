@@ -138,3 +138,56 @@ test('verification runner - coverage validation', () => {
   cleanupSandbox();
 });
 
+test('verification runner - process auditing', () => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  // Create a trigger script that attempts to run a blocked command
+  const triggerPath = path.join(sandboxDir, 'trigger.js');
+  fs.writeFileSync(triggerPath, `
+    const { execSync } = require('child_process');
+    try {
+      execSync('git push origin main');
+    } catch (err) {
+      console.error('TRIGGER_ERR:' + err.message);
+      process.exit(1);
+    }
+  `);
+
+  // 1. Config with process auditing enabled
+  const configWithAudit: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    auditSpawnedProcesses: true,
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'node trigger.js'
+    }
+  };
+
+  const reportWithAudit = runVerification(configWithAudit, sandboxDir);
+  assert.strictEqual(reportWithAudit.overallStatus, 'FAIL');
+  
+  const testResult = reportWithAudit.results.find(r => r.commandKey === 'test');
+  assert.ok(testResult);
+  assert.strictEqual(testResult.status, 'FAIL');
+  assert.ok(testResult.stderr.includes('Jewel Process Auditor') || testResult.stderr.includes('Command blocked'));
+
+  // 2. Config with process auditing disabled
+  const configWithoutAudit: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    auditSpawnedProcesses: false,
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'node trigger.js'
+    }
+  };
+
+  const reportWithoutAudit = runVerification(configWithoutAudit, sandboxDir);
+  const testResultNoAudit = reportWithoutAudit.results.find(r => r.commandKey === 'test');
+  assert.ok(testResultNoAudit);
+  assert.ok(!testResultNoAudit.stderr.includes('Jewel Process Auditor'));
+
+  cleanupSandbox();
+});
+
+

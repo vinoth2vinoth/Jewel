@@ -97,3 +97,99 @@ function cleanupSandbox() {
     node_assert_1.default.ok(mdContent.includes('| lint | `node -e "console.log(\'Linting passed\')"` | **PASS** | 0 |'));
     cleanupSandbox();
 });
+(0, node_test_1.default)('verification runner - coverage validation', () => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    const coverageDir = path.join(sandboxDir, 'coverage');
+    fs.mkdirSync(coverageDir, { recursive: true });
+    const reportPath = path.join(coverageDir, 'coverage-summary.json');
+    // Case A: Coverage satisfies thresholds
+    const mockCoveragePass = {
+        total: {
+            lines: { pct: 85 },
+            branches: { pct: 80 }
+        }
+    };
+    fs.writeFileSync(reportPath, JSON.stringify(mockCoveragePass), 'utf8');
+    const configPass = {
+        ...config_1.DEFAULT_CONFIG,
+        minCoverage: { lines: 80, branches: 75 },
+        coverageReportPath: './coverage/coverage-summary.json',
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'node -e "process.exit(0)"'
+        }
+    };
+    const reportPass = (0, runner_1.runVerification)(configPass, sandboxDir);
+    node_assert_1.default.strictEqual(reportPass.overallStatus, 'PASS');
+    const covResultPass = reportPass.results.find(r => r.commandKey === 'coverage');
+    node_assert_1.default.ok(covResultPass);
+    node_assert_1.default.strictEqual(covResultPass.status, 'PASS');
+    // Case B: Coverage below thresholds
+    const mockCoverageFail = {
+        total: {
+            lines: { pct: 75 }, // below 80
+            branches: { pct: 80 }
+        }
+    };
+    fs.writeFileSync(reportPath, JSON.stringify(mockCoverageFail), 'utf8');
+    const reportFail = (0, runner_1.runVerification)(configPass, sandboxDir);
+    node_assert_1.default.strictEqual(reportFail.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
+    const covResultFail = reportFail.results.find(r => r.commandKey === 'coverage');
+    node_assert_1.default.ok(covResultFail);
+    node_assert_1.default.strictEqual(covResultFail.status, 'FAIL');
+    node_assert_1.default.ok(covResultFail.stderr.includes('"lines" (75%) is below'));
+    // Case C: Missing coverage report file
+    fs.unlinkSync(reportPath);
+    const reportMissing = (0, runner_1.runVerification)(configPass, sandboxDir);
+    node_assert_1.default.strictEqual(reportMissing.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
+    const covResultMissing = reportMissing.results.find(r => r.commandKey === 'coverage');
+    node_assert_1.default.ok(covResultMissing);
+    node_assert_1.default.strictEqual(covResultMissing.status, 'FAIL');
+    node_assert_1.default.ok(covResultMissing.stderr.includes('Coverage report file not found'));
+    cleanupSandbox();
+});
+(0, node_test_1.default)('verification runner - process auditing', () => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    // Create a trigger script that attempts to run a blocked command
+    const triggerPath = path.join(sandboxDir, 'trigger.js');
+    fs.writeFileSync(triggerPath, `
+    const { execSync } = require('child_process');
+    try {
+      execSync('git push origin main');
+    } catch (err) {
+      console.error('TRIGGER_ERR:' + err.message);
+      process.exit(1);
+    }
+  `);
+    // 1. Config with process auditing enabled
+    const configWithAudit = {
+        ...config_1.DEFAULT_CONFIG,
+        auditSpawnedProcesses: true,
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'node trigger.js'
+        }
+    };
+    const reportWithAudit = (0, runner_1.runVerification)(configWithAudit, sandboxDir);
+    node_assert_1.default.strictEqual(reportWithAudit.overallStatus, 'FAIL');
+    const testResult = reportWithAudit.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResult);
+    node_assert_1.default.strictEqual(testResult.status, 'FAIL');
+    node_assert_1.default.ok(testResult.stderr.includes('Jewel Process Auditor') || testResult.stderr.includes('Command blocked'));
+    // 2. Config with process auditing disabled
+    const configWithoutAudit = {
+        ...config_1.DEFAULT_CONFIG,
+        auditSpawnedProcesses: false,
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'node trigger.js'
+        }
+    };
+    const reportWithoutAudit = (0, runner_1.runVerification)(configWithoutAudit, sandboxDir);
+    const testResultNoAudit = reportWithoutAudit.results.find(r => r.commandKey === 'test');
+    node_assert_1.default.ok(testResultNoAudit);
+    node_assert_1.default.ok(!testResultNoAudit.stderr.includes('Jewel Process Auditor'));
+    cleanupSandbox();
+});

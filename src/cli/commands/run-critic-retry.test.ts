@@ -686,4 +686,273 @@ describe('runTask Critic & Retry Integration Loops', () => {
       cleanupWorkspace(tempDir);
     }
   });
+
+  test('repair loop - interactive custom hint retry', async () => {
+    const tempDir = createTempWorkspace();
+    const originalExit = process.exit;
+    const originalFetch = globalThis.fetch;
+    const readline = require('readline');
+    const originalCreateInterface = readline.createInterface;
+    const originalIsTTY = process.stdout.isTTY;
+    const originalCI = process.env.CI;
+
+    let exitCode: number | null = null;
+    process.exit = ((code?: number) => {
+      exitCode = code !== undefined ? code : 0;
+      throw new Error(`exit-${exitCode}`);
+    }) as any;
+
+    let customHintReceived = false;
+    let attempt = 0;
+
+    process.stdout.isTTY = true;
+    delete process.env.CI;
+
+    readline.createInterface = function() {
+      return {
+        question: (query: string, callback: any) => {
+          if (query.includes('Choice [r/o/a]')) {
+            callback('r');
+          } else if (query.includes('Enter hint/guidance')) {
+            callback('use correct math logic');
+          } else {
+            callback('');
+          }
+        },
+        close: () => {}
+      };
+    } as any;
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      const body = JSON.parse(options.body);
+      const lastMessage = body.messages[body.messages.length - 1].content;
+
+      if (lastMessage.includes('TaskContract')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  task: 'Fix math logic',
+                  understanding: 'math plan',
+                  assumptions: [],
+                  filesLikelyNeeded: ['math.js'],
+                  forbiddenActions: [],
+                  successCriteria: ['math.js contains correct implementation'],
+                  riskLevel: 'low',
+                  requiresApproval: false,
+                  createdAt: new Date().toISOString(),
+                  mode: 'lax',
+                  preserveExistingTests: false
+                })
+              }
+            }]
+          })
+        };
+      } else if (lastMessage.includes('TestCriticResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  verdict: 'BAD_IMPLEMENTATION',
+                  confidence: 'high',
+                  explanation: 'Wrong code.',
+                  suspectedRootCause: 'Wrong math.js content',
+                  suggestedFix: 'Fix it.',
+                  canAutoRetry: true,
+                  requiresHumanReview: false
+                })
+              }
+            }]
+          })
+        };
+      } else {
+        attempt++;
+        if (lastMessage.includes('use correct math logic')) {
+          customHintReceived = true;
+          // Return correct patch so it passes
+          return {
+            ok: true,
+            json: async () => ({
+              choices: [{
+                message: {
+                  content: JSON.stringify({
+                    summary: 'correct patch',
+                    files: [{ filePath: 'math.js', content: 'console.log("correct implementation");', reason: 'implement math' }],
+                    notes: [],
+                    riskLevel: 'low'
+                  })
+                }
+              }]
+            })
+          };
+        }
+
+        // Otherwise return wrong patch
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  summary: 'wrong patch',
+                  files: [{ filePath: 'math.js', content: `console.log("wrong ${attempt}");`, reason: 'implement math' }],
+                  notes: [],
+                  riskLevel: 'low'
+                })
+              }
+            }]
+          })
+        };
+      }
+    }) as any;
+
+    process.env.OPENAI_API_KEY = 'sk-mock-key';
+
+    try {
+      try {
+        await runTask('Fix math logic', ['math.js'], false, tempDir, true, true, false);
+      } catch (err: any) {
+        if (!err.message.includes('exit-0') && !err.message.includes('exit-1')) throw err;
+      }
+
+      assert.strictEqual(customHintReceived, true, 'Should receive user custom retry hint in prompt');
+    } finally {
+      process.exit = originalExit;
+      globalThis.fetch = originalFetch;
+      readline.createInterface = originalCreateInterface;
+      process.stdout.isTTY = originalIsTTY;
+      if (originalCI !== undefined) {
+        process.env.CI = originalCI;
+      } else {
+        delete process.env.CI;
+      }
+      delete process.env.OPENAI_API_KEY;
+      cleanupWorkspace(tempDir);
+    }
+  });
+
+  test('repair loop - interactive override success', async () => {
+    const tempDir = createTempWorkspace();
+    const originalExit = process.exit;
+    const originalFetch = globalThis.fetch;
+    const readline = require('readline');
+    const originalCreateInterface = readline.createInterface;
+    const originalIsTTY = process.stdout.isTTY;
+    const originalCI = process.env.CI;
+
+    let exitCode: number | null = null;
+    process.exit = ((code?: number) => {
+      exitCode = code !== undefined ? code : 0;
+      throw new Error(`exit-${exitCode}`);
+    }) as any;
+
+    process.stdout.isTTY = true;
+    delete process.env.CI;
+
+    readline.createInterface = function() {
+      return {
+        question: (query: string, callback: any) => {
+          if (query.includes('Choice [r/o/a]')) {
+            callback('o'); // Override
+          } else {
+            callback('');
+          }
+        },
+        close: () => {}
+      };
+    } as any;
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      const body = JSON.parse(options.body);
+      const lastMessage = body.messages[body.messages.length - 1].content;
+
+      if (lastMessage.includes('TaskContract')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  task: 'Fix math logic',
+                  understanding: 'math plan',
+                  assumptions: [],
+                  filesLikelyNeeded: ['math.js'],
+                  forbiddenActions: [],
+                  successCriteria: ['math.js contains correct implementation'],
+                  riskLevel: 'low',
+                  requiresApproval: false,
+                  createdAt: new Date().toISOString(),
+                  mode: 'lax',
+                  preserveExistingTests: false
+                })
+              }
+            }]
+          })
+        };
+      } else if (lastMessage.includes('TestCriticResult')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  verdict: 'BAD_IMPLEMENTATION',
+                  confidence: 'high',
+                  explanation: 'Wrong code.',
+                  suspectedRootCause: 'Wrong math.js content',
+                  suggestedFix: 'Fix it.',
+                  canAutoRetry: true,
+                  requiresHumanReview: false
+                })
+              }
+            }]
+          })
+        };
+      } else {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  summary: 'wrong patch',
+                  files: [{ filePath: 'math.js', content: 'console.log("wrong");', reason: 'implement math' }],
+                  notes: [],
+                  riskLevel: 'low'
+                })
+              }
+            }]
+          })
+        };
+      }
+    }) as any;
+
+    process.env.OPENAI_API_KEY = 'sk-mock-key';
+
+    try {
+      try {
+        await runTask('Fix math logic', ['math.js'], false, tempDir, true, true, false);
+      } catch (err: any) {
+        if (!err.message.includes('exit-0')) throw err;
+      }
+
+      assert.strictEqual(exitCode, 0, 'Override should successfully finalize with exit code 0');
+    } finally {
+      process.exit = originalExit;
+      globalThis.fetch = originalFetch;
+      readline.createInterface = originalCreateInterface;
+      process.stdout.isTTY = originalIsTTY;
+      if (originalCI !== undefined) {
+        process.env.CI = originalCI;
+      } else {
+        delete process.env.CI;
+      }
+      delete process.env.OPENAI_API_KEY;
+      cleanupWorkspace(tempDir);
+    }
+  });
 });

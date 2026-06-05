@@ -399,7 +399,8 @@ export async function runTask(
 
   // 5. Verify & Retries loop
   let retries = 0;
-  const maxRetries = config.maxRetries;
+  let maxRetries = config.maxRetries;
+  let customHint: string | undefined = undefined;
   let verification: VerificationReport | null = null;
   let diffAnalysis: any = null;
   let critic: any = null;
@@ -526,7 +527,59 @@ export async function runTask(
         (contract.preserveExistingTests ?? false) && existingTestModified
       );
 
+      let shouldInteractivePrompt = false;
+      let promptReason = '';
+
       if (finalStopDecision.stop) {
+        shouldInteractivePrompt = true;
+        promptReason = finalStopDecision.reason || 'Critic stopped retry loop.';
+      } else if (retries >= maxRetries) {
+        shouldInteractivePrompt = true;
+        promptReason = `Maximum retry limit (${maxRetries}) reached.`;
+      }
+
+      const isInteractive = !!process.stdout.isTTY && !process.env.CI && config.interactiveRetryMode;
+
+      if (shouldInteractivePrompt && isInteractive) {
+        console.log(`\n[!] Safety or verification check failed. Reason: ${promptReason}`);
+        console.log('What would you like to do?');
+        console.log('  [r] Retry with custom hint');
+        console.log('  [o] Override failure and finalize (forces success)');
+        console.log('  [a] Abort and rollback (default)');
+
+        let choice = '';
+        while (choice !== 'r' && choice !== 'o' && choice !== 'a') {
+          const answer = await askQuestion('Choice [r/o/a]: ');
+          choice = answer.toLowerCase().trim();
+          if (choice === '') {
+            choice = 'a'; // default to abort
+          }
+          if (choice !== 'r' && choice !== 'o' && choice !== 'a') {
+            console.log('Invalid choice. Please enter "r", "o", or "a".');
+          }
+        }
+
+        if (choice === 'r') {
+          const hint = await askQuestion('Enter hint/guidance for the AI: ');
+          customHint = hint;
+          maxRetries++;
+          if (config.maxRetries !== undefined) {
+            config.maxRetries++;
+          }
+          finalStopDecision = null;
+          retryState.seenFailures.clear();
+          console.log(`\n[+] Retry registered. Continuing with custom hint...`);
+        } else if (choice === 'o') {
+          console.log('\n[+] Overriding failure. Finalizing task...');
+          passedAll = true;
+          approved = true;
+          break;
+        } else {
+          console.log('\n[-] Aborting execution...');
+          passedAll = false;
+          break;
+        }
+      } else if (finalStopDecision.stop) {
         console.log(`\n[Retry Stop] ${finalStopDecision.reason}`);
         passedAll = false;
         break;
@@ -569,7 +622,8 @@ export async function runTask(
             verificationResult: verification,
             testCriticResult: testCriticResult || undefined,
             config,
-            sessionPath
+            sessionPath,
+            customHint
           });
 
           validatePatchProposalJson(patch);

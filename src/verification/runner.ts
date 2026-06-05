@@ -71,8 +71,26 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
       let stderr = '';
       let exitCode = 0;
 
+      const execEnv = { ...process.env };
+      if (config.auditSpawnedProcesses) {
+        const auditConfig = {
+          allowGitPush: config.allowGitPush,
+          allowNewDependencies: config.allowNewDependencies,
+          dangerousCommandPolicy: config.dangerousCommandPolicy,
+          protectedFiles: config.protectedFiles
+        };
+        const preloadPath = path.resolve(__dirname, 'preload.js');
+        execEnv.JEWEL_AUDIT_CONFIG = JSON.stringify(auditConfig);
+        
+        const normalizedPreloadPath = preloadPath.replace(/\\/g, '/');
+        const requireOption = `--require "${normalizedPreloadPath}"`;
+        execEnv.NODE_OPTIONS = execEnv.NODE_OPTIONS
+          ? `${requireOption} ${execEnv.NODE_OPTIONS}`
+          : requireOption;
+      }
+
       try {
-        const output = execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8' });
+        const output = execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
         stdout = output;
       } catch (err: any) {
         exitCode = err.status !== undefined ? err.status : 1;

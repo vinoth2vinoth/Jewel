@@ -142,7 +142,16 @@ Default config contents:
     "src/security/**"
   ],
   "dangerousCommandPolicy": "block",
-  "reportFormat": ["markdown", "json"]
+  "reportFormat": ["markdown", "json"],
+  "auditSpawnedProcesses": true,
+  "interactiveRetryMode": true,
+  "minCoverage": {
+    "lines": 80,
+    "statements": 80,
+    "functions": 80,
+    "branches": 75
+  },
+  "coverageReportPath": "./coverage/coverage-summary.json"
 }
 ```
 

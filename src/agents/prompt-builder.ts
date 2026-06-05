@@ -61,6 +61,10 @@ export function buildPatchProposalPrompt(input: PatchInput): string {
     ? `\nCritic Feedback on previous failure:\nVerdict: ${input.testCriticResult.verdict}\nExplanation: ${input.testCriticResult.explanation}\nSuggested Fix: ${input.testCriticResult.suggestedFix}\n`
     : '';
 
+  const customHintStr = input.customHint
+    ? `\nUser Custom Guidance Hint:\n${input.customHint}\n`
+    : '';
+
   const protectReminder = contract.preserveExistingTests
     ? `\nCRITICAL WARNING: The user requested to keep existing tests exactly as they are. You must NOT modify, rename, delete or refactor any existing test cases or assertions. You may only append new tests if necessary, and only add imports if required for the new tests. Violating this will block execution with an EXISTING_TEST_MODIFIED failure.\n`
     : '';
@@ -93,6 +97,7 @@ ${contract.successCriteria.map(c => `- ${c}`).join('\n')}
 Previous Verification:
 ${verificationStr}
 ${criticFeedbackStr}
+${customHintStr}
 
 Repository Context:
 ${input.repoContext}

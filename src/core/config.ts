@@ -39,6 +39,8 @@ export interface JewelConfig {
     branches?: number;
   };
   coverageReportPath?: string;
+  auditSpawnedProcesses?: boolean;
+  interactiveRetryMode?: boolean;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -87,7 +89,9 @@ export const DEFAULT_CONFIG: JewelConfig = {
   allowUnstructuredProviderFallback: false,
   preferredProviders: [],
   minCoverage: undefined,
-  coverageReportPath: ''
+  coverageReportPath: '',
+  auditSpawnedProcesses: true,
+  interactiveRetryMode: true
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -143,7 +147,9 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'allowGitPush',
     'requireHumanDiffApproval',
     'llmStrictJson',
-    'allowUnstructuredProviderFallback'
+    'allowUnstructuredProviderFallback',
+    'auditSpawnedProcesses',
+    'interactiveRetryMode'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {

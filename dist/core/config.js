@@ -82,7 +82,11 @@ exports.DEFAULT_CONFIG = {
     dangerousCommandPolicy: 'block',
     reportFormat: ['markdown', 'json'],
     allowUnstructuredProviderFallback: false,
-    preferredProviders: []
+    preferredProviders: [],
+    minCoverage: undefined,
+    coverageReportPath: '',
+    auditSpawnedProcesses: true,
+    interactiveRetryMode: true
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -131,7 +135,9 @@ function validateAndMergeConfig(parsed) {
         'allowGitPush',
         'requireHumanDiffApproval',
         'llmStrictJson',
-        'allowUnstructuredProviderFallback'
+        'allowUnstructuredProviderFallback',
+        'auditSpawnedProcesses',
+        'interactiveRetryMode'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {
@@ -220,6 +226,28 @@ function validateAndMergeConfig(parsed) {
             }
             return item;
         });
+    }
+    if (parsed.minCoverage !== undefined) {
+        if (typeof parsed.minCoverage !== 'object' || parsed.minCoverage === null) {
+            throw new Error('Invalid config: "minCoverage" must be an object.');
+        }
+        config.minCoverage = {};
+        const coverageKeys = ['lines', 'statements', 'functions', 'branches'];
+        for (const key of coverageKeys) {
+            if (parsed.minCoverage[key] !== undefined) {
+                const val = Number(parsed.minCoverage[key]);
+                if (isNaN(val) || val < 0 || val > 100) {
+                    throw new Error(`Invalid config: "minCoverage.${key}" must be a number between 0 and 100.`);
+                }
+                config.minCoverage[key] = val;
+            }
+        }
+    }
+    if (parsed.coverageReportPath !== undefined) {
+        if (typeof parsed.coverageReportPath !== 'string') {
+            throw new Error('Invalid config: "coverageReportPath" must be a string.');
+        }
+        config.coverageReportPath = parsed.coverageReportPath;
     }
     return config;
 }

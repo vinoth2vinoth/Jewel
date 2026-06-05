@@ -12,7 +12,7 @@ export interface VerificationReport {
     projectName: string;
     date: string;
     mode: 'strict' | 'lax';
-    overallStatus: 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED';
+    overallStatus: 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED' | 'COVERAGE_THRESHOLD_VIOLATION';
     stats: {
         passed: number;
         failed: number;
