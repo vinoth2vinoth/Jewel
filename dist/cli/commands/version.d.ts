@@ -1,1 +1,1 @@
-export declare function runVersion(): void;
+export declare function runVersion(cwd?: string): void;
