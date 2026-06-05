@@ -6,6 +6,7 @@ import { runDoctor } from './commands/doctor';
 import { runAudit } from './commands/audit';
 import { runTask } from './commands/run';
 import { runVersion } from './commands/version';
+import { runTui } from './commands/tui';
 import { toJewelError } from './errors';
 
 function printHelp(): void {
@@ -48,8 +49,13 @@ Options:
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
-  if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
+  if (args.includes('-h') || args.includes('--help')) {
     printHelp();
+    process.exit(0);
+  }
+
+  if (args.length === 0) {
+    await runTui();
     process.exit(0);
   }
 
