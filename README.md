@@ -8,16 +8,14 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 \__/ |  |_____|    \/      \/        |_____|  |_____|
 ```
   
-  **Secure AI Agent Workspace Safety Harness & LLM Verification Loop CLI**
-  
-  *Automate Git Checkpoint Rollback, Sandboxed LLM Code Execution, and API Budget Guards*
+  **Strict, Verification-First AI Coding Safety Harness & Rollback Guard**
 
   [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
   [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
   [![License](https://img.shields.io/badge/license-MIT-slate?style=flat-square)](./LICENSE)
   [![Coverage](https://img.shields.io/badge/coverage-80%25-emerald?style=flat-square)](#)
 
-  *Jewel is a strict, verification-first AI coding safety harness and LLM verification loop CLI designed to secure your workspace. It protects developer files via sandboxed LLM code execution, automates git checkpoint rollback on test failures, and enforces cost-control budget guards.*
+  *A command-line safety harness that wraps AI coding patches in transactional checkpoints, runs tests in Docker sandboxes, and automatically rolls back your workspace if compilation or tests fail.*
 </div>
 
 ---
@@ -49,19 +47,22 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 
 ## What Jewel IS / IS NOT
 
+When you let AI agents write code directly in your local repository, they can overwrite critical configuration files, trigger runaway token bills, write bad imports, or execute destructive shell commands during testing. 
+
+**Jewel** acts as a strict safety execution layer for your AI workflows. Before any patch is applied, Jewel creates an ephemeral checkpoint of your files. It then writes the changes, runs compilation and test checks in isolated Docker containers, and performs an automatic rollback to your exact original files if any checks fail.
+
 ### What Jewel IS:
-- **An AI coding safety harness**: Wraps LLM generations in transactional checkpoints, diff guards, and verification tests to keep developer environments pristine.
-- **Automated git checkpoint rollback**: Automatically takes snapshot checkpoints of your workspace via Git commits or copy snapshots, and triggers a full rollback to the checkpoint if verification tests fail.
-- **Sandboxed LLM code execution**: Isolates and executes untrusted code patches and test suites inside containerized Docker environments to prevent host pollution or malicious shell commands.
-- **Budget guards & cost controls**: Tracks API spending in real-time and aborts runs before they exceed your predefined limits.
-- **Provider-neutral**: Implements a capability-aware adapter registry supporting OpenAI, Gemini, Anthropic, OpenRouter, and local dry-run modes.
-- **Path-escape protection**: Validates all proposed code changes for path traversal, absolute routes, Windows drive prefix escapes, and null bytes before editing.
-- **Developer-friendly UI**: Serves a local Web UI review modal with side-by-side git diffs, AST signature difference trees, and selective patch checklists.
+- **Git Transaction Manager**: Creates fast, branch-free checkpoints before code modifications and automates rolling back your workspace if compilation or verification tests fail.
+- **Docker Sandbox Test Isolation**: Isolates untrusted unit tests and build scripts inside secure, network-isolated container environments to prevent host system pollution.
+- **Path Escape Prevention**: Normalizes paths and rejects absolute routes, parent directory traversals (`..`), Windows drive letter prefixes (`C:`), or null bytes to block directory-escape exploits.
+- **Cost-Control Budget Guards**: Tracks LLM token usage and estimated cost in real-time, immediately halting agent execution if spending exceeds your configured session budget.
+- **Interactive local Web UI Dashboard**: Serves a local SSE event dashboard showing real-time logs, AST interface signature diff trees, and checklist approvals before staging.
+- **Provider-Neutral Adapter Registry**: Integrates with OpenAI, Gemini, Anthropic, OpenRouter, and local dry-run modes out-of-the-box.
 
 ### What Jewel IS NOT:
 - **An autonomous agent loop (like Claude Code)**: Jewel does not manage conversational chat loops. It is the *safety execution layer* that wraps patch proposals to ensure they compile, pass tests, and are approved before staging.
 - **A replacement for git**: Jewel builds on top of git for checkpointing.
-- **A sandbox-only tool**: By default, verification tests run directly on the host shell. To enable **sandboxed LLM code execution**, you must explicitly set `"useSandbox": true` in your configuration.
+- **A sandbox-only tool**: By default, verification tests run directly on the host shell. To enable containerized sandboxing, you must explicitly set `"useSandbox": true` in your configuration.
 
 ---
 
