@@ -16,8 +16,14 @@ npm --version
 git --version
 ```
 
-## 2. Packaging and Global Installation
-Package the package locally and install the command-line interface globally:
+## 2. Local Packaging & Development Installation
+To verify local code modifications during developer smoke tests, build and package the repository locally:
+
+> [!NOTE]
+> For standard end-users who are not developing Jewel, they simply install the official released package from the NPM registry directly via:
+> ```powershell
+> npm install -g jewel-cli
+> ```
 
 ```powershell
 # 1. Navigate to the Jewel project root

@@ -87,28 +87,22 @@ graph TD
 - **Docker**: Docker installed and active (optional, required if running tests inside a sandboxed container).
 
 ### User Installation
-1. Pack the local repository:
-   ```bash
-   npm pack
-   ```
-   This generates a tarball file (e.g. `jewel-cli-0.9.0.tgz`).
-2. Install the package globally from the local tarball:
-   - **Unix (Bash/Zsh)**:
-     ```bash
-     npm install -g ./jewel-cli-*.tgz
-     ```
-   - **Windows (PowerShell)**:
-     ```powershell
-     npm install -g (Get-Item ./jewel-cli-*.tgz).FullName
-     ```
-   - **Windows (Command Prompt / CMD)**:
-     If using standard CMD, replace the wildcard with the explicit version matching the generated tarball:
-     ```cmd
-     npm install -g jewel-cli-0.9.0.tgz
-     ```
-      
-      > [!IMPORTANT]
-      > **Windows CMD Environment Variable Tip**: When setting environment variables (like `GEMINI_API_KEY`) in CMD, use `set GEMINI_API_KEY=your_key_here` without quotes. Wrapping the value in quotes (e.g., `set GEMINI_API_KEY="key"`) forces Windows to ingest the quotes literally into Node's environment parser, causing authentication failures.
+
+You can install Jewel globally from the npm registry using a single command:
+```bash
+npm install -g jewel-cli
+```
+
+Alternatively, you can run tasks directly using the zero-install `npx` runner model:
+```bash
+npx -p jewel-cli jewel run "fix the failing math test" --mock
+```
+
+> [!NOTE]
+> **Installing from Local Source**: If you are modifying or developing Jewel locally, build the package using `npm pack` and install from the generated tarball (e.g., `npm install -g ./jewel-cli-*.tgz`). Detailed local dev setup steps can be found in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+> [!IMPORTANT]
+> **Windows CMD Environment Variable Tip**: When setting environment variables (like `GEMINI_API_KEY`) in CMD, use `set GEMINI_API_KEY=your_key_here` without quotes. Wrapping the value in quotes (e.g., `set GEMINI_API_KEY="key"`) forces Windows to ingest the quotes literally into Node's environment parser, causing authentication failures.
 3. Initialize configuration in your coding project:
    ```bash
    jewel init
