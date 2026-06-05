@@ -239,6 +239,16 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
         findings.push(`Multiple files deleted (${deletedFilesCount} files). Potential dangerous directory deletion.`);
         status = 'BLOCK';
     }
+    if (config.useASTDiffGuard) {
+        const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd);
+        findings.push(...astResult.findings);
+        if (astResult.status === 'BLOCK') {
+            status = 'BLOCK';
+        }
+        else if (astResult.status === 'WARN' && status !== 'BLOCK') {
+            status = 'WARN';
+        }
+    }
     return {
         status,
         changedFilesCount: changedFiles.length,
@@ -250,4 +260,215 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
         lockfilesChanged,
         findings
     };
+}
+let ts = null;
+try {
+    ts = require('typescript');
+}
+catch { }
+function extractASTSignatures(fileName, content) {
+    const signatures = new Set();
+    if (!ts)
+        return signatures;
+    let sourceFile;
+    try {
+        sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+    }
+    catch (err) {
+        throw new Error(`Parsing failed: ${err.message}`);
+    }
+    for (const node of sourceFile.statements) {
+        if (ts.isClassDeclaration(node) && node.name) {
+            const className = node.name.text;
+            signatures.add(`class ${className}`);
+            if (node.members) {
+                for (const member of node.members) {
+                    if (ts.isMethodDeclaration(member) && member.name) {
+                        const methodName = member.name.text;
+                        const params = member.parameters
+                            .map((p) => {
+                            if (p.name && ts.isIdentifier(p.name)) {
+                                return p.name.text;
+                            }
+                            return '_';
+                        })
+                            .join(',');
+                        signatures.add(`method ${className}.${methodName}(${params})`);
+                    }
+                    else if (ts.isPropertyDeclaration(member) && member.name) {
+                        const propName = member.name.text || '';
+                        if (propName) {
+                            signatures.add(`property ${className}.${propName}`);
+                        }
+                    }
+                }
+            }
+        }
+        else if (ts.isFunctionDeclaration(node) && node.name) {
+            const funcName = node.name.text;
+            const params = node.parameters
+                .map((p) => {
+                if (p.name && ts.isIdentifier(p.name)) {
+                    return p.name.text;
+                }
+                return '_';
+            })
+                .join(',');
+            signatures.add(`function ${funcName}(${params})`);
+        }
+        else if (ts.isInterfaceDeclaration(node) && node.name) {
+            signatures.add(`interface ${node.name.text}`);
+        }
+        else if (ts.isTypeAliasDeclaration(node) && node.name) {
+            signatures.add(`type ${node.name.text}`);
+        }
+        else if (ts.isEnumDeclaration(node) && node.name) {
+            signatures.add(`enum ${node.name.text}`);
+        }
+        else if (ts.isVariableStatement(node)) {
+            if (node.declarationList && node.declarationList.declarations) {
+                for (const decl of node.declarationList.declarations) {
+                    if (decl.name && ts.isIdentifier(decl.name)) {
+                        const varName = decl.name.text;
+                        let kind = 'var';
+                        if (node.declarationList.flags & ts.NodeFlags.Const) {
+                            kind = 'const';
+                        }
+                        else if (node.declarationList.flags & ts.NodeFlags.Let) {
+                            kind = 'let';
+                        }
+                        signatures.add(`${kind} ${varName}`);
+                    }
+                }
+            }
+        }
+    }
+    return signatures;
+}
+function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd) {
+    const findings = [];
+    let status = 'PASS';
+    if (!ts) {
+        findings.push("AST Diff Guard: TypeScript module not found. Falling back to line-by-line checks.");
+        return { status: 'WARN', findings };
+    }
+    // 1. AST comparison for each changed JS/TS file
+    for (const item of changedFiles) {
+        const file = item.file;
+        const ext = path.extname(file).toLowerCase();
+        if (!['.js', '.ts', '.jsx', '.tsx'].includes(ext)) {
+            continue;
+        }
+        const newPath = path.resolve(cwd, file);
+        if (!fs.existsSync(newPath)) {
+            continue;
+        }
+        const newContent = fs.readFileSync(newPath, 'utf8');
+        let oldContent = '';
+        if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+            try {
+                oldContent = (0, child_process_1.execSync)(`git show ${checkpoint.gitCheckpointSha}:${file}`, {
+                    cwd,
+                    encoding: 'utf8',
+                    stdio: ['pipe', 'pipe', 'ignore']
+                });
+            }
+            catch {
+                continue;
+            }
+        }
+        else if (checkpoint.backupPath) {
+            const backupFilePath = path.join(checkpoint.backupPath, file);
+            if (fs.existsSync(backupFilePath)) {
+                oldContent = fs.readFileSync(backupFilePath, 'utf8');
+            }
+            else {
+                continue;
+            }
+        }
+        else {
+            continue;
+        }
+        try {
+            const oldSignatures = extractASTSignatures(file, oldContent);
+            const newSignatures = extractASTSignatures(file, newContent);
+            for (const sig of oldSignatures) {
+                if (!newSignatures.has(sig)) {
+                    findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
+                    status = 'BLOCK';
+                }
+            }
+        }
+        catch (err) {
+            findings.push(`AST Diff Guard: Failed to parse AST for '${file}': ${err.message}. Falling back to line-by-line checks.`);
+            if (status !== 'BLOCK') {
+                status = 'WARN';
+            }
+        }
+    }
+    // 2. Semantic Dependency mapping
+    const changedJSFiles = changedFiles
+        .map(item => item.file)
+        .filter(file => ['.js', '.ts', '.jsx', '.tsx'].includes(path.extname(file).toLowerCase()));
+    if (changedJSFiles.length > 0) {
+        const allFiles = [];
+        const collectFiles = (dir) => {
+            const ignore = ['.git', 'node_modules', '.jewel', 'dist'];
+            if (!fs.existsSync(dir))
+                return;
+            let entries;
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true });
+            }
+            catch {
+                return;
+            }
+            for (const entry of entries) {
+                if (ignore.includes(entry.name))
+                    continue;
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    collectFiles(full);
+                }
+                else {
+                    allFiles.push(path.relative(cwd, full).replace(/\\/g, '/'));
+                }
+            }
+        };
+        collectFiles(cwd);
+        const protectedFiles = allFiles.filter(file => (0, path_policy_1.isProtectedPath)(file, config));
+        for (const changedFile of changedJSFiles) {
+            const changedFileAbs = path.resolve(cwd, changedFile);
+            for (const protFile of protectedFiles) {
+                const protFileAbs = path.resolve(cwd, protFile);
+                if (changedFileAbs === protFileAbs) {
+                    continue;
+                }
+                let protContent = '';
+                try {
+                    protContent = fs.readFileSync(protFileAbs, 'utf8');
+                }
+                catch {
+                    continue;
+                }
+                const rel = path.relative(path.dirname(protFileAbs), changedFileAbs);
+                let relNorm = rel.replace(/\\/g, '/');
+                relNorm = relNorm.replace(/\.[jt]sx?$/, '');
+                const relativeImport = relNorm.startsWith('.') ? relNorm : './' + relNorm;
+                const importPatterns = [
+                    `'${relativeImport}'`,
+                    `"${relativeImport}"`,
+                    `\`${relativeImport}\``
+                ];
+                const isReferenced = importPatterns.some(pat => protContent.includes(pat));
+                if (isReferenced) {
+                    findings.push(`AST Diff Guard: Modified file '${changedFile}' is referenced by protected module '${protFile}'.`);
+                    if (status !== 'BLOCK') {
+                        status = 'WARN';
+                    }
+                }
+            }
+        }
+    }
+    return { status, findings };
 }

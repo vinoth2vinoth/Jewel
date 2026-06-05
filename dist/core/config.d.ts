@@ -40,6 +40,7 @@ export interface JewelConfig {
     interactiveRetryMode?: boolean;
     maxSessionCost?: number;
     critics?: ('security' | 'linter' | 'architect')[];
+    useASTDiffGuard?: boolean;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

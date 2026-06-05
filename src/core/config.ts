@@ -43,6 +43,7 @@ export interface JewelConfig {
   interactiveRetryMode?: boolean;
   maxSessionCost?: number;
   critics?: ('security' | 'linter' | 'architect')[];
+  useASTDiffGuard?: boolean;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -95,7 +96,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
   auditSpawnedProcesses: true,
   interactiveRetryMode: true,
   maxSessionCost: 0.0,
-  critics: ['security']
+  critics: ['security'],
+  useASTDiffGuard: false
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -153,7 +155,8 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'llmStrictJson',
     'allowUnstructuredProviderFallback',
     'auditSpawnedProcesses',
-    'interactiveRetryMode'
+    'interactiveRetryMode',
+    'useASTDiffGuard'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {

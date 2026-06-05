@@ -88,7 +88,8 @@ exports.DEFAULT_CONFIG = {
     auditSpawnedProcesses: true,
     interactiveRetryMode: true,
     maxSessionCost: 0.0,
-    critics: ['security']
+    critics: ['security'],
+    useASTDiffGuard: false
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -139,7 +140,8 @@ function validateAndMergeConfig(parsed) {
         'llmStrictJson',
         'allowUnstructuredProviderFallback',
         'auditSpawnedProcesses',
-        'interactiveRetryMode'
+        'interactiveRetryMode',
+        'useASTDiffGuard'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {

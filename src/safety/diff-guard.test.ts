@@ -74,3 +74,108 @@ test('diff guard - non-git file comparisons', () => {
 
   cleanupSandbox();
 });
+
+test('diff guard - AST signature changes', () => {
+  cleanupSandbox();
+  
+  const originalDir = path.join(sandboxDir, 'backup');
+  const currentDir = path.join(sandboxDir, 'current');
+
+  fs.mkdirSync(originalDir, { recursive: true });
+  fs.mkdirSync(currentDir, { recursive: true });
+
+  const checkpoint: CheckpointMetadata = {
+    timestamp: '123',
+    isGit: false,
+    backupPath: originalDir
+  };
+
+  const astConfig: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useASTDiffGuard: true
+  };
+
+  // Test 1: Deleting function signature blocks
+  fs.writeFileSync(
+    path.join(originalDir, 'math.ts'),
+    'export function add(a: number, b: number): number { return a + b; }\nexport function subtract(a: number, b: number): number { return a - b; }\n'
+  );
+  fs.writeFileSync(
+    path.join(currentDir, 'math.ts'),
+    'export function add(a: number, b: number): number { return a + b; }\n' // subtract deleted
+  );
+  const analysis1 = runDiffGuard(checkpoint, astConfig, currentDir);
+  assert.strictEqual(analysis1.status, 'BLOCK');
+  assert.ok(analysis1.findings.some(f => f.includes("Deleted or modified signature of 'function subtract(a,b)'")));
+
+  // Test 2: Changing parameter signature blocks
+  fs.writeFileSync(
+    path.join(currentDir, 'math.ts'),
+    'export function add(a: number): number { return a; }\nexport function subtract(a: number, b: number): number { return a - b; }\n' // add parameter deleted
+  );
+  const analysis2 = runDiffGuard(checkpoint, astConfig, currentDir);
+  assert.strictEqual(analysis2.status, 'BLOCK');
+  assert.ok(analysis2.findings.some(f => f.includes("Deleted or modified signature of 'function add(a,b)'")));
+
+  // Test 3: Changing function body but keeping signature passes
+  fs.writeFileSync(
+    path.join(currentDir, 'math.ts'),
+    'export function add(a: number, b: number): number { console.log("adding"); return a + b; }\nexport function subtract(a: number, b: number): number { return a - b; }\n'
+  );
+  const analysis3 = runDiffGuard(checkpoint, astConfig, currentDir);
+  assert.strictEqual(analysis3.status, 'PASS');
+
+  // Test 4: AST diff guard is skipped if configuration option is false
+  const noAstConfig: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useASTDiffGuard: false
+  };
+  fs.writeFileSync(
+    path.join(currentDir, 'math.ts'),
+    'export function add(a: number): number { return a; }\nexport function subtract(a: number, b: number): number { return a - b; }\n'
+  );
+  const analysis4 = runDiffGuard(checkpoint, noAstConfig, currentDir);
+  assert.strictEqual(analysis4.status, 'PASS'); // skipped AST block, passes standard checks
+
+  cleanupSandbox();
+});
+
+test('diff guard - AST semantic dependency checks', () => {
+  cleanupSandbox();
+  
+  const originalDir = path.join(sandboxDir, 'backup');
+  const currentDir = path.join(sandboxDir, 'current');
+
+  fs.mkdirSync(originalDir, { recursive: true });
+  fs.mkdirSync(currentDir, { recursive: true });
+
+  const checkpoint: CheckpointMetadata = {
+    timestamp: '123',
+    isGit: false,
+    backupPath: originalDir
+  };
+
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useASTDiffGuard: true,
+    protectedFiles: ['src/payments/**'],
+    allowProtectedFileChanges: true
+  };
+
+  // Setup a modified file math.ts
+  fs.writeFileSync(path.join(originalDir, 'math.ts'), 'export function add(a: number, b: number) { return a + b; }\n');
+  fs.writeFileSync(path.join(currentDir, 'math.ts'), 'export function add(a: number, b: number) { console.log("body change"); return a + b; }\n');
+
+  // Setup a protected file that imports math.ts
+  fs.mkdirSync(path.join(currentDir, 'src/payments'), { recursive: true });
+  fs.writeFileSync(
+    path.join(currentDir, 'src/payments/billing.ts'),
+    'import { add } from "../../math";\nconsole.log(add(1, 2));\n'
+  );
+
+  const analysis = runDiffGuard(checkpoint, config, currentDir);
+  assert.strictEqual(analysis.status, 'WARN');
+  assert.ok(analysis.findings.some(f => f.includes("Modified file 'math.ts' is referenced by protected module 'src/payments/billing.ts'")));
+
+  cleanupSandbox();
+});
