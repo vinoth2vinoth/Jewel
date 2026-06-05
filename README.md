@@ -1,12 +1,11 @@
 <div align="center">
   
 ```text
-      ____  _____ _      _____ _      
-     / __ \| ____| |    |  ___| |     
-    | |  | | |__ | |    | |__ | |     
-    | |  | |  __|| |    |  __|| |     
-    | |__| | |___| |____| |___| |____ 
-     \____/|_____|______|_____|______|
+  ___    _____   \ \    /  \    / /   _____    _     
+ |_  |  |  ___|   \ \  / /\ \  / /   |  ___|  | |    
+   | |  | |__      \ \/ /  \ \/ /    | |__    | |    
+_  | |  | |___     \  /    \  /      | |___   | |___ 
+\__/ |  |_____|    \/      \/        |_____|  |_____|
 ```
   
   **Strict, Verification-First AI Coding Safety Harness CLI**
@@ -55,7 +54,7 @@
 ### What Jewel IS NOT:
 - **An autonomous agent loop (like Claude Code)**: Jewel does not manage conversational chat loops. It is the *safety execution layer* that wraps patch proposals to ensure they compile, pass tests, and are approved before staging.
 - **A replacement for git**: Jewel builds on top of git for snapshotting.
-- **A loose sandbox fallback**: Jewel does not blindly execute test scripts on the host unless sandboxing is explicitly disabled.
+- **A sandboxed environment by default**: Verification tests run directly on the host shell by default. You must explicitly configure Docker sandboxing (`"useSandbox": true`) to isolate execution for untrusted AI proposals.
 
 ---
 
@@ -74,6 +73,7 @@ graph TD
     F -- Fail --> H[Automatic Rollback]
     G -- Approved --> I[Commit Changes]
     G -- Rejected/Retry --> H
+    H --> C
 ```
 
 ---
@@ -92,9 +92,22 @@ graph TD
    ```
    This generates a tarball file (e.g. `jewel-cli-0.9.0.tgz`).
 2. Install the package globally from the local tarball:
-   ```bash
-   npm install -g ./jewel-cli-*.tgz
-   ```
+   - **Unix (Bash/Zsh)**:
+     ```bash
+     npm install -g ./jewel-cli-*.tgz
+     ```
+   - **Windows (PowerShell)**:
+     ```powershell
+     npm install -g (Get-Item ./jewel-cli-*.tgz).FullName
+     ```
+   - **Windows (Command Prompt / CMD)**:
+     If using standard CMD, replace the wildcard with the explicit version matching the generated tarball:
+     ```cmd
+     npm install -g jewel-cli-0.9.0.tgz
+     ```
+     
+     > [!IMPORTANT]
+     > **Windows CMD Environment Variable Tip**: When setting environment variables (like `GEMINI_API_KEY`) in CMD, use `set GEMINI_API_KEY=your_key_here` without quotes. Wrapping the value in quotes (e.g., `set GEMINI_API_KEY="key"`) forces Windows to ingest the quotes literally into Node's environment parser, causing authentication failures.
 3. Initialize configuration in your coding project:
    ```bash
    jewel init
@@ -180,19 +193,32 @@ Configure your safety parameters inside `jewel.config.json` at the root of your 
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `mode` | `string` | `"strict"` | Safety level. In `strict` mode, exceeding changed file limits or missing plans immediately blocks task commits. |
-| `maxFilesChanged` | `number` | `8` | Maximum number of files an agent can modify in one session. |
-| `maxLinesChanged` | `number` | `500` | Maximum lines modified limit before triggering a preflight check block. |
-| `allowProtectedFileChanges`| `boolean`| `false` | If false, blocks any writes to paths matching `protectedFiles` patterns. |
-| `dangerousCommandPolicy` | `string` | `"block"` | Policy for shell executions. Can be `"block"` (stops execution), `"warn"` (warns and logs), or `"allow"`. |
-| `provider` | `string` | `"none"` | LLM adapter provider (`none`, `openai`, `gemini`, `anthropic`, `openrouter`). |
-| `model` | `string` | `""` | Base model name (e.g. `gpt-4o-mini`, `gemini-1.5-flash`). |
-| `temperature` | `number` | `0.0` | Sampling temperature. `0.0` is recommended for deterministic JSON patches. |
-| `maxSessionCost` | `number` | `0.0` | **Budget Guard**. Maximum cumulative USD cost allowed for a single task run. `0.0` disables budget checks. |
-| `useSandbox` | `boolean` | `false` | Enable Docker container isolation for verification commands. |
-| `sandboxNetwork` | `string` | `"none"` | Network configuration for verification containers (defaults to `"none"` to prevent exfiltration). |
-| `sandboxReadOnlyRoot` | `boolean` | `true` | Mounts the project root workspace read-only inside the container to prevent unauthorized filesystem modification. |
-| `sandboxWritePaths` | `string[]`| `[]` | Directories in the workspace granted write permission (mounted `:rw`) during sandbox verification. |
+| `projectName` | `string` | `"My App"` | Name/Title of the workspace for logs, dashboards, and pre-launch reports. |
+| `mode` | `string` | `"strict"` | Safety enforcement mode (`strict` blocks preflight failures; `lax` allows warnings). |
+| `maxRetries` | `number` | `3` | Maximum verification auto-retry attempts before marking the task as failed. |
+| `maxFilesChanged` | `number` | `8` | Maximum number of files allowed to be modified in a single session. |
+| `maxLinesChanged` | `number` | `500` | Maximum lines modified across all files in a single session. |
+| `requirePlanBeforeEdit` | `boolean` | `true` | Forces LLM to write design plans to `memory/plans/` before applying edits. |
+| `requireVerificationBeforeDone` | `boolean` | `true` | Requires all verification checks to pass successfully before prompting commit. |
+| `allowNewDependencies` | `boolean` | `false` | Allows the LLM patch to introduce new external dependencies into `package.json`. |
+| `allowProtectedFileChanges` | `boolean` | `false` | Allows writes to files matching patterns inside the `protectedFiles` array. |
+| `allowGitPush` | `boolean` | `false` | Allows Jewel to automatically push finalized commits to the upstream remote. |
+| `provider` | `string` | `"none"` | LLM connection adapter (`none` for dry-run/mocks, `openai`, `gemini`, `anthropic`, `openrouter`). |
+| `model` | `string` | `""` | Base model selector name (e.g., `gpt-4o-mini`, `gemini-1.5-flash`). |
+| `temperature` | `number` | `0.0` | Model generation temperature (recommended `0.0` for deterministic outputs). |
+| `maxOutputTokens` | `number` | `4000` | Maximum token limit allowed in provider API responses. |
+| `maxSessionCost` | `number` | `0.0` | **Budget Guard**. Aborts execution if accumulative USD token cost exceeds this amount. `0.0` is disabled. |
+| `commands` | `object` | *See block* | Map of key verification commands executed during preflight checks (`lint`, `typecheck`, `test`, `build`, `e2e`). |
+| `protectedFiles` | `string[]` | *See block* | Glob patterns of files protected from modification by default (e.g., `.env`, `package-lock.json`). |
+| `dangerousCommandPolicy` | `string` | `"block"` | Shell safety policy for script executions (`block` stops run, `warn` alerts, `allow` proceeds). |
+| `reportFormat` | `string[]` | `["markdown", "json"]` | File outputs generated after each session under `.jewel/reports/`. |
+| `auditSpawnedProcesses` | `boolean` | `true` | Audits process trees spawned by unit tests to flag unrecognized network/filesystem activity. |
+| `interactiveRetryMode` | `boolean` | `true` | Prompts developers for interactive feedback/retry choices on command line on verification failures. |
+| `useASTDiffGuard` | `boolean` | `false` | Blocks commits if the patch alters class/function interfaces or signatures. |
+| `useSandbox` | `boolean` | `false` | Isolates all verification commands inside Docker containers. |
+| `sandboxNetwork` | `string` | `"none"` | Docker container network mode (`none` blocks outbound connection for exfiltration protection). |
+| `sandboxReadOnlyRoot` | `boolean` | `true` | Mounts target workspace root as read-only (`:ro`) in Docker container. |
+| `sandboxWritePaths` | `string[]` | `[]` | Directories inside workspace granted read-write container mounting permissions. |
 
 ---
 
@@ -253,16 +279,24 @@ description: Enforce safe migration and schema alteration patterns
 | `audit` | `jewel audit` | Perform safety check verification on configuration and reports. |
 | `doctor` | `jewel doctor` | Diagnoses local env setup (Node, Git, package managers, and configured API keys). |
 | `provider-ready`| `jewel provider-ready`| Verifies provider integration config and checks capability registry. |
+| `smoke-provider`| `jewel smoke-provider [name]`| Run a quick network connectivity and credentials capability check on a provider. |
 | `release-check`| `jewel release-check`| Run public package release checklist and secret redaction audit. |
 | `version` | `jewel version` | Prints the current package version and system info. |
 
 ### Options & Flags
-- `-f, --files <list>`: Comma-separated list of files likely needed for the task contract.
-- `-m, --mock`: Use mock agent adapter to apply deterministic patches locally (forces provider to `none`).
-- `--yes`: Auto-approve planning and patch proposal stages without waiting for human review.
-- `--no-review`: Disable visual diff review step.
-- `--keep-failed`: Prevent automatic snapshot rollback if verification or human review fails.
-- `--ui`: Launch the interactive local Web UI dashboard (starts at http://127.0.0.1:3000).
+| Option | Arguments | Description |
+|---|---|---|
+| `-f, --files` | `<list>` | Comma-separated list of target files for the task scope contract. |
+| `-m, --mock` | *None* | Runs task using local mock adapter for dry-run simulation (forces provider to `none`). |
+| `--dry-run` | *None* | Perform preflight check, print task contract, and exit without invoking LLM or writing patches. |
+| `--yes` | *None* | Auto-approve planning and patch stages without prompting for human intervention. |
+| `--no-review` | *None* | Disables the visual HTML diff review step. |
+| `--keep-failed` | *None* | Bypasses automatic checkpoint rollback if verification tests fail. |
+| `--ui` | *None* | Launches the interactive local Web UI dashboard at http://127.0.0.1:3000. |
+| `--provider` | `<provider>` | Override the LLM provider configuration (`openai`, `gemini`, `anthropic`, `openrouter`). |
+| `--model` | `<model>` | Override the model name configuration (e.g. `gpt-4o-mini`). |
+| `--temperature` | `<temp>` | Override the sampling temperature setting (e.g. `0.2`). |
+| `--max-output-tokens`| `<tokens>` | Override the maximum output token limit. |
 
 ---
 

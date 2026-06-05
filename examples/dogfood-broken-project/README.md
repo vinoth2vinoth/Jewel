@@ -17,8 +17,8 @@ npm test
 ## Running Jewel with Provider `none` (Mock Mode)
 You can run Jewel using the mock adapter to automatically fix this issue:
 ```bash
-# Make sure jewel CLI is installed or run it locally
-node ../../dist/cli/index.js run "fix the failing math test" --provider none --mock --files src/math.ts --yes
+# Execute Jewel run using the globally installed CLI and mock adapter
+jewel run "fix the failing math test" --mock --files src/math.ts --yes
 ```
 
 Jewel will:
@@ -41,7 +41,7 @@ npm test
 If you have configured API keys (e.g., `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`), you can run the real LLM models to fix the bug:
 ```bash
 # Example using OpenAI (requires OPENAI_API_KEY environment variable)
-node ../../dist/cli/index.js run "fix the division by zero bug in src/math.ts by throwing an error" --provider openai --files src/math.ts
+jewel run "fix the division by zero bug in src/math.ts by throwing an error" --provider openai --files src/math.ts
 ```
 
 This will run real prompt engineering planning, patch generation, and critic steps. If the proposed code fails tests or edits unauthorized files, Jewel will automatically roll back the changes to restore the working directory state.

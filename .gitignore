@@ -6,4 +6,7 @@ sandbox-test-*/
 .env
 .env.*
 graphify-out/
+memory/
+.agents/
+
 

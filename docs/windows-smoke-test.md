@@ -28,10 +28,9 @@ npm run build
 
 # 3. Pack into a local tarball
 npm pack
-# Generates jewel-cli-0.4.0.tgz (or matching current version)
 
 # 4. Install the package globally from the local tarball
-npm install -g ./jewel-cli-0.4.0.tgz
+npm install -g (Get-Item ./jewel-cli-*.tgz).FullName
 ```
 
 ## 3. Verify Global CLI Installation
@@ -84,7 +83,7 @@ npm run build
 npm test
 
 # 5. Execute Jewel with the mock adapter to automatically fix math.ts
-node ../../dist/cli/index.js run "fix the failing math test" --provider none --mock --files src/math.ts --yes
+jewel run "fix the failing math test" --mock --files src/math.ts --yes
 
 # 6. Run tests again (Must pass successfully)
 npm test

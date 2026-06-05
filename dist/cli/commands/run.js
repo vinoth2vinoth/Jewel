@@ -140,11 +140,11 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             throw new errors_1.JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
         }
         console.log(`\x1b[36m
-     💎   _ _______        _______ _     
-         | |  ___\\ \\      / /  ___| |    
-      _  | | |_   \\ \\ /\\ / /| |_  | |    
-     | |_| |  _|   \\ V  V / | |___| |___ 
-      \\___/|_|      \\_/\\_/  |_____|_____|
+   💎  ___    _____   \\\\ \\    /  \\\\    / /   _____    _     
+      |_  |  |  ___|   \\\\ \\  / /\\\\ \\  / /   |  ___|  | |    
+        | |  | |__      \\\\ \\/ /  \\\\ \\/ /    | |__    | |    
+     _  | |  | |___     \\\\  /    \\\\  /      | |___   | |___ 
+    \\__/ |  |_____|    \\\\/      \\\\/        |_____|  |_____|
 \x1b[35m              Strict AI Coding Safety Harness CLI\x1b[0m
 `);
         console.log(`Starting Jewel Harness for task: "${task}"`);
