@@ -50,11 +50,76 @@ exports.dockerUtils = {
             return false;
         }
     },
-    executeDocker(args, cwd, env) {
-        return cp.spawnSync('docker', args, { cwd, stdio: 'pipe', encoding: 'utf8', env });
+    executeDocker(args, cwd, env, onChunk) {
+        return new Promise((resolve) => {
+            let stdout = '';
+            let stderr = '';
+            let error;
+            let completed = false;
+            const child = cp.spawn('docker', args, { cwd, env });
+            child.stdout.on('data', (data) => {
+                const str = data.toString();
+                stdout += str;
+                if (onChunk)
+                    onChunk(str, 'stdout');
+            });
+            child.stderr.on('data', (data) => {
+                const str = data.toString();
+                stderr += str;
+                if (onChunk)
+                    onChunk(str, 'stderr');
+            });
+            child.on('error', (err) => {
+                error = err;
+                if (!completed) {
+                    completed = true;
+                    resolve({ status: null, signal: null, stdout, stderr, error });
+                }
+            });
+            child.on('close', (status, signal) => {
+                if (!completed) {
+                    completed = true;
+                    resolve({ status, signal, stdout, stderr, error });
+                }
+            });
+        });
     }
 };
-function runVerification(config, cwd = process.cwd()) {
+function executeHost(cmdLine, cwd, env, onChunk) {
+    return new Promise((resolve) => {
+        let stdout = '';
+        let stderr = '';
+        let error;
+        let completed = false;
+        const child = cp.spawn(cmdLine, [], { cwd, env, shell: true });
+        child.stdout.on('data', (data) => {
+            const str = data.toString();
+            stdout += str;
+            if (onChunk)
+                onChunk(str, 'stdout');
+        });
+        child.stderr.on('data', (data) => {
+            const str = data.toString();
+            stderr += str;
+            if (onChunk)
+                onChunk(str, 'stderr');
+        });
+        child.on('error', (err) => {
+            error = err;
+            if (!completed) {
+                completed = true;
+                resolve({ status: null, signal: null, stdout, stderr, error });
+            }
+        });
+        child.on('close', (status, signal) => {
+            if (!completed) {
+                completed = true;
+                resolve({ status, signal, stdout, stderr, error });
+            }
+        });
+    });
+}
+async function runVerification(config, cwd = process.cwd(), onProgress) {
     const results = [];
     const commands = config.commands;
     const orderKeys = ['lint', 'typecheck', 'test', 'build', 'e2e'];
@@ -72,26 +137,47 @@ function runVerification(config, cwd = process.cwd()) {
                 stdout: '',
                 stderr: ''
             });
+            if (onProgress) {
+                onProgress({ key, stdout: '', stderr: '', status: 'SKIPPED' });
+            }
             continue;
         }
         // Check policy
         const policyResult = (0, policy_1.checkCommandPolicy)(cmdLine, config);
         if (!policyResult.allowed) {
+            const errorMsg = policyResult.reason || 'Command blocked by policy.';
             results.push({
                 commandKey: key,
                 commandLine: cmdLine,
                 status: 'BLOCKED',
                 stdout: '',
                 stderr: '',
-                errorMsg: policyResult.reason || 'Command blocked by policy.'
+                errorMsg
             });
+            if (onProgress) {
+                onProgress({ key, stdout: '', stderr: errorMsg, status: 'BLOCKED' });
+            }
             continue;
+        }
+        if (onProgress) {
+            onProgress({ key, stdout: '', stderr: '', status: 'RUNNING' });
         }
         // Execute command
         try {
             let stdout = '';
             let stderr = '';
             let exitCode = 0;
+            const handleChunk = (chunk, type) => {
+                if (type === 'stdout') {
+                    stdout += chunk;
+                }
+                else {
+                    stderr += chunk;
+                }
+                if (onProgress) {
+                    onProgress({ key, stdout, stderr, status: 'RUNNING' });
+                }
+            };
             if (config.useSandbox) {
                 if (!dockerAvailable) {
                     if (config.sandboxFallbackToHost) {
@@ -112,17 +198,13 @@ function runVerification(config, cwd = process.cwd()) {
                                 ? `${requireOption} ${execEnv.NODE_OPTIONS}`
                                 : requireOption;
                         }
-                        try {
-                            const output = cp.execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
-                            stdout = output;
+                        const res = await executeHost(cmdLine, cwd, execEnv, handleChunk);
+                        if (res.error) {
+                            exitCode = 99;
+                            stderr += (stderr ? '\n' : '') + `Execution error: ${res.error.message}`;
                         }
-                        catch (err) {
-                            exitCode = err.status !== undefined ? err.status : 1;
-                            stdout = err.stdout || '';
-                            stderr = err.stderr || '';
-                            if (err.message && !stderr && !stdout) {
-                                stderr = err.message;
-                            }
+                        else {
+                            exitCode = res.status !== null ? res.status : 1;
                         }
                         stderr = fallbackWarning + stderr;
                     }
@@ -130,6 +212,9 @@ function runVerification(config, cwd = process.cwd()) {
                         // sandbox fallback is false -> FAIL immediately
                         exitCode = 1;
                         stderr = "Sandbox verification failed: Docker is not available or daemon is not running, and sandboxFallbackToHost is disabled.";
+                        if (onProgress) {
+                            onProgress({ key, stdout: '', stderr, status: 'FAIL' });
+                        }
                     }
                 }
                 else {
@@ -179,16 +264,15 @@ function runVerification(config, cwd = process.cwd()) {
                     const image = config.sandboxImage || 'node:18-slim';
                     dockerArgs.push(image);
                     dockerArgs.push('sh', '-c', cmdLine);
-                    const spawnResult = exports.dockerUtils.executeDocker(dockerArgs, cwd, execEnv);
-                    stdout = spawnResult.stdout || '';
-                    stderr = spawnResult.stderr || '';
-                    if (spawnResult.status === null || spawnResult.status === undefined) {
+                    const spawnResult = await exports.dockerUtils.executeDocker(dockerArgs, cwd, execEnv, handleChunk);
+                    if (spawnResult.error) {
+                        exitCode = 1;
+                        stderr += (stderr ? '\n' : '') + `Docker execution error: ${spawnResult.error.message}`;
+                    }
+                    else if (spawnResult.status === null || spawnResult.status === undefined) {
                         exitCode = 1;
                         let errMsg = '';
-                        if (spawnResult.error) {
-                            errMsg = spawnResult.error.message;
-                        }
-                        else if (spawnResult.signal) {
+                        if (spawnResult.signal) {
                             errMsg = `Docker process terminated by signal: ${spawnResult.signal}`;
                         }
                         else {
@@ -219,37 +303,41 @@ function runVerification(config, cwd = process.cwd()) {
                         ? `${requireOption} ${execEnv.NODE_OPTIONS}`
                         : requireOption;
                 }
-                try {
-                    const output = cp.execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
-                    stdout = output;
+                const res = await executeHost(cmdLine, cwd, execEnv, handleChunk);
+                if (res.error) {
+                    exitCode = 99;
+                    stderr += (stderr ? '\n' : '') + `Execution error: ${res.error.message}`;
                 }
-                catch (err) {
-                    exitCode = err.status !== undefined ? err.status : 1;
-                    stdout = err.stdout || '';
-                    stderr = err.stderr || '';
-                    if (err.message && !stderr && !stdout) {
-                        stderr = err.message;
-                    }
+                else {
+                    exitCode = res.status !== null ? res.status : 1;
                 }
             }
+            const status = exitCode === 0 ? 'PASS' : 'FAIL';
             results.push({
                 commandKey: key,
                 commandLine: cmdLine,
-                status: exitCode === 0 ? 'PASS' : 'FAIL',
+                status,
                 exitCode,
                 stdout: (0, secret_redactor_1.redactSecrets)(stdout),
                 stderr: (0, secret_redactor_1.redactSecrets)(stderr)
             });
+            if (onProgress) {
+                onProgress({ key, stdout, stderr, status });
+            }
         }
         catch (err) {
+            const errorMsg = err.message || 'Execution error.';
             results.push({
                 commandKey: key,
                 commandLine: cmdLine,
                 status: 'FAIL',
                 exitCode: 99,
                 stdout: '',
-                stderr: (0, secret_redactor_1.redactSecrets)(err.message || 'Execution error.')
+                stderr: (0, secret_redactor_1.redactSecrets)(errorMsg)
             });
+            if (onProgress) {
+                onProgress({ key, stdout: '', stderr: errorMsg, status: 'FAIL' });
+            }
         }
     }
     // Check if everything else passed first before running coverage check

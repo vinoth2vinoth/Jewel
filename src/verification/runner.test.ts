@@ -13,7 +13,7 @@ function cleanupSandbox() {
   }
 }
 
-test('verification runner - full cycle', () => {
+test('verification runner - full cycle', async () => {
   cleanupSandbox();
   fs.mkdirSync(sandboxDir, { recursive: true });
 
@@ -29,7 +29,7 @@ test('verification runner - full cycle', () => {
     }
   };
 
-  const report = runVerification(config, sandboxDir);
+  const report = await runVerification(config, sandboxDir);
 
   // Check stats
   assert.strictEqual(report.overallStatus, 'FAIL'); // because test command failed
@@ -74,7 +74,7 @@ test('verification runner - full cycle', () => {
   cleanupSandbox();
 });
 
-test('verification runner - coverage validation', () => {
+test('verification runner - coverage validation', async () => {
   cleanupSandbox();
   fs.mkdirSync(sandboxDir, { recursive: true });
 
@@ -101,7 +101,7 @@ test('verification runner - coverage validation', () => {
     }
   };
 
-  const reportPass = runVerification(configPass, sandboxDir);
+  const reportPass = await runVerification(configPass, sandboxDir);
   assert.strictEqual(reportPass.overallStatus, 'PASS');
   
   const covResultPass = reportPass.results.find(r => r.commandKey === 'coverage');
@@ -117,7 +117,7 @@ test('verification runner - coverage validation', () => {
   };
   fs.writeFileSync(reportPath, JSON.stringify(mockCoverageFail), 'utf8');
 
-  const reportFail = runVerification(configPass, sandboxDir);
+  const reportFail = await runVerification(configPass, sandboxDir);
   assert.strictEqual(reportFail.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
   
   const covResultFail = reportFail.results.find(r => r.commandKey === 'coverage');
@@ -126,8 +126,10 @@ test('verification runner - coverage validation', () => {
   assert.ok(covResultFail.stderr.includes('"lines" (75%) is below'));
 
   // Case C: Missing coverage report file
-  fs.unlinkSync(reportPath);
-  const reportMissing = runVerification(configPass, sandboxDir);
+  if (fs.existsSync(reportPath)) {
+    fs.unlinkSync(reportPath);
+  }
+  const reportMissing = await runVerification(configPass, sandboxDir);
   assert.strictEqual(reportMissing.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
   
   const covResultMissing = reportMissing.results.find(r => r.commandKey === 'coverage');
@@ -138,7 +140,7 @@ test('verification runner - coverage validation', () => {
   cleanupSandbox();
 });
 
-test('verification runner - process auditing', () => {
+test('verification runner - process auditing', async () => {
   cleanupSandbox();
   fs.mkdirSync(sandboxDir, { recursive: true });
 
@@ -164,7 +166,7 @@ test('verification runner - process auditing', () => {
     }
   };
 
-  const reportWithAudit = runVerification(configWithAudit, sandboxDir);
+  const reportWithAudit = await runVerification(configWithAudit, sandboxDir);
   assert.strictEqual(reportWithAudit.overallStatus, 'FAIL');
   
   const testResult = reportWithAudit.results.find(r => r.commandKey === 'test');
@@ -182,7 +184,7 @@ test('verification runner - process auditing', () => {
     }
   };
 
-  const reportWithoutAudit = runVerification(configWithoutAudit, sandboxDir);
+  const reportWithoutAudit = await runVerification(configWithoutAudit, sandboxDir);
   const testResultNoAudit = reportWithoutAudit.results.find(r => r.commandKey === 'test');
   assert.ok(testResultNoAudit);
   assert.ok(!testResultNoAudit.stderr.includes('Jewel Process Auditor'));
@@ -190,7 +192,7 @@ test('verification runner - process auditing', () => {
   cleanupSandbox();
 });
 
-test('verification runner - sandbox fallback to host when docker is unavailable', (t) => {
+test('verification runner - sandbox fallback to host when docker is unavailable', async (t) => {
   cleanupSandbox();
   fs.mkdirSync(sandboxDir, { recursive: true });
 
@@ -208,7 +210,7 @@ test('verification runner - sandbox fallback to host when docker is unavailable'
     }
   };
 
-  const reportFallback = runVerification(configFallback, sandboxDir);
+  const reportFallback = await runVerification(configFallback, sandboxDir);
   assert.strictEqual(reportFallback.overallStatus, 'PASS');
   const testResultFallback = reportFallback.results.find(r => r.commandKey === 'test');
   assert.ok(testResultFallback);
@@ -227,7 +229,7 @@ test('verification runner - sandbox fallback to host when docker is unavailable'
     }
   };
 
-  const reportNoFallback = runVerification(configNoFallback, sandboxDir);
+  const reportNoFallback = await runVerification(configNoFallback, sandboxDir);
   assert.strictEqual(reportNoFallback.overallStatus, 'FAIL');
   const testResultNoFallback = reportNoFallback.results.find(r => r.commandKey === 'test');
   assert.ok(testResultNoFallback);
@@ -238,7 +240,7 @@ test('verification runner - sandbox fallback to host when docker is unavailable'
   cleanupSandbox();
 });
 
-test('verification runner - sandbox docker execution and command assembly', (t) => {
+test('verification runner - sandbox docker execution and command assembly', async (t) => {
   cleanupSandbox();
   fs.mkdirSync(sandboxDir, { recursive: true });
 
@@ -250,12 +252,17 @@ test('verification runner - sandbox docker execution and command assembly', (t) 
   let capturedCwd = '';
   let capturedEnv: any = null;
 
-  t.mock.method(dockerUtils, 'executeDocker', (args: string[], cwd: string, env: any) => {
+  t.mock.method(dockerUtils, 'executeDocker', async (args: string[], cwd: string, env: any, onChunk?: any) => {
     capturedArgs = args;
     capturedCwd = cwd;
     capturedEnv = env;
+    if (onChunk) {
+      onChunk('Docker command output', 'stdout');
+      onChunk('Docker warnings', 'stderr');
+    }
     return {
       status: 0,
+      signal: null,
       stdout: 'Docker command output',
       stderr: 'Docker warnings',
       error: undefined
@@ -280,7 +287,7 @@ test('verification runner - sandbox docker execution and command assembly', (t) 
     }
   };
 
-  const report = runVerification(config, sandboxDir);
+  const report = await runVerification(config, sandboxDir);
 
   // Check verification report status
   assert.strictEqual(report.overallStatus, 'PASS');
@@ -333,17 +340,17 @@ test('verification runner - sandbox docker execution and command assembly', (t) 
   cleanupSandbox();
 });
 
-test('verification runner - sandbox process error and signal handling', (t) => {
+test('verification runner - sandbox process error and signal handling', async (t) => {
   cleanupSandbox();
   fs.mkdirSync(sandboxDir, { recursive: true });
 
   t.mock.method(dockerUtils, 'isDockerAvailable', () => true);
 
   // Case A: spawnSync fails with error (status: null, error info present)
-  t.mock.method(dockerUtils, 'executeDocker', () => {
+  t.mock.method(dockerUtils, 'executeDocker', async () => {
     return {
       status: null,
-      signal: undefined,
+      signal: null,
       stdout: '',
       stderr: '',
       error: new Error('Docker daemon connection refused')
@@ -359,7 +366,7 @@ test('verification runner - sandbox process error and signal handling', (t) => {
     }
   };
 
-  const reportErr = runVerification(configErr, sandboxDir);
+  const reportErr = await runVerification(configErr, sandboxDir);
   assert.strictEqual(reportErr.overallStatus, 'FAIL');
   const testResultErr = reportErr.results.find(r => r.commandKey === 'test');
   assert.ok(testResultErr);
@@ -368,7 +375,7 @@ test('verification runner - sandbox process error and signal handling', (t) => {
   assert.ok(testResultErr.stderr.includes('Docker daemon connection refused'));
 
   // Case B: process terminated by signal (status: null, signal present)
-  t.mock.method(dockerUtils, 'executeDocker', () => {
+  t.mock.method(dockerUtils, 'executeDocker', async () => {
     return {
       status: null,
       signal: 'SIGKILL',
@@ -378,7 +385,7 @@ test('verification runner - sandbox process error and signal handling', (t) => {
     };
   });
 
-  const reportSig = runVerification(configErr, sandboxDir);
+  const reportSig = await runVerification(configErr, sandboxDir);
   assert.strictEqual(reportSig.overallStatus, 'FAIL');
   const testResultSig = reportSig.results.find(r => r.commandKey === 'test');
   assert.ok(testResultSig);
@@ -388,5 +395,3 @@ test('verification runner - sandbox process error and signal handling', (t) => {
 
   cleanupSandbox();
 });
-
-

@@ -1,0 +1,1165 @@
+﻿Found 36 test files to execute.
+TAP version 13
+# Subtest: agent adapter - mock adapter runs plan and proposePatch
+ok 1 - agent adapter - mock adapter runs plan and proposePatch
+  ---
+  duration_ms: 46.7837
+  type: 'test'
+  ...
+# Subtest: json-response - extractJsonObject cases
+ok 2 - json-response - extractJsonObject cases
+  ---
+  duration_ms: 17.8197
+  type: 'test'
+  ...
+# Subtest: json-response - validateTaskContractJson cases
+ok 3 - json-response - validateTaskContractJson cases
+  ---
+  duration_ms: 4.7005
+  type: 'test'
+  ...
+# Subtest: json-response - validatePatchProposalJson cases
+ok 4 - json-response - validatePatchProposalJson cases
+  ---
+  duration_ms: 13.5724
+  type: 'test'
+  ...
+# Subtest: json-response - validateReviewResultJson cases
+ok 5 - json-response - validateReviewResultJson cases
+  ---
+  duration_ms: 2.8614
+  type: 'test'
+  ...
+# Subtest: json-response - forbidden execution fields in other validators
+ok 6 - json-response - forbidden execution fields in other validators
+  ---
+  duration_ms: 2.235
+  type: 'test'
+  ...
+# Subtest: json-response - empty patch validation cases
+ok 7 - json-response - empty patch validation cases
+  ---
+  duration_ms: 1.7763
+  type: 'test'
+  ...
+# Subtest: json-response - validateTestCriticResultJson cases
+ok 8 - json-response - validateTestCriticResultJson cases
+  ---
+  duration_ms: 2.126
+  type: 'test'
+  ...
+# Subtest: json-response - validateTaskContractJson optional scope estimation validation
+ok 9 - json-response - validateTaskContractJson optional scope estimation validation
+  ---
+  duration_ms: 1.5826
+  type: 'test'
+  ...
+# Subtest: prompt-builder - planning prompt contains required rules
+ok 10 - prompt-builder - planning prompt contains required rules
+  ---
+  duration_ms: 6.1689
+  type: 'test'
+  ...
+# Subtest: prompt-builder - patch proposal prompt contains task contract constraints
+ok 11 - prompt-builder - patch proposal prompt contains task contract constraints
+  ---
+  duration_ms: 70.3342
+  type: 'test'
+  ...
+# Subtest: prompt-builder - diff review prompt contains diff
+ok 12 - prompt-builder - diff review prompt contains diff
+  ---
+  duration_ms: 6.4895
+  type: 'test'
+  ...
+# Subtest: prompt-builder - patch proposal prompt contains verification logs and critic feedback on repair
+ok 13 - prompt-builder - patch proposal prompt contains verification logs and critic feedback on repair
+  ---
+  duration_ms: 6.4129
+  type: 'test'
+  ...
+# Subtest: prompt-builder - buildTestCriticPrompt contains diff and verification results
+ok 14 - prompt-builder - buildTestCriticPrompt contains diff and verification results
+  ---
+  duration_ms: 7.2228
+  type: 'test'
+  ...
+# Subtest: provider-factory - createAgentAdapter cases
+ok 15 - provider-factory - createAgentAdapter cases
+  ---
+  duration_ms: 32.2624
+  type: 'test'
+  ...
+# Subtest: anthropic-adapter - plan throws when API key is missing
+ok 16 - anthropic-adapter - plan throws when API key is missing
+  ---
+  duration_ms: 12.8075
+  type: 'test'
+  ...
+# Subtest: anthropic-adapter - mocked fetch successfully generates plan
+ok 17 - anthropic-adapter - mocked fetch successfully generates plan
+  ---
+  duration_ms: 20.7424
+  type: 'test'
+  ...
+# Subtest: anthropic-adapter - mocked fetch successfully proposes patch
+ok 18 - anthropic-adapter - mocked fetch successfully proposes patch
+  ---
+  duration_ms: 43.1955
+  type: 'test'
+  ...
+# Subtest: anthropic-adapter - handles http non-200 cleanly
+ok 19 - anthropic-adapter - handles http non-200 cleanly
+  ---
+  duration_ms: 4351.7884
+  type: 'test'
+  ...
+# Subtest: anthropic-adapter - handles timeout cleanly
+ok 20 - anthropic-adapter - handles timeout cleanly
+  ---
+  duration_ms: 3965.3584
+  type: 'test'
+  ...
+# Subtest: gemini-adapter - plan throws when API key is missing
+ok 21 - gemini-adapter - plan throws when API key is missing
+  ---
+  duration_ms: 15.4496
+  type: 'test'
+  ...
+# Subtest: gemini-adapter - mocked fetch successfully generates plan
+ok 22 - gemini-adapter - mocked fetch successfully generates plan
+  ---
+  duration_ms: 20.4739
+  type: 'test'
+  ...
+# Subtest: gemini-adapter - mocked fetch successfully proposes patch
+ok 23 - gemini-adapter - mocked fetch successfully proposes patch
+  ---
+  duration_ms: 36.1766
+  type: 'test'
+  ...
+# Subtest: gemini-adapter - handles http non-200 cleanly
+ok 24 - gemini-adapter - handles http non-200 cleanly
+  ---
+  duration_ms: 4284.1207
+  type: 'test'
+  ...
+# [Warning] Unknown model "unknown-gemini-model" for provider "gemini". Tooling features may have unexpected behavior.
+# Subtest: gemini-adapter - handles timeout cleanly
+ok 25 - gemini-adapter - handles timeout cleanly
+  ---
+  duration_ms: 3953.2071
+  type: 'test'
+  ...
+# Subtest: gemini-adapter - request includes JSON schema config
+ok 26 - gemini-adapter - request includes JSON schema config
+  ---
+  duration_ms: 16.3104
+  type: 'test'
+  ...
+# Subtest: gemini-adapter - blocks unsupported models by default
+ok 27 - gemini-adapter - blocks unsupported models by default
+  ---
+  duration_ms: 6.3763
+  type: 'test'
+  ...
+# Subtest: http-client - 429 status code retries and succeeds on next attempt
+ok 28 - http-client - 429 status code retries and succeeds on next attempt
+  ---
+  duration_ms: 1601.1443
+  type: 'test'
+  ...
+# Subtest: http-client - 500 status code retries and fails after maxRetries
+ok 29 - http-client - 500 status code retries and fails after maxRetries
+  ---
+  duration_ms: 4239.8674
+  type: 'test'
+  ...
+# Subtest: http-client - 401 status code does not retry and fails immediately
+ok 30 - http-client - 401 status code does not retry and fails immediately
+  ---
+  duration_ms: 14.293
+  type: 'test'
+  ...
+# Subtest: http-client - secrets are redacted from error outputs
+ok 31 - http-client - secrets are redacted from error outputs
+  ---
+  duration_ms: 17.6753
+  type: 'test'
+  ...
+# Subtest: openai-adapter - plan throws when API key is missing
+ok 32 - openai-adapter - plan throws when API key is missing
+  ---
+  duration_ms: 11.1128
+  type: 'test'
+  ...
+# Subtest: openai-adapter - mocked fetch successfully generates plan
+ok 33 - openai-adapter - mocked fetch successfully generates plan
+  ---
+  duration_ms: 18.0581
+  type: 'test'
+  ...
+# Subtest: openai-adapter - mocked fetch successfully proposes patch
+ok 34 - openai-adapter - mocked fetch successfully proposes patch
+  ---
+  duration_ms: 34.3555
+  type: 'test'
+  ...
+# Subtest: openai-adapter - handles http non-200 cleanly
+ok 35 - openai-adapter - handles http non-200 cleanly
+  ---
+  duration_ms: 3332.8417
+  type: 'test'
+  ...
+# Subtest: openai-adapter - request includes json_schema response format
+ok 36 - openai-adapter - request includes json_schema response format
+  ---
+  duration_ms: 9.7799
+  type: 'test'
+  ...
+# Subtest: openai-adapter - blocks unsupported models by default
+ok 37 - openai-adapter - blocks unsupported models by default
+  ---
+  duration_ms: 4.5028
+  type: 'test'
+  ...
+# Subtest: openai-adapter - permits unsupported models when fallback is allowed
+ok 38 - openai-adapter - permits unsupported models when fallback is allowed
+  ---
+  duration_ms: 5.3028
+  type: 'test'
+  ...
+# Subtest: openrouter-adapter - plan throws when API key is missing
+ok 39 - openrouter-adapter - plan throws when API key is missing
+  ---
+  duration_ms: 9.8091
+  type: 'test'
+  ...
+# Subtest: openrouter-adapter - mocked fetch successfully generates plan
+ok 40 - openrouter-adapter - mocked fetch successfully generates plan
+  ---
+  duration_ms: 32.536
+  type: 'test'
+  ...
+# Subtest: openrouter-adapter - mocked fetch successfully proposes patch
+ok 41 - openrouter-adapter - mocked fetch successfully proposes patch
+  ---
+  duration_ms: 50.6077
+  type: 'test'
+  ...
+# Subtest: openrouter-adapter - handles http non-200 cleanly
+ok 42 - openrouter-adapter - handles http non-200 cleanly
+  ---
+  duration_ms: 4129.8285
+  type: 'test'
+  ...
+# Subtest: openrouter-adapter - handles timeout cleanly
+ok 43 - openrouter-adapter - handles timeout cleanly
+  ---
+  duration_ms: 3332.4943
+  type: 'test'
+  ...
+# Skipping real LLM provider tests (JEWEL_RUN_REAL_LLM_TESTS is not set to true).
+# Subtest: real provider smoke tests - only runs when JEWEL_RUN_REAL_LLM_TESTS is true
+ok 44 - real provider smoke tests - only runs when JEWEL_RUN_REAL_LLM_TESTS is true
+  ---
+  duration_ms: 8.2325
+  type: 'test'
+  ...
+# Subtest: response normalizer - OpenAI response normalizes
+ok 45 - response normalizer - OpenAI response normalizes
+  ---
+  duration_ms: 32.1569
+  type: 'test'
+  ...
+# Subtest: response normalizer - Gemini response normalizes
+ok 46 - response normalizer - Gemini response normalizes
+  ---
+  duration_ms: 2.555
+  type: 'test'
+  ...
+# Subtest: response normalizer - Anthropic response normalizes
+ok 47 - response normalizer - Anthropic response normalizes
+  ---
+  duration_ms: 2.1693
+  type: 'test'
+  ...
+# Subtest: response normalizer - missing usage is handled safely
+ok 48 - response normalizer - missing usage is handled safely
+  ---
+  duration_ms: 1.3475
+  type: 'test'
+  ...
+# Subtest: response normalizer - non-text response throws error
+ok 49 - response normalizer - non-text response throws error
+  ---
+  duration_ms: 3.535
+  type: 'test'
+  ...
+# Subtest: response normalizer - Anthropic response tool_use normalizes
+ok 50 - response normalizer - Anthropic response tool_use normalizes
+  ---
+  duration_ms: 1.6901
+  type: 'test'
+  ...
+# Subtest: structured schema - schemas compile as valid objects
+ok 51 - structured schema - schemas compile as valid objects
+  ---
+  duration_ms: 5.5701
+  type: 'test'
+  ...
+# Subtest: structured schema - task contract validator checks required fields
+ok 52 - structured schema - task contract validator checks required fields
+  ---
+  duration_ms: 13.7188
+  type: 'test'
+  ...
+# Subtest: structured schema - forbidden execution fields are rejected
+ok 53 - structured schema - forbidden execution fields are rejected
+  ---
+  duration_ms: 3.0912
+  type: 'test'
+  ...
+# Subtest: structured schema - empty patch requires noChangeNeeded and noChangeReason
+ok 54 - structured schema - empty patch requires noChangeNeeded and noChangeReason
+  ---
+  duration_ms: 4.2905
+  type: 'test'
+  ...
+# Subtest: structured schema - review result validator checks values
+ok 55 - structured schema - review result validator checks values
+  ---
+  duration_ms: 1.8886
+  type: 'test'
+  ...
+# Running Jewel Repository Safety and Quality Audit...
+# --- Audit Check List ---
+#   [FAIL] Jewel Config File: jewel.config.json is missing.
+#   [FAIL] Verification Commands: Cannot audit verification commands because configuration is invalid.
+#   [FAIL] Protected Files List: Cannot audit protected files configuration.
+#   [FAIL] Dangerous Command Policy: Cannot audit dangerous command policy.
+#   [FAIL] AGENTS.md File: AGENTS.md is missing. AI coding agents may make unaligned modifications.
+#   [WARN] Jewel Skills: .jewel/skills directory is missing.
+#   [WARN] Git Cleanliness: Not a git repository. Git cleanliness tracking is unavailable.
+#   [WARN] Package Scripts: package.json is missing.
+#   [WARN] Test Suite Presence: No test directories or test files (e.g. *.test.*, *.spec.*) detected.
+#   [PASS] Risky Working Tree Changes: Not git repository (skipped).
+# Audit completed: 1 Passes, 4 Warnings, 5 Failures.
+# Subtest: audit checks - generates markdown and json reports
+ok 56 - audit checks - generates markdown and json reports
+  ---
+  duration_ms: 282.4158
+  type: 'test'
+  ...
+# Subtest: diff command - print diff statistics from session
+ok 57 - diff command - print diff statistics from session
+  ---
+  duration_ms: 39.3078
+  type: 'test'
+  ...
+# Running Jewel Diagnostics (Doctor)...
+# [PASS] Node.js version is v22.16.0 (>= 18 required)
+# [PASS] npm version is 11.6.3
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# [FAIL] Git is not installed or not available on your PATH.
+# [WARN] jewel.config.json is missing. Please run "jewel init".
+# [WARN] AGENTS.md is missing. Agents will not have access to Jewel constraints.
+# [WARN] .jewel control directory is missing.
+# [PASS] LLM Provider is set to "none". API key checks skipped.
+# Diagnostics finished with 1 Failures and 3 Warnings.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# 'git' is not recognized as an internal or external command,
+# operable program or batch file.
+# Subtest: doctor checks - execution with mock exit
+ok 58 - doctor checks - execution with mock exit
+  ---
+  duration_ms: 4584.4377
+  type: 'test'
+  ...
+# Subtest: doctor checks - provider-specific API key warnings
+ok 59 - doctor checks - provider-specific API key warnings
+  ---
+  duration_ms: 40315.5819
+  type: 'test'
+  ...
+# Subtest: doctor checks - preferredProviders diagnostics
+ok 60 - doctor checks - preferredProviders diagnostics
+  ---
+  duration_ms: 4431.0876
+  type: 'test'
+  ...
+# Checking LLM Provider Readiness for "none"...
+# Checking LLM Provider Readiness for "gemini"...
+# [-] Provider readiness check failed: Missing API key environment variable "GEMINI_API_KEY" for provider "gemini".
+# [+] Provider readiness report written to .jewel/reports/provider-ready.md and .json
+# Subtest: provider-ready - provider none is invalid
+ok 61 - provider-ready - provider none is invalid
+  ---
+  duration_ms: 10.5049
+  type: 'test'
+  ...
+# Subtest: provider-ready - missing key fails cleanly and writes report
+ok 62 - provider-ready - missing key fails cleanly and writes report
+  ---
+  duration_ms: 47.8113
+  type: 'test'
+  ...
+# Subtest: provider-ready - mocked gemini readiness check passes
+ok 63 - provider-ready - mocked gemini readiness check passes
+  ---
+  duration_ms: 48.0442
+  type: 'test'
+  ...
+# Subtest: provider-ready - mocked openrouter readiness check passes
+ok 64 - provider-ready - mocked openrouter readiness check passes
+  ---
+  duration_ms: 33.0527
+  type: 'test'
+  ...
+# Subtest: release-check - successful validation on compliant workspace
+not ok 65 - release-check - successful validation on compliant workspace
+  ---
+  duration_ms: 286.918
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\release-check.test.js:91:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createMockReleaseWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\release-check.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\release-check.test.js:103:23)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: release-check - warns on missing docs and below version target
+not ok 66 - release-check - warns on missing docs and below version target
+  ---
+  duration_ms: 217.3069
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\release-check.test.js:120:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createMockReleaseWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\release-check.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\release-check.test.js:133:23)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: release-check - dogfood fixture check behaves correctly
+not ok 67 - release-check - dogfood fixture check behaves correctly
+  ---
+  duration_ms: 221.2277
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\release-check.test.js:147:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createMockReleaseWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\release-check.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\release-check.test.js:159:23)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Skipping test due to git failure: Error: Command failed: git init
+#     at genericNodeError (node:internal/errors:983:15)
+#     at wrappedFn (node:internal/errors:537:14)
+#     at checkExecSyncError (node:child_process:882:11)
+#     at execSync (node:child_process:954:15)
+#     at TestContext.<anonymous> (C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\rollback.test.js:50:9)
+#     at Test.runInAsyncScope (node:async_hooks:214:14)
+#     at Test.run (node:internal/test_runner/test:1047:25)
+#     at Test.start (node:internal/test_runner/test:944:17)
+#     at startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17) {
+#   status: 1,
+#   signal: null,
+#   output: [ null, null, null ],
+#   pid: 17864,
+#   stdout: null,
+#   stderr: null
+# }
+# Subtest: rollback command - safety hardening checks
+ok 68 - rollback command - safety hardening checks
+  ---
+  duration_ms: 256.4188
+  type: 'test'
+  ...
+# Subtest: runTask Critic & Retry Integration Loops
+    # Subtest: repair loop successfully retries and passes
+    not ok 1 - repair loop successfully retries and passes
+      ---
+      duration_ms: 371.6199
+      type: 'test'
+      location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:106:29'
+      failureType: 'testCodeFailure'
+      error: 'Command failed: git init'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        genericNodeError (node:internal/errors:983:15)
+        wrappedFn (node:internal/errors:537:14)
+        checkExecSyncError (node:child_process:882:11)
+        execSync (node:child_process:954:15)
+        createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:49:34)
+        TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:107:25)
+        Test.runInAsyncScope (node:async_hooks:214:14)
+        Test.run (node:internal/test_runner/test:1047:25)
+        Test.start (node:internal/test_runner/test:944:17)
+        node:internal/test_runner/test:1440:71
+      ...
+    # Subtest: repair loop hits retry limit and stops with RETRY_LIMIT_REACHED
+    not ok 2 - repair loop hits retry limit and stops with RETRY_LIMIT_REACHED
+      ---
+      duration_ms: 293.2775
+      type: 'test'
+      location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:207:29'
+      failureType: 'testCodeFailure'
+      error: 'Command failed: git init'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        genericNodeError (node:internal/errors:983:15)
+        wrappedFn (node:internal/errors:537:14)
+        checkExecSyncError (node:child_process:882:11)
+        execSync (node:child_process:954:15)
+        createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:49:34)
+        TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:208:25)
+        Test.runInAsyncScope (node:async_hooks:214:14)
+        Test.run (node:internal/test_runner/test:1047:25)
+        Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+        Test.postRun (node:internal/test_runner/test:1173:19)
+      ...
+    # Subtest: repair loop stops early on same verification failure logs
+    not ok 3 - repair loop stops early on same verification failure logs
+      ---
+      duration_ms: 423.6814
+      type: 'test'
+      location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:306:29'
+      failureType: 'testCodeFailure'
+      error: 'Command failed: git init'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        genericNodeError (node:internal/errors:983:15)
+        wrappedFn (node:internal/errors:537:14)
+        checkExecSyncError (node:child_process:882:11)
+        execSync (node:child_process:954:15)
+        createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:49:34)
+        TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:307:25)
+        Test.runInAsyncScope (node:async_hooks:214:14)
+        Test.run (node:internal/test_runner/test:1047:25)
+        Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+        Test.postRun (node:internal/test_runner/test:1173:19)
+      ...
+    # Subtest: repair loop stops on UNKNOWN verdict with NEEDS_HUMAN_REVIEW
+    not ok 4 - repair loop stops on UNKNOWN verdict with NEEDS_HUMAN_REVIEW
+      ---
+      duration_ms: 352.9804
+      type: 'test'
+      location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:405:29'
+      failureType: 'testCodeFailure'
+      error: 'Command failed: git init'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        genericNodeError (node:internal/errors:983:15)
+        wrappedFn (node:internal/errors:537:14)
+        checkExecSyncError (node:child_process:882:11)
+        execSync (node:child_process:954:15)
+        createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:49:34)
+        TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:406:25)
+        Test.runInAsyncScope (node:async_hooks:214:14)
+        Test.run (node:internal/test_runner/test:1047:25)
+        Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+        Test.postRun (node:internal/test_runner/test:1173:19)
+      ...
+    # Subtest: repair loop detects bad generated test and returns GENERATED_TEST_SUSPECT
+    not ok 5 - repair loop detects bad generated test and returns GENERATED_TEST_SUSPECT
+      ---
+      duration_ms: 348.3339
+      type: 'test'
+      location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:499:29'
+      failureType: 'testCodeFailure'
+      error: 'Command failed: git init'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        genericNodeError (node:internal/errors:983:15)
+        wrappedFn (node:internal/errors:537:14)
+        checkExecSyncError (node:child_process:882:11)
+        execSync (node:child_process:954:15)
+        createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:49:34)
+        TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:500:25)
+        Test.runInAsyncScope (node:async_hooks:214:14)
+        Test.run (node:internal/test_runner/test:1047:25)
+        Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+        Test.postRun (node:internal/test_runner/test:1173:19)
+      ...
+    # Subtest: repair loop blocks modification of existing tests with EXISTING_TEST_MODIFIED
+    not ok 6 - repair loop blocks modification of existing tests with EXISTING_TEST_MODIFIED
+      ---
+      duration_ms: 445.9093
+      type: 'test'
+      location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:593:29'
+      failureType: 'testCodeFailure'
+      error: 'Command failed: git init'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        genericNodeError (node:internal/errors:983:15)
+        wrappedFn (node:internal/errors:537:14)
+        checkExecSyncError (node:child_process:882:11)
+        execSync (node:child_process:954:15)
+        createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:49:34)
+        TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run-critic-retry.test.js:594:25)
+        Test.runInAsyncScope (node:async_hooks:214:14)
+        Test.run (node:internal/test_runner/test:1047:25)
+        Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+        Test.postRun (node:internal/test_runner/test:1173:19)
+      ...
+    1..6
+not ok 69 - runTask Critic & Retry Integration Loops
+  ---
+  duration_ms: 2260.4035
+  type: 'suite'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run-critic-retry.test.js:105:26'
+  failureType: 'subtestsFailed'
+  error: '6 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: run command - OpenAI integration safe patch writes successfully
+not ok 70 - run command - OpenAI integration safe patch writes successfully
+  ---
+  duration_ms: 496.1483
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:89:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:90:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: run command - OpenAI integration blocked for parent traversal
+not ok 71 - run command - OpenAI integration blocked for parent traversal
+  ---
+  duration_ms: 372.3216
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:175:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:176:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - OpenAI integration blocked for absolute path
+not ok 72 - run command - OpenAI integration blocked for absolute path
+  ---
+  duration_ms: 213.4744
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:253:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:254:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - CLI provider overrides and validation
+not ok 73 - run command - CLI provider overrides and validation
+  ---
+  duration_ms: 464.7229
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:330:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:331:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - Gemini integration safe patch and unsafe blocking
+not ok 74 - run command - Gemini integration safe patch and unsafe blocking
+  ---
+  duration_ms: 518.5739
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:430:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:431:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - Anthropic integration safe patch and unsafe blocking
+not ok 75 - run command - Anthropic integration safe patch and unsafe blocking
+  ---
+  duration_ms: 323.5849
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:538:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:539:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - OpenRouter integration safe patch and unsafe blocking
+not ok 76 - run command - OpenRouter integration safe patch and unsafe blocking
+  ---
+  duration_ms: 349.8517
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:639:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:640:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - dry-run does not write files, create checkpoints, or call providers
+not ok 77 - run command - dry-run does not write files, create checkpoints, or call providers
+  ---
+  duration_ms: 586.3783
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:743:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:744:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: run command - provider none metadata is correct in report
+not ok 78 - run command - provider none metadata is correct in report
+  ---
+  duration_ms: 466.7831
+  type: 'test'
+  location: 'C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\cli\\commands\\run.test.js:771:25'
+  failureType: 'testCodeFailure'
+  error: 'Command failed: git init'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    genericNodeError (node:internal/errors:983:15)
+    wrappedFn (node:internal/errors:537:14)
+    checkExecSyncError (node:child_process:882:11)
+    execSync (node:child_process:954:15)
+    createTempWorkspace (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:49:34)
+    TestContext.<anonymous> (C:\Users\vinot\Documents\IM\Active Projects\Project Jewel\dist\cli\commands\run.test.js:772:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+  ...
+# Subtest: smoke-provider - provider none is invalid
+ok 79 - smoke-provider - provider none is invalid
+  ---
+  duration_ms: 18.2529
+  type: 'test'
+  ...
+# Subtest: smoke-provider - missing API key fails cleanly
+ok 80 - smoke-provider - missing API key fails cleanly
+  ---
+  duration_ms: 3.0824
+  type: 'test'
+  ...
+# Subtest: smoke-provider - mocked smoke test passes
+ok 81 - smoke-provider - mocked smoke test passes
+  ---
+  duration_ms: 80.9002
+  type: 'test'
+  ...
+# Subtest: smoke-provider - no-write flag skips writing report
+ok 82 - smoke-provider - no-write flag skips writing report
+  ---
+  duration_ms: 11.4097
+  type: 'test'
+  ...
+# Subtest: version command prints package and node version info
+ok 83 - version command prints package and node version info
+  ---
+  duration_ms: 16.3775
+  type: 'test'
+  ...
+# Subtest: config loader - default config
+ok 84 - config loader - default config
+  ---
+  duration_ms: 12.4261
+  type: 'test'
+  ...
+# Subtest: config loader - valid partial config overrides defaults
+ok 85 - config loader - valid partial config overrides defaults
+  ---
+  duration_ms: 1.4546
+  type: 'test'
+  ...
+# Subtest: config loader - invalid types throw error
+ok 86 - config loader - invalid types throw error
+  ---
+  duration_ms: 13.983
+  type: 'test'
+  ...
+# Subtest: Retry Policy and Bounded Loops
+    # Subtest: maxRetries is respected
+    ok 1 - maxRetries is respected
+      ---
+      duration_ms: 9.5955
+      type: 'test'
+      ...
+    # Subtest: same failure repeated twice stops
+    ok 2 - same failure repeated twice stops
+      ---
+      duration_ms: 1.9003
+      type: 'test'
+      ...
+    # Subtest: low confidence critic verdict stops immediately
+    ok 3 - low confidence critic verdict stops immediately
+      ---
+      duration_ms: 1.653
+      type: 'test'
+      ...
+    # Subtest: UNKNOWN verdict stops immediately
+    ok 4 - UNKNOWN verdict stops immediately
+      ---
+      duration_ms: 0.8859
+      type: 'test'
+      ...
+    # Subtest: existing test modification blocks immediately
+    ok 5 - existing test modification blocks immediately
+      ---
+      duration_ms: 0.8743
+      type: 'test'
+      ...
+    1..5
+ok 87 - Retry Policy and Bounded Loops
+  ---
+  duration_ms: 23.6144
+  type: 'suite'
+  ...
+# Subtest: session - validate contract schema
+ok 88 - session - validate contract schema
+  ---
+  duration_ms: 22.908
+  type: 'test'
+  ...
+# Subtest: session - risk assessment
+ok 89 - session - risk assessment
+  ---
+  duration_ms: 67.858
+  type: 'test'
+  ...
+# Subtest: session - create session and save contract
+ok 90 - session - create session and save contract
+  ---
+  duration_ms: 65.537
+  type: 'test'
+  ...
+# Subtest: critic - clean diff with passing verification passes
+ok 91 - critic - clean diff with passing verification passes
+  ---
+  duration_ms: 8.2415
+  type: 'test'
+  ...
+# Subtest: critic - missing verification blocks when required
+ok 92 - critic - missing verification blocks when required
+  ---
+  duration_ms: 1.7922
+  type: 'test'
+  ...
+# Subtest: critic - failing verification blocks
+ok 93 - critic - failing verification blocks
+  ---
+  duration_ms: 5.2298
+  type: 'test'
+  ...
+# Subtest: critic - unplanned file edits block in strict mode
+ok 94 - critic - unplanned file edits block in strict mode
+  ---
+  duration_ms: 1.9853
+  type: 'test'
+  ...
+# Subtest: diff guard - non-git file comparisons
+ok 95 - diff guard - non-git file comparisons
+  ---
+  duration_ms: 269.6715
+  type: 'test'
+  ...
+# Subtest: path-policy - matchesProtectedPattern patterns
+ok 96 - path-policy - matchesProtectedPattern patterns
+  ---
+  duration_ms: 114.2035
+  type: 'test'
+  ...
+# Subtest: path-policy - Windows backslash paths normalize and match correctly
+ok 97 - path-policy - Windows backslash paths normalize and match correctly
+  ---
+  duration_ms: 8.1509
+  type: 'test'
+  ...
+# Subtest: path-policy - boundary checks and escape detection
+ok 98 - path-policy - boundary checks and escape detection
+  ---
+  duration_ms: 8.8931
+  type: 'test'
+  ...
+# Subtest: path-policy - dependencies and lockfiles identification
+ok 99 - path-policy - dependencies and lockfiles identification
+  ---
+  duration_ms: 26.7055
+  type: 'test'
+  ...
+# Subtest: command policy - allowed commands
+ok 100 - command policy - allowed commands
+  ---
+  duration_ms: 28.004
+  type: 'test'
+  ...
+# Subtest: command policy - blocked dangerous commands
+ok 101 - command policy - blocked dangerous commands
+  ---
+  duration_ms: 2.4488
+  type: 'test'
+  ...
+# Subtest: command policy - env files protection
+ok 102 - command policy - env files protection
+  ---
+  duration_ms: 0.9805
+  type: 'test'
+  ...
+# Subtest: command policy - ssh keys protection
+ok 103 - command policy - ssh keys protection
+  ---
+  duration_ms: 0.9
+  type: 'test'
+  ...
+# Subtest: command policy - new dependencies policy toggle
+ok 104 - command policy - new dependencies policy toggle
+  ---
+  duration_ms: 2.3246
+  type: 'test'
+  ...
+# Subtest: command policy - git push policy toggle
+ok 105 - command policy - git push policy toggle
+  ---
+  duration_ms: 0.9571
+  type: 'test'
+  ...
+# Subtest: command policy - safety hardening checks v0.2
+ok 106 - command policy - safety hardening checks v0.2
+  ---
+  duration_ms: 4.2005
+  type: 'test'
+  ...
+# Subtest: report redaction audit - clean reports pass
+ok 107 - report redaction audit - clean reports pass
+  ---
+  duration_ms: 87.5321
+  type: 'test'
+  ...
+# Subtest: report redaction audit - flags OpenAI sk- style keys
+ok 108 - report redaction audit - flags OpenAI sk- style keys
+  ---
+  duration_ms: 45.4241
+  type: 'test'
+  ...
+# Subtest: report redaction audit - flags GitHub PATs
+ok 109 - report redaction audit - flags GitHub PATs
+  ---
+  duration_ms: 30.6205
+  type: 'test'
+  ...
+# Subtest: safe-patch-writer - validation and writing checks
+ok 110 - safe-patch-writer - validation and writing checks
+  ---
+  duration_ms: 280.6479
+  type: 'test'
+  ...
+# Subtest: safe-patch-writer - transactional rollback on failure
+ok 111 - safe-patch-writer - transactional rollback on failure
+  ---
+  duration_ms: 62.2118
+  type: 'test'
+  ...
+# Subtest: secret-redactor - redactSecrets checks
+ok 112 - secret-redactor - redactSecrets checks
+  ---
+  duration_ms: 15.3449
+  type: 'test'
+  ...
+# Subtest: skill loader - parse skill markdown
+ok 113 - skill loader - parse skill markdown
+  ---
+  duration_ms: 8.015
+  type: 'test'
+  ...
+# Skipping git checkpoint integration test: Error: Command failed: git init
+#     at genericNodeError (node:internal/errors:983:15)
+#     at wrappedFn (node:internal/errors:537:14)
+#     at checkExecSyncError (node:child_process:882:11)
+#     at execSync (node:child_process:954:15)
+#     at TestContext.<anonymous> (C:\\Users\\vinot\\Documents\\IM\\Active Projects\\Project Jewel\\dist\\storage\\git.test.js:84:9)
+#     at Test.runInAsyncScope (node:async_hooks:214:14)
+#     at Test.run (node:internal/test_runner/test:1047:25)
+#     at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#     at Test.postRun (node:internal/test_runner/test:1173:19)
+#     at Test.run (node:internal/test_runner/test:1101:12) {
+#   status: 1,
+#   signal: null,
+#   output: [ null, null, null ],
+#   pid: 13628,
+#   stdout: null,
+#   stderr: null
+# }
+# Subtest: backup & restore directory (non-Git fallback)
+ok 114 - backup & restore directory (non-Git fallback)
+  ---
+  duration_ms: 115.8479
+  type: 'test'
+  ...
+# Subtest: git checkpoint and rollback flow
+ok 115 - git checkpoint and rollback flow
+  ---
+  duration_ms: 394.63
+  type: 'test'
+  ...
+# Subtest: verification runner - full cycle
+ok 116 - verification runner - full cycle
+  ---
+  duration_ms: 4440.2874
+  type: 'test'
+  ...
+# Subtest: Test Modification Policy
+    # Subtest: appending new tests at end of file passes
+    ok 1 - appending new tests at end of file passes
+      ---
+      duration_ms: 169.9484
+      type: 'test'
+      ...
+    # Subtest: changing an existing assertion fails
+    ok 2 - changing an existing assertion fails
+      ---
+      duration_ms: 9.8947
+      type: 'test'
+      ...
+    # Subtest: changing an existing test name fails
+    ok 3 - changing an existing test name fails
+      ---
+      duration_ms: 18.7867
+      type: 'test'
+      ...
+    # Subtest: adding an import for new tests warns, not blocks
+    ok 4 - adding an import for new tests warns, not blocks
+      ---
+      duration_ms: 12.5361
+      type: 'test'
+      ...
+    # Subtest: adding an import without appending tests blocks
+    ok 5 - adding an import without appending tests blocks
+      ---
+      duration_ms: 9.4287
+      type: 'test'
+      ...
+    1..5
+ok 117 - Test Modification Policy
+  ---
+  duration_ms: 233.1204
+  type: 'suite'
+  ...
+1..117
+# tests 130
+# suites 3
+# pass 112
+# fail 18
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 54146.1659

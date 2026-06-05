@@ -42,6 +42,7 @@ Options:
   --temperature <temp>       Override temperature.
   --max-output-tokens <n>    Override max output tokens.
   --dry-run                  Preview the task contract and files scope without creating a session or applying changes.
+  --ui                       Start a local HTTP server for interactive dashboard.
   -h, --help                 Print this help menu.
 `);
 }
@@ -63,7 +64,7 @@ async function main() {
                 break;
             }
             case 'verify': {
-                (0, verify_1.runVerify)();
+                await (0, verify_1.runVerify)();
                 break;
             }
             case 'status': {
@@ -169,6 +170,7 @@ async function main() {
                 let temperatureOverride;
                 let maxOutputTokensOverride;
                 let dryRun = false;
+                let uiFlag = false;
                 const remainingArgs = args.slice(2);
                 for (let i = 0; i < remainingArgs.length; i++) {
                     const arg = remainingArgs[i];
@@ -222,6 +224,9 @@ async function main() {
                     else if (arg === '--dry-run') {
                         dryRun = true;
                     }
+                    else if (arg === '--ui') {
+                        uiFlag = true;
+                    }
                 }
                 const overrides = {
                     provider: providerOverride,
@@ -229,7 +234,7 @@ async function main() {
                     temperature: temperatureOverride,
                     maxOutputTokens: maxOutputTokensOverride
                 };
-                await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun);
+                await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun, uiFlag);
                 break;
             }
             default: {

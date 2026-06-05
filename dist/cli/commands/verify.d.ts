@@ -1,1 +1,1 @@
-export declare function runVerify(cwd?: string): void;
+export declare function runVerify(cwd?: string): Promise<void>;

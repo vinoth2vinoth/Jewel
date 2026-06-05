@@ -37,12 +37,98 @@ export const dockerUtils = {
       return false;
     }
   },
-  executeDocker(args: string[], cwd: string, env: Record<string, string | undefined>) {
-    return cp.spawnSync('docker', args, { cwd, stdio: 'pipe', encoding: 'utf8', env });
+  executeDocker(
+    args: string[],
+    cwd: string,
+    env: Record<string, string | undefined>,
+    onChunk?: (chunk: string, type: 'stdout' | 'stderr') => void
+  ): Promise<{ status: number | null; signal: string | null; stdout: string; stderr: string; error?: Error }> {
+    return new Promise((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let error: Error | undefined;
+      let completed = false;
+
+      const child = cp.spawn('docker', args, { cwd, env });
+
+      child.stdout.on('data', (data) => {
+        const str = data.toString();
+        stdout += str;
+        if (onChunk) onChunk(str, 'stdout');
+      });
+
+      child.stderr.on('data', (data) => {
+        const str = data.toString();
+        stderr += str;
+        if (onChunk) onChunk(str, 'stderr');
+      });
+
+      child.on('error', (err) => {
+        error = err;
+        if (!completed) {
+          completed = true;
+          resolve({ status: null, signal: null, stdout, stderr, error });
+        }
+      });
+
+      child.on('close', (status, signal) => {
+        if (!completed) {
+          completed = true;
+          resolve({ status, signal, stdout, stderr, error });
+        }
+      });
+    });
   }
 };
 
-export function runVerification(config: JewelConfig, cwd: string = process.cwd()): VerificationReport {
+function executeHost(
+  cmdLine: string,
+  cwd: string,
+  env: Record<string, string | undefined>,
+  onChunk?: (chunk: string, type: 'stdout' | 'stderr') => void
+): Promise<{ status: number | null; signal: string | null; stdout: string; stderr: string; error?: Error }> {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let error: Error | undefined;
+    let completed = false;
+
+    const child = cp.spawn(cmdLine, [], { cwd, env, shell: true });
+
+    child.stdout.on('data', (data) => {
+      const str = data.toString();
+      stdout += str;
+      if (onChunk) onChunk(str, 'stdout');
+    });
+
+    child.stderr.on('data', (data) => {
+      const str = data.toString();
+      stderr += str;
+      if (onChunk) onChunk(str, 'stderr');
+    });
+
+    child.on('error', (err) => {
+      error = err;
+      if (!completed) {
+        completed = true;
+        resolve({ status: null, signal: null, stdout, stderr, error });
+      }
+    });
+
+    child.on('close', (status, signal) => {
+      if (!completed) {
+        completed = true;
+        resolve({ status, signal, stdout, stderr, error });
+      }
+    });
+  });
+}
+
+export async function runVerification(
+  config: JewelConfig,
+  cwd: string = process.cwd(),
+  onProgress?: (progress: { key: string, stdout: string, stderr: string, status: 'RUNNING' | 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED' }) => void
+): Promise<VerificationReport> {
   const results: CommandResult[] = [];
   const commands = config.commands;
 
@@ -64,21 +150,32 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
         stdout: '',
         stderr: ''
       });
+      if (onProgress) {
+        onProgress({ key, stdout: '', stderr: '', status: 'SKIPPED' });
+      }
       continue;
     }
 
     // Check policy
     const policyResult = checkCommandPolicy(cmdLine, config);
     if (!policyResult.allowed) {
+      const errorMsg = policyResult.reason || 'Command blocked by policy.';
       results.push({
         commandKey: key,
         commandLine: cmdLine,
         status: 'BLOCKED',
         stdout: '',
         stderr: '',
-        errorMsg: policyResult.reason || 'Command blocked by policy.'
+        errorMsg
       });
+      if (onProgress) {
+        onProgress({ key, stdout: '', stderr: errorMsg, status: 'BLOCKED' });
+      }
       continue;
+    }
+
+    if (onProgress) {
+      onProgress({ key, stdout: '', stderr: '', status: 'RUNNING' });
     }
 
     // Execute command
@@ -86,6 +183,17 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
       let stdout = '';
       let stderr = '';
       let exitCode = 0;
+
+      const handleChunk = (chunk: string, type: 'stdout' | 'stderr') => {
+        if (type === 'stdout') {
+          stdout += chunk;
+        } else {
+          stderr += chunk;
+        }
+        if (onProgress) {
+          onProgress({ key, stdout, stderr, status: 'RUNNING' });
+        }
+      };
 
       if (config.useSandbox) {
         if (!dockerAvailable) {
@@ -109,22 +217,21 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
                 : requireOption;
             }
 
-            try {
-              const output = cp.execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
-              stdout = output;
-            } catch (err: any) {
-              exitCode = err.status !== undefined ? err.status : 1;
-              stdout = err.stdout || '';
-              stderr = err.stderr || '';
-              if (err.message && !stderr && !stdout) {
-                stderr = err.message;
-              }
+            const res = await executeHost(cmdLine, cwd, execEnv, handleChunk);
+            if (res.error) {
+              exitCode = 99;
+              stderr += (stderr ? '\n' : '') + `Execution error: ${res.error.message}`;
+            } else {
+              exitCode = res.status !== null ? res.status : 1;
             }
             stderr = fallbackWarning + stderr;
           } else {
             // sandbox fallback is false -> FAIL immediately
             exitCode = 1;
             stderr = "Sandbox verification failed: Docker is not available or daemon is not running, and sandboxFallbackToHost is disabled.";
+            if (onProgress) {
+              onProgress({ key, stdout: '', stderr, status: 'FAIL' });
+            }
           }
         } else {
           // Docker is available
@@ -181,15 +288,14 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
           dockerArgs.push(image);
           dockerArgs.push('sh', '-c', cmdLine);
 
-          const spawnResult = dockerUtils.executeDocker(dockerArgs, cwd, execEnv);
-          stdout = spawnResult.stdout || '';
-          stderr = spawnResult.stderr || '';
-          if (spawnResult.status === null || spawnResult.status === undefined) {
+          const spawnResult = await dockerUtils.executeDocker(dockerArgs, cwd, execEnv, handleChunk);
+          if (spawnResult.error) {
+            exitCode = 1;
+            stderr += (stderr ? '\n' : '') + `Docker execution error: ${spawnResult.error.message}`;
+          } else if (spawnResult.status === null || spawnResult.status === undefined) {
             exitCode = 1;
             let errMsg = '';
-            if (spawnResult.error) {
-              errMsg = spawnResult.error.message;
-            } else if (spawnResult.signal) {
+            if (spawnResult.signal) {
               errMsg = `Docker process terminated by signal: ${spawnResult.signal}`;
             } else {
               errMsg = 'Unknown failure starting docker.';
@@ -219,36 +325,40 @@ export function runVerification(config: JewelConfig, cwd: string = process.cwd()
             : requireOption;
         }
 
-        try {
-          const output = cp.execSync(cmdLine, { cwd, stdio: 'pipe', encoding: 'utf8', env: execEnv });
-          stdout = output;
-        } catch (err: any) {
-          exitCode = err.status !== undefined ? err.status : 1;
-          stdout = err.stdout || '';
-          stderr = err.stderr || '';
-          if (err.message && !stderr && !stdout) {
-            stderr = err.message;
-          }
+        const res = await executeHost(cmdLine, cwd, execEnv, handleChunk);
+        if (res.error) {
+          exitCode = 99;
+          stderr += (stderr ? '\n' : '') + `Execution error: ${res.error.message}`;
+        } else {
+          exitCode = res.status !== null ? res.status : 1;
         }
       }
 
+      const status = exitCode === 0 ? 'PASS' : 'FAIL';
       results.push({
         commandKey: key,
         commandLine: cmdLine,
-        status: exitCode === 0 ? 'PASS' : 'FAIL',
+        status,
         exitCode,
         stdout: redactSecrets(stdout),
         stderr: redactSecrets(stderr)
       });
+      if (onProgress) {
+        onProgress({ key, stdout, stderr, status });
+      }
     } catch (err: any) {
+      const errorMsg = err.message || 'Execution error.';
       results.push({
         commandKey: key,
         commandLine: cmdLine,
         status: 'FAIL',
         exitCode: 99,
         stdout: '',
-        stderr: redactSecrets(err.message || 'Execution error.')
+        stderr: redactSecrets(errorMsg)
       });
+      if (onProgress) {
+        onProgress({ key, stdout: '', stderr: errorMsg, status: 'FAIL' });
+      }
     }
   }
 

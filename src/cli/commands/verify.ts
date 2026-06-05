@@ -1,11 +1,11 @@
 import { loadConfig } from '../../core/config';
 import { runVerification } from '../../verification/runner';
 
-export function runVerify(cwd: string = process.cwd()): void {
+export async function runVerify(cwd: string = process.cwd()): Promise<void> {
   console.log('Running Jewel Verification...');
   try {
     const config = loadConfig(cwd);
-    const report = runVerification(config, cwd);
+    const report = await runVerification(config, cwd);
 
     console.log('\n--- Verification Report ---');
     console.log(`Project: ${report.projectName}`);
@@ -26,13 +26,11 @@ export function runVerify(cwd: string = process.cwd()): void {
 
     if (report.overallStatus === 'PASS' || report.overallStatus === 'SKIPPED') {
       console.log(`\nVerification finished. Status: ${report.overallStatus}`);
-      process.exit(0);
     } else {
-      console.error(`\nVerification FAILED or BLOCKED. Status: ${report.overallStatus}`);
-      process.exit(1);
+      throw new Error(`Verification FAILED or BLOCKED. Status: ${report.overallStatus}`);
     }
   } catch (err: any) {
     console.error('Error running verification:', err.message);
-    process.exit(1);
+    throw err;
   }
 }

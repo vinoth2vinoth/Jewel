@@ -52,6 +52,26 @@ const secret_redactor_1 = require("../../safety/secret-redactor");
 const errors_1 = require("../errors");
 const test_change_policy_1 = require("../../verification/test-change-policy");
 const retry_policy_1 = require("../../core/retry-policy");
+const ui_server_1 = require("../ui-server");
+async function waitForExitAcknowledgment(uiServer) {
+    let rl = null;
+    const cliPrompt = new Promise((resolve) => {
+        rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        rl.on('line', () => {
+            resolve();
+        });
+    });
+    await Promise.race([
+        uiServer.waitForExitConfirmation(),
+        cliPrompt
+    ]);
+    if (rl) {
+        rl.close();
+    }
+}
 function askQuestion(query) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -87,13 +107,17 @@ function generateRepoSummary(cwd) {
     catch { }
     return `Project Structure:\n${files.map(f => `- ${f}`).join('\n')}`;
 }
-async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false) {
+async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false, useUI = false) {
     let config = null;
     let adapter = null;
     let sessionId = '';
     let sessionPath = '';
     let contractPath = '';
     let checkpoint = null;
+    let uiServer = null;
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    let accumulatedLogs = '';
     try {
         if (!task || task.trim() === '') {
             throw new errors_1.JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
@@ -107,6 +131,35 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         }
         catch (err) {
             throw new errors_1.JewelError('CONFIG_ERROR', `Failed to load configuration: ${err.message}`, 'Check jewel.config.json formatting and paths.', err);
+        }
+        if (useUI) {
+            uiServer = new ui_server_1.UIServer({ startPort: 3000 });
+            await uiServer.start();
+            console.log(`\n[+] Dashboard server started. View live progress at: ${uiServer.getUrl()}`);
+            process.stdout.write = (chunk, encoding, callback) => {
+                const str = chunk.toString();
+                accumulatedLogs += str;
+                if (uiServer) {
+                    uiServer.updateState({ terminalLogs: accumulatedLogs });
+                }
+                return originalStdoutWrite(chunk, encoding, callback);
+            };
+            process.stderr.write = (chunk, encoding, callback) => {
+                const str = chunk.toString();
+                accumulatedLogs += str;
+                if (uiServer) {
+                    uiServer.updateState({ terminalLogs: accumulatedLogs });
+                }
+                return originalStderrWrite(chunk, encoding, callback);
+            };
+            uiServer.updateState({
+                stage: 'init',
+                task,
+                overrides: {
+                    provider: config.provider,
+                    model: config.model
+                }
+            });
         }
         if (cliOverrides) {
             if (cliOverrides.provider !== undefined) {
@@ -154,6 +207,16 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         sessionId = sessionData.sessionId;
         sessionPath = sessionData.sessionPath;
         contractPath = sessionData.contractPath;
+        if (uiServer) {
+            uiServer.updateState({
+                sessionId,
+                files: filesNeeded,
+                overrides: {
+                    provider: config.provider,
+                    model: config.model
+                }
+            });
+        }
         adapter = null;
         if (isAgentMode) {
             const adapterConfig = useMock ? { ...config, provider: 'none' } : config;
@@ -162,6 +225,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             }
             catch (err) {
                 throw new errors_1.JewelError('ADAPTER_INSTANTIATION_FAILED', `Error instantiating agent adapter: ${err.message}`, 'Verify provider settings and environment.', err);
+            }
+            if (uiServer) {
+                uiServer.updateState({ stage: 'planning' });
             }
             console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
             const repoSummary = generateRepoSummary(cwd);
@@ -213,8 +279,23 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 config.maxLinesChanged = Math.max(config.maxLinesChanged, estimatedLines + 50);
             }
             else {
-                const response = await askQuestion('Would you like to expand the scope limits to accommodate this task? (y/n): ');
-                if (response.toLowerCase().trim() === 'y') {
+                let approvedScope = false;
+                if (useUI && uiServer) {
+                    uiServer.updateState({ stage: 'review' });
+                    const res = await uiServer.waitForApproval('scope-expansion', {
+                        message: `Estimated scope exceeds limits. Files: ${estimatedFiles}/${config.maxFilesChanged}, Lines: ${estimatedLines}/${config.maxLinesChanged}. Approve to expand limits?`
+                    });
+                    if (res.action === 'approve') {
+                        approvedScope = true;
+                    }
+                }
+                else {
+                    const response = await askQuestion('Would you like to expand the scope limits to accommodate this task? (y/n): ');
+                    if (response.toLowerCase().trim() === 'y') {
+                        approvedScope = true;
+                    }
+                }
+                if (approvedScope) {
                     config.maxFilesChanged = Math.max(config.maxFilesChanged, estimatedFiles + 1);
                     config.maxLinesChanged = Math.max(config.maxLinesChanged, estimatedLines + 50);
                     console.log(`[+] Scope expanded. New limits -> Files: ${config.maxFilesChanged}, Lines: ${config.maxLinesChanged}`);
@@ -341,13 +422,15 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     }
                 }
                 console.log('\nGit Diff Preview:');
+                let diffContent = '';
                 if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
                     try {
-                        (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, {
+                        diffContent = (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, {
                             cwd,
-                            stdio: 'inherit',
+                            encoding: 'utf8',
                             env: { ...process.env, PAGER: 'cat' }
                         });
+                        console.log(diffContent);
                     }
                     catch (err) {
                         console.log(`(Failed to print git diff: ${err.message})`);
@@ -357,8 +440,17 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     console.log('(Git diff preview is not available in non-Git backup mode)');
                 }
                 console.log('======================================\n');
-                const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
-                if (response.toLowerCase().trim() !== 'y') {
+                let choice = '';
+                if (useUI && uiServer) {
+                    uiServer.updateState({ stage: 'review' });
+                    const res = await uiServer.waitForApproval('patch-review', { diff: diffContent });
+                    choice = res.action === 'approve' ? 'y' : 'n';
+                }
+                else {
+                    const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
+                    choice = response.toLowerCase().trim();
+                }
+                if (choice !== 'y') {
                     approved = false;
                 }
             }
@@ -460,7 +552,29 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 }
                 // B. Run verification commands
                 console.log('\nRunning verification tests...');
-                verification = (0, runner_1.runVerification)(config, cwd);
+                if (uiServer) {
+                    uiServer.updateState({ stage: 'verification' });
+                }
+                verification = await (0, runner_1.runVerification)(config, cwd, (progress) => {
+                    if (uiServer) {
+                        const currentResults = uiServer.getState().verificationResults || [];
+                        const idx = currentResults.findIndex(r => r.commandKey === progress.key);
+                        const item = {
+                            commandKey: progress.key,
+                            commandLine: config.commands[progress.key] || '',
+                            status: progress.status,
+                            stdout: progress.stdout,
+                            stderr: progress.stderr
+                        };
+                        if (idx >= 0) {
+                            currentResults[idx] = item;
+                        }
+                        else {
+                            currentResults.push(item);
+                        }
+                        uiServer.updateState({ verificationResults: [...currentResults] });
+                    }
+                });
                 console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
                 // C. Run Critic Review
                 let diffContent = '';
@@ -469,6 +583,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                         diffContent = (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, { cwd, encoding: 'utf8', env: { ...process.env, PAGER: 'cat' } });
                     }
                     catch { }
+                }
+                if (uiServer) {
+                    uiServer.updateState({ stage: 'critic' });
                 }
                 critic = await (0, critic_1.runMultiAgentCriticReview)(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
                 console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
@@ -479,6 +596,21 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 if (critic.requiredActions.length > 0) {
                     console.log('Required Actions:');
                     critic.requiredActions.forEach((a) => console.log(`  - ${a}`));
+                }
+                if (uiServer) {
+                    const uiFindings = critic.findings.map((f) => {
+                        let type = 'WARN';
+                        if (f.startsWith('[FAIL]') || f.startsWith('[BLOCK]'))
+                            type = 'BLOCK';
+                        else if (f.startsWith('[PASS]'))
+                            type = 'PASS';
+                        return {
+                            type,
+                            title: type === 'BLOCK' ? 'Critic Block' : (type === 'PASS' ? 'Critic Pass' : 'Critic Warning'),
+                            message: f
+                        };
+                    });
+                    uiServer.updateState({ findings: uiFindings });
                 }
                 if (critic.status === 'PASS' && !((contract.preserveExistingTests ?? false) && existingTestModified)) {
                     passedAll = true;
@@ -533,19 +665,31 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     console.log('  [o] Override failure and finalize (forces success)');
                     console.log('  [a] Abort and rollback (default)');
                     let choice = '';
-                    while (choice !== 'r' && choice !== 'o' && choice !== 'a') {
-                        const answer = await askQuestion('Choice [r/o/a]: ');
-                        choice = answer.toLowerCase().trim();
-                        if (choice === '') {
-                            choice = 'a'; // default to abort
-                        }
-                        if (choice !== 'r' && choice !== 'o' && choice !== 'a') {
-                            console.log('Invalid choice. Please enter "r", "o", or "a".');
+                    if (useUI && uiServer) {
+                        uiServer.updateState({ stage: 'review' });
+                        const res = await uiServer.waitForApproval('retry-choice', {
+                            message: `Safety or verification check failed. Reason: ${promptReason}`
+                        });
+                        choice = res.action;
+                        customHint = res.comment;
+                    }
+                    else {
+                        while (choice !== 'r' && choice !== 'o' && choice !== 'a') {
+                            const answer = await askQuestion('Choice [r/o/a]: ');
+                            choice = answer.toLowerCase().trim();
+                            if (choice === '') {
+                                choice = 'a'; // default to abort
+                            }
+                            if (choice !== 'r' && choice !== 'o' && choice !== 'a') {
+                                console.log('Invalid choice. Please enter "r", "o", or "a".');
+                            }
                         }
                     }
-                    if (choice === 'r') {
-                        const hint = await askQuestion('Enter hint/guidance for the AI: ');
-                        customHint = hint;
+                    if (choice === 'r' || choice === 'retry') {
+                        if (!useUI || !customHint) {
+                            const hint = await askQuestion('Enter hint/guidance for the AI: ');
+                            customHint = hint;
+                        }
                         maxRetries++;
                         if (config.maxRetries !== undefined) {
                             config.maxRetries++;
@@ -554,7 +698,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                         retryState.seenFailures.clear();
                         console.log(`\n[+] Retry registered. Continuing with custom hint...`);
                     }
-                    else if (choice === 'o') {
+                    else if (choice === 'o' || choice === 'override') {
                         console.log('\n[+] Overriding failure. Finalizing task...');
                         passedAll = true;
                         approved = true;
@@ -643,8 +787,19 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     else {
                         console.log('\n[!] Checks failed. Please fix the problems in your code.');
                         console.log(`Remaining retries: ${maxRetries - retries}`);
-                        const answer = await askQuestion('Would you like to re-run verification now? (y/n): ');
-                        if (answer.toLowerCase().trim() !== 'y') {
+                        let answer = '';
+                        if (useUI && uiServer) {
+                            uiServer.updateState({ stage: 'review' });
+                            const res = await uiServer.waitForApproval('retry-choice', {
+                                message: `Verification checks failed. Remaining retries: ${maxRetries - retries}. Select action:`
+                            });
+                            answer = res.action === 'retry' ? 'y' : 'n';
+                        }
+                        else {
+                            const response = await askQuestion('Would you like to re-run verification now? (y/n): ');
+                            answer = response.toLowerCase().trim();
+                        }
+                        if (answer !== 'y') {
                             break;
                         }
                         retries++;
@@ -716,6 +871,11 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         });
         if (passedAll || (noChangeNeeded && !patchBlocked)) {
             console.log(`\n[+] Success! Task verified and finalized. Report written to .jewel/reports/latest-run.md`);
+            if (useUI && uiServer) {
+                uiServer.updateState({ stage: 'completed' });
+                console.log(`\nDashboard execution finished. Open ${uiServer.getUrl()} to stop the server and inspect results, or press [ENTER] in this terminal to exit.`);
+                await waitForExitAcknowledgment(uiServer);
+            }
             process.exit(0);
         }
         else {
@@ -799,6 +959,25 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         }
     }
     catch (err) {
+        process.stdout.write = originalStdoutWrite;
+        process.stderr.write = originalStderrWrite;
+        if (useUI && uiServer) {
+            const jewelErr = (0, errors_1.toJewelError)(err);
+            uiServer.updateState({
+                stage: 'failed',
+                findings: [
+                    ...(uiServer.getState().findings || []),
+                    {
+                        type: 'BLOCK',
+                        title: jewelErr.status || 'Error',
+                        message: jewelErr.message
+                    }
+                ]
+            });
+            console.log(`\n[!] Execution failed: ${jewelErr.message}`);
+            console.log(`Open ${uiServer.getUrl()} to stop the server and exit, or press [ENTER] in this terminal to exit.`);
+            await waitForExitAcknowledgment(uiServer);
+        }
         if (err && err.message && err.message.startsWith('exit-')) {
             throw err;
         }
@@ -824,6 +1003,13 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         console.error(`Next Action: ${jewelErr.nextAction}`);
         console.error(`======================================\n`);
         process.exit(1);
+    }
+    finally {
+        process.stdout.write = originalStdoutWrite;
+        process.stderr.write = originalStderrWrite;
+        if (uiServer) {
+            await uiServer.close();
+        }
     }
 }
 function getPackageVersion(cwd) {

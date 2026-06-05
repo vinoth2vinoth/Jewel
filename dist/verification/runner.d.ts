@@ -1,4 +1,3 @@
-import * as cp from 'child_process';
 import { JewelConfig } from '../core/config';
 export interface CommandResult {
     commandKey: string;
@@ -24,7 +23,18 @@ export interface VerificationReport {
 }
 export declare const dockerUtils: {
     isDockerAvailable(): boolean;
-    executeDocker(args: string[], cwd: string, env: Record<string, string | undefined>): cp.SpawnSyncReturns<string>;
+    executeDocker(args: string[], cwd: string, env: Record<string, string | undefined>, onChunk?: (chunk: string, type: "stdout" | "stderr") => void): Promise<{
+        status: number | null;
+        signal: string | null;
+        stdout: string;
+        stderr: string;
+        error?: Error;
+    }>;
 };
-export declare function runVerification(config: JewelConfig, cwd?: string): VerificationReport;
+export declare function runVerification(config: JewelConfig, cwd?: string, onProgress?: (progress: {
+    key: string;
+    stdout: string;
+    stderr: string;
+    status: 'RUNNING' | 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED';
+}) => void): Promise<VerificationReport>;
 export declare function saveVerificationReports(report: VerificationReport, cwd: string, formats: ('markdown' | 'json')[]): void;

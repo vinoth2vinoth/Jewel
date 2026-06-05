@@ -48,7 +48,7 @@ function cleanupSandbox() {
         fs.rmSync(sandboxDir, { recursive: true, force: true });
     }
 }
-(0, node_test_1.default)('verification runner - full cycle', () => {
+(0, node_test_1.default)('verification runner - full cycle', async () => {
     cleanupSandbox();
     fs.mkdirSync(sandboxDir, { recursive: true });
     // 1. Set up a config with mixed commands
@@ -62,7 +62,7 @@ function cleanupSandbox() {
             e2e: 'git push origin main' // Blocked (due to default git push policy)
         }
     };
-    const report = (0, runner_1.runVerification)(config, sandboxDir);
+    const report = await (0, runner_1.runVerification)(config, sandboxDir);
     // Check stats
     node_assert_1.default.strictEqual(report.overallStatus, 'FAIL'); // because test command failed
     node_assert_1.default.strictEqual(report.stats.passed, 2); // lint, typecheck
@@ -97,7 +97,7 @@ function cleanupSandbox() {
     node_assert_1.default.ok(mdContent.includes('| lint | `node -e "console.log(\'Linting passed\')"` | **PASS** | 0 |'));
     cleanupSandbox();
 });
-(0, node_test_1.default)('verification runner - coverage validation', () => {
+(0, node_test_1.default)('verification runner - coverage validation', async () => {
     cleanupSandbox();
     fs.mkdirSync(sandboxDir, { recursive: true });
     const coverageDir = path.join(sandboxDir, 'coverage');
@@ -120,7 +120,7 @@ function cleanupSandbox() {
             test: 'node -e "process.exit(0)"'
         }
     };
-    const reportPass = (0, runner_1.runVerification)(configPass, sandboxDir);
+    const reportPass = await (0, runner_1.runVerification)(configPass, sandboxDir);
     node_assert_1.default.strictEqual(reportPass.overallStatus, 'PASS');
     const covResultPass = reportPass.results.find(r => r.commandKey === 'coverage');
     node_assert_1.default.ok(covResultPass);
@@ -133,15 +133,17 @@ function cleanupSandbox() {
         }
     };
     fs.writeFileSync(reportPath, JSON.stringify(mockCoverageFail), 'utf8');
-    const reportFail = (0, runner_1.runVerification)(configPass, sandboxDir);
+    const reportFail = await (0, runner_1.runVerification)(configPass, sandboxDir);
     node_assert_1.default.strictEqual(reportFail.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
     const covResultFail = reportFail.results.find(r => r.commandKey === 'coverage');
     node_assert_1.default.ok(covResultFail);
     node_assert_1.default.strictEqual(covResultFail.status, 'FAIL');
     node_assert_1.default.ok(covResultFail.stderr.includes('"lines" (75%) is below'));
     // Case C: Missing coverage report file
-    fs.unlinkSync(reportPath);
-    const reportMissing = (0, runner_1.runVerification)(configPass, sandboxDir);
+    if (fs.existsSync(reportPath)) {
+        fs.unlinkSync(reportPath);
+    }
+    const reportMissing = await (0, runner_1.runVerification)(configPass, sandboxDir);
     node_assert_1.default.strictEqual(reportMissing.overallStatus, 'COVERAGE_THRESHOLD_VIOLATION');
     const covResultMissing = reportMissing.results.find(r => r.commandKey === 'coverage');
     node_assert_1.default.ok(covResultMissing);
@@ -149,7 +151,7 @@ function cleanupSandbox() {
     node_assert_1.default.ok(covResultMissing.stderr.includes('Coverage report file not found'));
     cleanupSandbox();
 });
-(0, node_test_1.default)('verification runner - process auditing', () => {
+(0, node_test_1.default)('verification runner - process auditing', async () => {
     cleanupSandbox();
     fs.mkdirSync(sandboxDir, { recursive: true });
     // Create a trigger script that attempts to run a blocked command
@@ -172,7 +174,7 @@ function cleanupSandbox() {
             test: 'node trigger.js'
         }
     };
-    const reportWithAudit = (0, runner_1.runVerification)(configWithAudit, sandboxDir);
+    const reportWithAudit = await (0, runner_1.runVerification)(configWithAudit, sandboxDir);
     node_assert_1.default.strictEqual(reportWithAudit.overallStatus, 'FAIL');
     const testResult = reportWithAudit.results.find(r => r.commandKey === 'test');
     node_assert_1.default.ok(testResult);
@@ -187,13 +189,13 @@ function cleanupSandbox() {
             test: 'node trigger.js'
         }
     };
-    const reportWithoutAudit = (0, runner_1.runVerification)(configWithoutAudit, sandboxDir);
+    const reportWithoutAudit = await (0, runner_1.runVerification)(configWithoutAudit, sandboxDir);
     const testResultNoAudit = reportWithoutAudit.results.find(r => r.commandKey === 'test');
     node_assert_1.default.ok(testResultNoAudit);
     node_assert_1.default.ok(!testResultNoAudit.stderr.includes('Jewel Process Auditor'));
     cleanupSandbox();
 });
-(0, node_test_1.default)('verification runner - sandbox fallback to host when docker is unavailable', (t) => {
+(0, node_test_1.default)('verification runner - sandbox fallback to host when docker is unavailable', async (t) => {
     cleanupSandbox();
     fs.mkdirSync(sandboxDir, { recursive: true });
     // 1. Stub isDockerAvailable to return false
@@ -208,7 +210,7 @@ function cleanupSandbox() {
             test: 'node -e "console.log(\'host ran\'); process.exit(0)"'
         }
     };
-    const reportFallback = (0, runner_1.runVerification)(configFallback, sandboxDir);
+    const reportFallback = await (0, runner_1.runVerification)(configFallback, sandboxDir);
     node_assert_1.default.strictEqual(reportFallback.overallStatus, 'PASS');
     const testResultFallback = reportFallback.results.find(r => r.commandKey === 'test');
     node_assert_1.default.ok(testResultFallback);
@@ -225,7 +227,7 @@ function cleanupSandbox() {
             test: 'node -e "console.log(\'should not run\')"'
         }
     };
-    const reportNoFallback = (0, runner_1.runVerification)(configNoFallback, sandboxDir);
+    const reportNoFallback = await (0, runner_1.runVerification)(configNoFallback, sandboxDir);
     node_assert_1.default.strictEqual(reportNoFallback.overallStatus, 'FAIL');
     const testResultNoFallback = reportNoFallback.results.find(r => r.commandKey === 'test');
     node_assert_1.default.ok(testResultNoFallback);
@@ -234,7 +236,7 @@ function cleanupSandbox() {
     node_assert_1.default.ok(testResultNoFallback.stderr.includes('sandboxFallbackToHost is disabled'));
     cleanupSandbox();
 });
-(0, node_test_1.default)('verification runner - sandbox docker execution and command assembly', (t) => {
+(0, node_test_1.default)('verification runner - sandbox docker execution and command assembly', async (t) => {
     cleanupSandbox();
     fs.mkdirSync(sandboxDir, { recursive: true });
     // 1. Stub isDockerAvailable to return true
@@ -243,12 +245,17 @@ function cleanupSandbox() {
     let capturedArgs = [];
     let capturedCwd = '';
     let capturedEnv = null;
-    t.mock.method(runner_1.dockerUtils, 'executeDocker', (args, cwd, env) => {
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', async (args, cwd, env, onChunk) => {
         capturedArgs = args;
         capturedCwd = cwd;
         capturedEnv = env;
+        if (onChunk) {
+            onChunk('Docker command output', 'stdout');
+            onChunk('Docker warnings', 'stderr');
+        }
         return {
             status: 0,
+            signal: null,
             stdout: 'Docker command output',
             stderr: 'Docker warnings',
             error: undefined
@@ -270,7 +277,7 @@ function cleanupSandbox() {
             test: 'npm run test'
         }
     };
-    const report = (0, runner_1.runVerification)(config, sandboxDir);
+    const report = await (0, runner_1.runVerification)(config, sandboxDir);
     // Check verification report status
     node_assert_1.default.strictEqual(report.overallStatus, 'PASS');
     const testResult = report.results.find(r => r.commandKey === 'test');
@@ -311,15 +318,15 @@ function cleanupSandbox() {
     delete process.env.TEST_HOST_SECRET;
     cleanupSandbox();
 });
-(0, node_test_1.default)('verification runner - sandbox process error and signal handling', (t) => {
+(0, node_test_1.default)('verification runner - sandbox process error and signal handling', async (t) => {
     cleanupSandbox();
     fs.mkdirSync(sandboxDir, { recursive: true });
     t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => true);
     // Case A: spawnSync fails with error (status: null, error info present)
-    t.mock.method(runner_1.dockerUtils, 'executeDocker', () => {
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', async () => {
         return {
             status: null,
-            signal: undefined,
+            signal: null,
             stdout: '',
             stderr: '',
             error: new Error('Docker daemon connection refused')
@@ -333,7 +340,7 @@ function cleanupSandbox() {
             test: 'npm test'
         }
     };
-    const reportErr = (0, runner_1.runVerification)(configErr, sandboxDir);
+    const reportErr = await (0, runner_1.runVerification)(configErr, sandboxDir);
     node_assert_1.default.strictEqual(reportErr.overallStatus, 'FAIL');
     const testResultErr = reportErr.results.find(r => r.commandKey === 'test');
     node_assert_1.default.ok(testResultErr);
@@ -341,7 +348,7 @@ function cleanupSandbox() {
     node_assert_1.default.strictEqual(testResultErr.exitCode, 1);
     node_assert_1.default.ok(testResultErr.stderr.includes('Docker daemon connection refused'));
     // Case B: process terminated by signal (status: null, signal present)
-    t.mock.method(runner_1.dockerUtils, 'executeDocker', () => {
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', async () => {
         return {
             status: null,
             signal: 'SIGKILL',
@@ -350,7 +357,7 @@ function cleanupSandbox() {
             error: undefined
         };
     });
-    const reportSig = (0, runner_1.runVerification)(configErr, sandboxDir);
+    const reportSig = await (0, runner_1.runVerification)(configErr, sandboxDir);
     node_assert_1.default.strictEqual(reportSig.overallStatus, 'FAIL');
     const testResultSig = reportSig.results.find(r => r.commandKey === 'test');
     node_assert_1.default.ok(testResultSig);

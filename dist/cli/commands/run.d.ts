@@ -3,4 +3,4 @@ export declare function runTask(task: string, filesNeeded?: string[], useMock?: 
     model?: string;
     temperature?: number;
     maxOutputTokens?: number;
-}, dryRun?: boolean): Promise<void>;
+}, dryRun?: boolean, useUI?: boolean): Promise<void>;
