@@ -31,12 +31,15 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 - [🚀 Quick Start](#-quick-start)
 - [🖥️ Local Web UI Dashboard (`--ui`)](#️-local-web-ui-dashboard---ui)
 - [⚙️ Configuration Reference (`jewel.config.json`)](#️-configuration-reference-jewelconfigjson)
+- [🤖 Supported Models & Providers](#-supported-models--providers)
 - [🔒 Safety & Security Model](#-safety-security-model)
   - [Docker Sandboxing](#docker-sandboxing)
   - [Path Escape & Boundary Protection](#path-escape--boundary-protection)
   - [Budget Guard & Cost Limits](#budget-guard--cost-limits)
 - [🛠️ Custom Safety Skills](#️-custom-safety-skills)
 - [💻 CLI Command & Option Reference](#-cli-command--option-reference)
+- [❓ Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
+- [🔍 Troubleshooting & Diagnostics](#-troubleshooting--diagnostics)
 - [🧪 Dogfooding Demo Project](#-dogfooding-demo-project)
 - [🤝 Contributing & License](#-contributing--license)
 
@@ -222,6 +225,21 @@ Configure your safety parameters inside `jewel.config.json` at the root of your 
 
 ---
 
+## 🤖 Supported Models & Providers
+
+Jewel integrates with major LLM providers. Adapters validate capabilities (such as Structured Output support and system prompts) before invoking API endpoints.
+
+### Capability Matrix
+
+| Provider | Recommended Model(s) | Structured Outputs | Usage Metrics | Cost Tracking | Notes |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **gemini** | `gemini-1.5-flash`<br>`gemini-1.5-pro`<br>`gemini-2.0-flash`<br>`gemini-2.5-flash` | Yes | Yes | Yes | Highly cost-efficient; Gemini adapter strips incompatible schema parameters (`$schema`, `additionalProperties`). |
+| **openai** | `gpt-4o-mini`<br>`gpt-4o`<br>`gpt-4-turbo` | Yes | Yes | Yes | Supports JSON schemas format natively. Older models like `gpt-3.5-turbo` are restricted as they lack strict schema formats. |
+| **anthropic** | `claude-3-5-sonnet-20241022`<br>`claude-3-5-haiku-20241022`<br>`claude-3-opus-20240229` | Yes | Yes | Yes | Uses Anthropic tool choice mapping to enforce structured patches. |
+| **openrouter** | `openai/gpt-4o-mini`<br>`anthropic/claude-3.5-sonnet` | Yes | Yes | Yes | Routes calls and resolves model endpoints to underlying providers dynamically. |
+
+---
+
 ## 🔒 Safety & Security Model
 
 ### Docker Sandboxing
@@ -297,6 +315,39 @@ description: Enforce safe migration and schema alteration patterns
 | `--model` | `<model>` | Override the model name configuration (e.g. `gpt-4o-mini`). |
 | `--temperature` | `<temp>` | Override the sampling temperature setting (e.g. `0.2`). |
 | `--max-output-tokens`| `<tokens>` | Override the maximum output token limit. |
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+### How is Jewel different from coding assistants like Aider or Claude Code?
+* **Aider / Claude Code**: These are active, conversational editing agents. They manage chat context windows, request model edits, and sometimes run shell tests. They focus on *generation*.
+* **Jewel**: Jewel is an *execution-layer safety shield*. It does not interact in conversation. Instead, it wraps LLM/agent code proposals in transactional checkpoints, enforces file scopes, normalizes paths, redacts secrets, and rolls back the workspace to the pre-run state if tests fail.
+
+### Does Jewel execute raw shell scripts?
+Only if they are defined inside your project's `jewel.config.json` configuration block under `commands` (e.g. `npm test`). Jewel will reject arbitrary command executions if `dangerousCommandPolicy` is set to `"block"`.
+
+### Does Jewel send my files or telemetry to third parties?
+No. Jewel operates 100% locally. It has **zero built-in telemetry** and sends zero data to external monitoring servers. File contexts are only sent directly to your configured LLM API provider via official client libraries (OpenAI, Gemini, Anthropic, or OpenRouter).
+
+---
+
+## 🔍 Troubleshooting & Diagnostics
+
+### Git Repository Detection Failures
+If you receive the warning: `Harness warning: Git repository not initialized...`:
+* **Cause**: Jewel uses Git for automated branch-free checkpointing (`git commit` to a local, temporary safety reference branch).
+* **Fix**: Run `git init` and make at least one commit in your project directory before executing `jewel run`. Ensure that your global git credentials (`user.name` and `user.email`) are configured.
+
+### Docker Container Sandbox Failures
+If running `useSandbox: true` fails or hangs:
+* **Cause**: Docker is either inactive, or the current user lacks permissions to interact with the Docker socket (`/var/run/docker.sock` on Linux or Docker Desktop on Windows).
+* **Fix**: Verify that Docker is running (`docker info` in terminal). If Docker is not available and you want tests to run directly on the host shell, set `"sandboxFallbackToHost": true` or `"useSandbox": false` in your configuration.
+
+### Budget Guard Aborting Runs
+If you receive the error `[Jewel Budget Guard] Session cost limit exceeded...`:
+* **Cause**: The accumulated prompt and output tokens used during planning, patching, and critic reviews exceeded the `maxSessionCost` limit defined in `jewel.config.json`.
+* **Fix**: Increase the limit in `jewel.config.json` (e.g., set to `0.05` for a 5-cent budget, or `0.0` to disable bounds), or run with a cheaper model like `gemini-1.5-flash` or `gpt-4o-mini`.
 
 ---
 
