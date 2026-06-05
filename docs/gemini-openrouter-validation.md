@@ -1,6 +1,6 @@
 # Gemini and OpenRouter Real Provider Validation
 
-This guide explains how to validate Jewel version `0.7.2` using Gemini and OpenRouter, with a focus on Windows PowerShell.
+This guide explains how to validate Jewel version `0.8.0` using Gemini and OpenRouter, with a focus on Windows PowerShell.
 
 ## ⚠️ CAUTION & SAFETY RULES
 1. **Do not run these commands on production or uncommitted repositories.**
@@ -17,7 +17,7 @@ First, pack and install Jewel locally:
 ```powershell
 # PowerShell (Windows)
 npm pack
-npm install -g .\jewel-cli-0.7.2.tgz
+npm install -g .\jewel-cli-0.8.0.tgz
 jewel version
 jewel release-check
 ```
@@ -26,7 +26,7 @@ jewel release-check
 ```bash
 # Git Bash
 npm pack
-npm install -g ./jewel-cli-0.7.2.tgz
+npm install -g ./jewel-cli-0.8.0.tgz
 jewel version
 jewel release-check
 ```

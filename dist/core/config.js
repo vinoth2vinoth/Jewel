@@ -86,7 +86,8 @@ exports.DEFAULT_CONFIG = {
     minCoverage: undefined,
     coverageReportPath: '',
     auditSpawnedProcesses: true,
-    interactiveRetryMode: true
+    interactiveRetryMode: true,
+    maxSessionCost: 0.0
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -117,7 +118,7 @@ function validateAndMergeConfig(parsed) {
         }
         config.mode = parsed.mode;
     }
-    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries'];
+    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost'];
     for (const field of numericFields) {
         if (parsed[field] !== undefined) {
             const val = Number(parsed[field]);

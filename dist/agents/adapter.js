@@ -7,14 +7,25 @@ class MockAgentAdapter {
     usage;
     accumulateMockUsage() {
         if (!this.usage) {
-            this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+            this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0.0 };
         }
         this.usage.inputTokens = (this.usage.inputTokens || 0) + 100;
         this.usage.outputTokens = (this.usage.outputTokens || 0) + 50;
         this.usage.totalTokens = (this.usage.totalTokens || 0) + 150;
+        this.usage.estimatedCostUsd = (this.usage.estimatedCostUsd || 0) + 0.05;
+    }
+    checkBudget(config) {
+        const maxSessionCost = config?.maxSessionCost;
+        if (maxSessionCost !== undefined && maxSessionCost > 0) {
+            const currentCost = this.usage?.estimatedCostUsd || 0;
+            if (currentCost > maxSessionCost) {
+                throw new Error(`[Jewel Budget Guard] Session cost limit exceeded: Current cost $${currentCost.toFixed(4)} exceeds maximum allowed budget of $${maxSessionCost.toFixed(2)}.`);
+            }
+        }
     }
     async plan(input) {
         this.accumulateMockUsage();
+        this.checkBudget(input.config);
         const files = input.filesNeeded && input.filesNeeded.length > 0 ? input.filesNeeded : ['src/index.ts'];
         const contract = (0, session_1.generateLocalContract)(input.task, input.config, files);
         contract.understanding = `Mock understanding of: ${input.task}`;
@@ -22,6 +33,7 @@ class MockAgentAdapter {
     }
     async proposePatch(input) {
         this.accumulateMockUsage();
+        this.checkBudget(input.config);
         // Propose a simple edit to src/index.ts or the first filesLikelyNeeded
         const targetFile = input.taskContract.filesLikelyNeeded[0] || 'src/index.ts';
         let content = `// Mock implementation for: ${input.taskContract.task}\nconsole.log("Task executed successfully");\n`;
@@ -69,6 +81,7 @@ module.exports = { add, divide };
     }
     async reviewDiff(input) {
         this.accumulateMockUsage();
+        this.checkBudget(input.config);
         return {
             status: 'PASS',
             findings: ['Mock agent review passed successfully.']
@@ -76,6 +89,7 @@ module.exports = { add, divide };
     }
     async reviewTestCorrectness(input) {
         this.accumulateMockUsage();
+        this.checkBudget(input.config);
         return {
             verdict: 'BAD_IMPLEMENTATION',
             confidence: 'high',

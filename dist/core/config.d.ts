@@ -38,6 +38,7 @@ export interface JewelConfig {
     coverageReportPath?: string;
     auditSpawnedProcesses?: boolean;
     interactiveRetryMode?: boolean;
+    maxSessionCost?: number;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

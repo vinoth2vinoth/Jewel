@@ -96,6 +96,7 @@ export declare class MockAgentAdapter implements AgentAdapter {
         retryCount?: number;
     };
     private accumulateMockUsage;
+    private checkBudget;
     plan(input: PlanInput): Promise<TaskContract>;
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;

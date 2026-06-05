@@ -88,6 +88,12 @@ function generateRepoSummary(cwd) {
     return `Project Structure:\n${files.map(f => `- ${f}`).join('\n')}`;
 }
 async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false) {
+    let config = null;
+    let adapter = null;
+    let sessionId = '';
+    let sessionPath = '';
+    let contractPath = '';
+    let checkpoint = null;
     try {
         if (!task || task.trim() === '') {
             throw new errors_1.JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
@@ -96,7 +102,6 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         let reviewRequired = false;
         let approved = true;
         // 1. Load config & skills
-        let config;
         try {
             config = (0, config_1.loadConfig)(cwd);
         }
@@ -145,8 +150,11 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         // Determine if we are running an agent or manual human edits
         const isAgentMode = useMock || config.provider !== 'none';
         // 2. Initialize Session & Task Contract
-        const { sessionId, sessionPath, contractPath } = (0, session_1.createSession)(task, config, filesNeeded, cwd);
-        let adapter = null;
+        const sessionData = (0, session_1.createSession)(task, config, filesNeeded, cwd);
+        sessionId = sessionData.sessionId;
+        sessionPath = sessionData.sessionPath;
+        contractPath = sessionData.contractPath;
+        adapter = null;
         if (isAgentMode) {
             const adapterConfig = useMock ? { ...config, provider: 'none' } : config;
             try {
@@ -218,7 +226,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         }
         // 3. Create Checkpoint
         console.log('\nCreating checkpoint...');
-        const checkpoint = (0, git_1.createCheckpoint)(sessionId, cwd);
+        checkpoint = (0, git_1.createCheckpoint)(sessionId, cwd);
         fs.writeFileSync(path.join(sessionPath, 'checkpoint.json'), JSON.stringify(checkpoint, null, 2), 'utf8');
         console.log(`[+] Checkpoint created. strategy: ${checkpoint.isGit ? 'Git commit' : 'Backup copy'}`);
         // 4. Apply changes (LLM adapter or User edit)
@@ -252,6 +260,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 });
             }
             catch (err) {
+                if (err.message && err.message.includes('[Jewel Budget Guard]')) {
+                    throw err;
+                }
                 console.error(`[-] Patch proposal failed: ${err.message}`);
                 patchBlocked = true;
                 blockReasons = [`Patch proposal failed: ${err.message}`];
@@ -486,6 +497,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                         console.log(`[Critic Suggestion] ${testCriticResult.suggestedFix}`);
                     }
                     catch (err) {
+                        if (err.message && err.message.includes('[Jewel Budget Guard]')) {
+                            throw err;
+                        }
                         console.error(`[Critic Error] Failed to run test correctness critic: ${err.message}`);
                     }
                 }
@@ -605,6 +619,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                         }
                     }
                     catch (err) {
+                        if (err.message && err.message.includes('[Jewel Budget Guard]')) {
+                            throw err;
+                        }
                         console.error(`[-] Auto-fix patch proposal failed: ${err.message}`);
                         break;
                     }
@@ -778,6 +795,21 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             throw err;
         }
         const jewelErr = (0, errors_1.toJewelError)(err);
+        if (jewelErr.status === 'BUDGET_EXCEEDED') {
+            if (sessionPath && sessionId) {
+                writeRunReport(cwd, sessionPath, sessionId, task, 'BUDGET_EXCEEDED', config, adapter, { error: err.message });
+            }
+            if (checkpoint && !keepFailed) {
+                console.log('Rolling back changes due to budget limit breach...');
+                try {
+                    (0, git_1.rollbackCheckpoint)(checkpoint, cwd);
+                    console.log('[+] Rollback completed. Working files restored safely.');
+                }
+                catch (rollbackErr) {
+                    console.error(`[-] Rollback failed: ${rollbackErr.message}`);
+                }
+            }
+        }
         console.error(`\n======================================`);
         console.error(`Status: ${jewelErr.status}`);
         console.error(`Error: ${jewelErr.message}`);
