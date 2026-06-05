@@ -8,14 +8,14 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 \__/ |  |_____|    \/      \/        |_____|  |_____|
 ```
   
-  **Strict, Verification-First AI Coding Safety Harness & Rollback Guard**
+  **Transactional AI Coding Agent & Safe Execution Loop CLI**
 
   [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
   [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
   [![License](https://img.shields.io/badge/license-MIT-slate?style=flat-square)](./LICENSE)
   [![Coverage](https://img.shields.io/badge/coverage-80%25-emerald?style=flat-square)](#)
 
-  *A command-line safety harness that wraps AI coding patches in transactional checkpoints, runs tests in Docker sandboxes, and automatically rolls back your workspace if compilation or tests fail.*
+  *An autonomous task-based AI coding agent that plans, patches, and verifies code using configured LLMs, wrapping all executions in a strict, sandboxed git transaction harness with auto-rollback protection.*
 </div>
 
 ---
@@ -47,22 +47,22 @@ _  | |  | |___     \  /    \  /      | |___   | |___
 
 ## What Jewel IS / IS NOT
 
-When you let AI agents write code directly in your local repository, they can overwrite critical configuration files, trigger runaway token bills, write bad imports, or execute destructive shell commands during testing. 
+When you let LLMs write code directly in your local repository, they can overwrite critical configuration files, trigger runaway token bills, introduce compile errors, or run destructive shell tests.
 
-**Jewel** acts as a strict safety execution layer for your AI workflows. Before any patch is applied, Jewel creates an ephemeral checkpoint of your files. It then writes the changes, runs compilation and test checks in isolated Docker containers, and performs an automatic rollback to your exact original files if any checks fail.
+**Jewel** is an autonomous AI coding agent designed to operate inside a strict, transactional safety harness. When given a natural language task, Jewel creates an ephemeral Git checkpoint of your workspace, plans and generates code patches using your configured LLM provider, executes your compilation and test suites inside isolated Docker sandboxes, and automatically rolls back all changes to your original files if any test fails.
 
 ### What Jewel IS:
-- **Git Transaction Manager**: Creates fast, branch-free checkpoints before code modifications and automates rolling back your workspace if compilation or verification tests fail.
-- **Docker Sandbox Test Isolation**: Isolates untrusted unit tests and build scripts inside secure, network-isolated container environments to prevent host system pollution.
-- **Path Escape Prevention**: Normalizes paths and rejects absolute routes, parent directory traversals (`..`), Windows drive letter prefixes (`C:`), or null bytes to block directory-escape exploits.
-- **Cost-Control Budget Guards**: Tracks LLM token usage and estimated cost in real-time, immediately halting agent execution if spending exceeds your configured session budget.
-- **Interactive local Web UI Dashboard**: Serves a local SSE event dashboard showing real-time logs, AST interface signature diff trees, and checklist approvals before staging.
-- **Provider-Neutral Adapter Registry**: Integrates with OpenAI, Gemini, Anthropic, OpenRouter, and local dry-run modes out-of-the-box.
+- **Autonomous AI Coding Agent**: Takes natural language tasks, performs file-scope analysis, drafts design plans, writes target code patches, and reviews code correctness.
+- **Git Transaction Manager**: Snapshots the workspace prior to code modifications and automates rolling back your repository if verification tests fail.
+- **Docker Sandbox Isolation**: Safely executes tests and build commands in secure, network-isolated container environments to prevent host system pollution or execution of dangerous shell commands.
+- **Path Escape Prevention**: Normalizes patch files and blocks absolute routes, directory traversals (`..`), UNC paths, and null bytes before editing.
+- **Budget Guards & Cost Tracking**: Calculates token expenses in real-time, immediately aborting the task run if LLM costs exceed your session budget.
+- **Local Web UI Dashboard**: Serves an interactive SSE dashboard showing live logs, AST interface signature diff trees, and manual patch selection checklists.
 
 ### What Jewel IS NOT:
-- **An autonomous agent loop (like Claude Code)**: Jewel does not manage conversational chat loops. It is the *safety execution layer* that wraps patch proposals to ensure they compile, pass tests, and are approved before staging.
-- **A replacement for git**: Jewel builds on top of git for checkpointing.
-- **A sandbox-only tool**: By default, verification tests run directly on the host shell. To enable containerized sandboxing, you must explicitly set `"useSandbox": true` in your configuration.
+- **An interactive conversational chat loop assistant (like Claude Code or Aider)**: Jewel is a command-driven task execution agent. It does not run interactive multi-turn chat loops in your terminal; it accepts a task, generates a safe patch, runs tests, and exits.
+- **A replacement for Git**: Jewel builds on top of Git for atomic checkpoint rollbacks.
+- **A sandbox-only executor**: By default, verification scripts run on the host. To isolate untrusted test executions, you must set `"useSandbox": true` in your configuration.
 
 ---
 
