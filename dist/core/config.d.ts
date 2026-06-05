@@ -46,6 +46,7 @@ export interface JewelConfig {
     sandboxImage?: string;
     sandboxVolumes?: Record<string, string>;
     sandboxEnv?: Record<string, string>;
+    allowedSymbolChanges?: string[];
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

@@ -17,6 +17,7 @@ export interface TaskContract {
   estimatedFilesChangedCount?: number;
   estimatedLinesChangedCount?: number;
   preserveExistingTests?: boolean;
+  allowedSymbolChanges?: string[];
 }
 
 export function validateContract(contract: any): string[] {

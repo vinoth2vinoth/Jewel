@@ -139,3 +139,18 @@ test('config loader - sandbox parameters validation', () => {
   }, /sandboxEnv.*must be an object/);
 });
 
+test('config loader - allowedSymbolChanges validation', () => {
+  const result = validateAndMergeConfig({
+    allowedSymbolChanges: ['myFunc', 'MyClass.myMethod']
+  });
+  assert.deepStrictEqual(result.allowedSymbolChanges, ['myFunc', 'MyClass.myMethod']);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ allowedSymbolChanges: 'not-an-array' });
+  }, /allowedSymbolChanges.*must be an array/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ allowedSymbolChanges: [123] });
+  }, /allowedSymbolChanges\[0\].*must be a string/);
+});
+

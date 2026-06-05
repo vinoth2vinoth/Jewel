@@ -11,4 +11,4 @@ export interface DiffAnalysis {
     lockfilesChanged: string[];
     findings: string[];
 }
-export declare function runDiffGuard(checkpoint: CheckpointMetadata, config: JewelConfig, cwd?: string): DiffAnalysis;
+export declare function runDiffGuard(checkpoint: CheckpointMetadata, config: JewelConfig, cwd?: string, allowedSymbolChanges?: string[]): DiffAnalysis;

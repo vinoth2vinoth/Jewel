@@ -38,7 +38,7 @@ const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const path_policy_1 = require("./path-policy");
-function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
+function runDiffGuard(checkpoint, config, cwd = process.cwd(), allowedSymbolChanges = []) {
     const findings = [];
     let status = 'PASS';
     let changedFiles = [];
@@ -239,8 +239,14 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd()) {
         findings.push(`Multiple files deleted (${deletedFilesCount} files). Potential dangerous directory deletion.`);
         status = 'BLOCK';
     }
+    const mergedAllowedSymbols = [
+        ...(config.allowedSymbolChanges || []),
+        ...(allowedSymbolChanges || [])
+    ]
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
     if (config.useASTDiffGuard) {
-        const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd);
+        const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, mergedAllowedSymbols);
         findings.push(...astResult.findings);
         if (astResult.status === 'BLOCK') {
             status = 'BLOCK';
@@ -345,7 +351,7 @@ function extractASTSignatures(fileName, content) {
     }
     return signatures;
 }
-function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd) {
+function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, allowedSymbolChanges = []) {
     const findings = [];
     let status = 'PASS';
     if (!ts) {
@@ -394,8 +400,17 @@ function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd) {
             const newSignatures = extractASTSignatures(file, newContent);
             for (const sig of oldSignatures) {
                 if (!newSignatures.has(sig)) {
-                    findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
-                    status = 'BLOCK';
+                    const isAllowed = allowedSymbolChanges.some(allowed => {
+                        if (sig === allowed || sig.includes(allowed)) {
+                            return true;
+                        }
+                        const words = sig.split(/[\s.()=,]+/);
+                        return words.includes(allowed);
+                    });
+                    if (!isAllowed) {
+                        findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
+                        status = 'BLOCK';
+                    }
                 }
             }
         }

@@ -404,7 +404,7 @@ export async function runTask(
 
   // HUMAN DIFF APPROVAL loop
   if (!patchBlocked && !noChangeNeeded) {
-    const diffAnalysisForReview = runDiffGuard(checkpoint, config, cwd);
+    const diffAnalysisForReview = runDiffGuard(checkpoint, config, cwd, contract.allowedSymbolChanges);
     
     approved = true;
     reviewRequired = config.requireHumanDiffApproval;
@@ -534,7 +534,7 @@ export async function runTask(
       }
 
       // A. Inspect changes via Diff Guard
-      diffAnalysis = runDiffGuard(checkpoint, config, cwd);
+      diffAnalysis = runDiffGuard(checkpoint, config, cwd, contract.allowedSymbolChanges);
       console.log(`\n--- Diff Guard Summary (Status: ${diffAnalysis.status}) ---`);
       console.log(`Changed files: ${diffAnalysis.changedFilesCount}`);
       console.log(`Lines added: ${diffAnalysis.addedLinesCount}, removed: ${diffAnalysis.removedLinesCount}`);

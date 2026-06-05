@@ -125,6 +125,11 @@ export function validateTaskContractJson(input: unknown): TaskContract {
   if (obj.preserveExistingTests !== undefined && typeof obj.preserveExistingTests !== 'boolean') {
     throw new Error('Invalid TaskContract: "preserveExistingTests" must be a boolean.');
   }
+  if (obj.allowedSymbolChanges !== undefined) {
+    if (!Array.isArray(obj.allowedSymbolChanges) || obj.allowedSymbolChanges.some((x: any) => typeof x !== 'string')) {
+      throw new Error('Invalid TaskContract: "allowedSymbolChanges" must be an array of strings.');
+    }
+  }
 
   return obj as TaskContract;
 }

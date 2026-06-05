@@ -49,6 +49,7 @@ export interface JewelConfig {
   sandboxImage?: string;
   sandboxVolumes?: Record<string, string>;
   sandboxEnv?: Record<string, string>;
+  allowedSymbolChanges?: string[];
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -107,7 +108,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
   sandboxFallbackToHost: false,
   sandboxImage: 'node:18-slim',
   sandboxVolumes: {},
-  sandboxEnv: {}
+  sandboxEnv: {},
+  allowedSymbolChanges: []
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -301,6 +303,18 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
         throw new Error(`Invalid config: "critics[${i}]" must be one of "security", "linter", or "architect".`);
       }
       return item as 'security' | 'linter' | 'architect';
+    });
+  }
+
+  if (parsed.allowedSymbolChanges !== undefined) {
+    if (!Array.isArray(parsed.allowedSymbolChanges)) {
+      throw new Error('Invalid config: "allowedSymbolChanges" must be an array.');
+    }
+    config.allowedSymbolChanges = parsed.allowedSymbolChanges.map((item: any, i: number) => {
+      if (typeof item !== 'string') {
+        throw new Error(`Invalid config: "allowedSymbolChanges[${i}]" must be a string.`);
+      }
+      return item;
     });
   }
 

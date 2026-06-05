@@ -120,3 +120,15 @@ const config_1 = require("./config");
         (0, config_1.validateAndMergeConfig)({ sandboxEnv: 'not-an-object' });
     }, /sandboxEnv.*must be an object/);
 });
+(0, node_test_1.default)('config loader - allowedSymbolChanges validation', () => {
+    const result = (0, config_1.validateAndMergeConfig)({
+        allowedSymbolChanges: ['myFunc', 'MyClass.myMethod']
+    });
+    node_assert_1.default.deepStrictEqual(result.allowedSymbolChanges, ['myFunc', 'MyClass.myMethod']);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ allowedSymbolChanges: 'not-an-array' });
+    }, /allowedSymbolChanges.*must be an array/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ allowedSymbolChanges: [123] });
+    }, /allowedSymbolChanges\[0\].*must be a string/);
+});

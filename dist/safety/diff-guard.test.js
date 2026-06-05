@@ -167,3 +167,38 @@ function cleanupSandbox() {
     node_assert_1.default.ok(analysis.findings.some(f => f.includes("Modified file 'math.ts' is referenced by protected module 'src/payments/billing.ts'")));
     cleanupSandbox();
 });
+(0, node_test_1.default)('diff guard - AST allowed symbol changes bypass block', () => {
+    cleanupSandbox();
+    const originalDir = path.join(sandboxDir, 'backup');
+    const currentDir = path.join(sandboxDir, 'current');
+    fs.mkdirSync(originalDir, { recursive: true });
+    fs.mkdirSync(currentDir, { recursive: true });
+    const checkpoint = {
+        timestamp: '123',
+        isGit: false,
+        backupPath: originalDir
+    };
+    const astConfig = {
+        ...config_1.DEFAULT_CONFIG,
+        useASTDiffGuard: true
+    };
+    // Original files: math.ts contains add and subtract
+    fs.writeFileSync(path.join(originalDir, 'math.ts'), 'export function add(a: number, b: number): number { return a + b; }\nexport function subtract(a: number, b: number): number { return a - b; }\n');
+    // Current files: delete subtract
+    fs.writeFileSync(path.join(currentDir, 'math.ts'), 'export function add(a: number, b: number): number { return a + b; }\n');
+    // 1. Without allowed symbol changes: blocked
+    const analysisBlocked = (0, diff_guard_1.runDiffGuard)(checkpoint, astConfig, currentDir);
+    node_assert_1.default.strictEqual(analysisBlocked.status, 'BLOCK');
+    node_assert_1.default.ok(analysisBlocked.findings.some(f => f.includes("Deleted or modified signature of 'function subtract(a,b)'")));
+    // 2. With allowed symbol changes containing 'subtract': passes
+    const analysisPassed = (0, diff_guard_1.runDiffGuard)(checkpoint, astConfig, currentDir, ['subtract']);
+    node_assert_1.default.strictEqual(analysisPassed.status, 'PASS');
+    // 3. With config-level allowed symbol changes containing 'subtract': passes
+    const configWithAllowed = {
+        ...astConfig,
+        allowedSymbolChanges: ['subtract']
+    };
+    const analysisPassedConfig = (0, diff_guard_1.runDiffGuard)(checkpoint, configWithAllowed, currentDir);
+    node_assert_1.default.strictEqual(analysisPassedConfig.status, 'PASS');
+    cleanupSandbox();
+});

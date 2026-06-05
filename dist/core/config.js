@@ -94,7 +94,8 @@ exports.DEFAULT_CONFIG = {
     sandboxFallbackToHost: false,
     sandboxImage: 'node:18-slim',
     sandboxVolumes: {},
-    sandboxEnv: {}
+    sandboxEnv: {},
+    allowedSymbolChanges: []
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -267,6 +268,17 @@ function validateAndMergeConfig(parsed) {
         config.critics = parsed.critics.map((item, i) => {
             if (typeof item !== 'string' || !['security', 'linter', 'architect'].includes(item)) {
                 throw new Error(`Invalid config: "critics[${i}]" must be one of "security", "linter", or "architect".`);
+            }
+            return item;
+        });
+    }
+    if (parsed.allowedSymbolChanges !== undefined) {
+        if (!Array.isArray(parsed.allowedSymbolChanges)) {
+            throw new Error('Invalid config: "allowedSymbolChanges" must be an array.');
+        }
+        config.allowedSymbolChanges = parsed.allowedSymbolChanges.map((item, i) => {
+            if (typeof item !== 'string') {
+                throw new Error(`Invalid config: "allowedSymbolChanges[${i}]" must be a string.`);
             }
             return item;
         });

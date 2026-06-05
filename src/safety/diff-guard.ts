@@ -20,7 +20,8 @@ export interface DiffAnalysis {
 export function runDiffGuard(
   checkpoint: CheckpointMetadata,
   config: JewelConfig,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  allowedSymbolChanges: string[] = []
 ): DiffAnalysis {
   const findings: string[] = [];
   let status: DiffAnalysis['status'] = 'PASS';
@@ -233,8 +234,15 @@ export function runDiffGuard(
     status = 'BLOCK';
   }
 
+  const mergedAllowedSymbols = [
+    ...(config.allowedSymbolChanges || []),
+    ...(allowedSymbolChanges || [])
+  ]
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
   if (config.useASTDiffGuard) {
-    const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd);
+    const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, mergedAllowedSymbols);
     findings.push(...astResult.findings);
     if (astResult.status === 'BLOCK') {
       status = 'BLOCK';
@@ -339,7 +347,8 @@ function runASTDiffAnalysis(
   checkpoint: CheckpointMetadata,
   config: JewelConfig,
   changedFiles: { file: string; added: number; removed: number }[],
-  cwd: string
+  cwd: string,
+  allowedSymbolChanges: string[] = []
 ): { status: 'PASS' | 'WARN' | 'BLOCK'; findings: string[] } {
   const findings: string[] = [];
   let status: 'PASS' | 'WARN' | 'BLOCK' = 'PASS';
@@ -391,8 +400,18 @@ function runASTDiffAnalysis(
 
       for (const sig of oldSignatures) {
         if (!newSignatures.has(sig)) {
-          findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
-          status = 'BLOCK';
+          const isAllowed = allowedSymbolChanges.some(allowed => {
+            if (sig === allowed || sig.includes(allowed)) {
+              return true;
+            }
+            const words = sig.split(/[\s.()=,]+/);
+            return words.includes(allowed);
+          });
+
+          if (!isAllowed) {
+            findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
+            status = 'BLOCK';
+          }
         }
       }
     } catch (err: any) {

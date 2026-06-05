@@ -391,7 +391,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         }
         // HUMAN DIFF APPROVAL loop
         if (!patchBlocked && !noChangeNeeded) {
-            const diffAnalysisForReview = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd);
+            const diffAnalysisForReview = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd, contract.allowedSymbolChanges);
             approved = true;
             reviewRequired = config.requireHumanDiffApproval;
             if (noReview) {
@@ -508,7 +508,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     console.log(`\n[Retry ${retries}/${maxRetries}] Retrying verification checks...`);
                 }
                 // A. Inspect changes via Diff Guard
-                diffAnalysis = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd);
+                diffAnalysis = (0, diff_guard_1.runDiffGuard)(checkpoint, config, cwd, contract.allowedSymbolChanges);
                 console.log(`\n--- Diff Guard Summary (Status: ${diffAnalysis.status}) ---`);
                 console.log(`Changed files: ${diffAnalysis.changedFilesCount}`);
                 console.log(`Lines added: ${diffAnalysis.addedLinesCount}, removed: ${diffAnalysis.removedLinesCount}`);

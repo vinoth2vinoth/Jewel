@@ -70,6 +70,13 @@ export declare const TaskContractSchema: {
             type: string;
             description: string;
         };
+        allowedSymbolChanges: {
+            type: string;
+            items: {
+                type: string;
+            };
+            description: string;
+        };
     };
     required: string[];
     additionalProperties: boolean;

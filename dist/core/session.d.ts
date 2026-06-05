@@ -13,6 +13,7 @@ export interface TaskContract {
     estimatedFilesChangedCount?: number;
     estimatedLinesChangedCount?: number;
     preserveExistingTests?: boolean;
+    allowedSymbolChanges?: string[];
 }
 export declare function validateContract(contract: any): string[];
 export declare function assessRiskLevel(task: string, filesNeeded: string[], config: JewelConfig): 'low' | 'medium' | 'high';

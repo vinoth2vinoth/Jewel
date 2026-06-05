@@ -73,6 +73,23 @@ test('json-response - validateTaskContractJson cases', () => {
   assert.throws(() => {
     validateTaskContractJson({ ...valid, successCriteria: [] });
   }, /successCriteria/);
+
+  // Valid allowedSymbolChanges
+  const validWithSymbols = {
+    ...valid,
+    allowedSymbolChanges: ['myFunc', 'MyClass.myMethod']
+  };
+  const parsedWithSymbols = validateTaskContractJson(validWithSymbols);
+  assert.deepStrictEqual(parsedWithSymbols.allowedSymbolChanges, ['myFunc', 'MyClass.myMethod']);
+
+  // Invalid allowedSymbolChanges
+  assert.throws(() => {
+    validateTaskContractJson({ ...valid, allowedSymbolChanges: 'not-an-array' });
+  }, /allowedSymbolChanges/);
+
+  assert.throws(() => {
+    validateTaskContractJson({ ...valid, allowedSymbolChanges: [123] });
+  }, /allowedSymbolChanges/);
 });
 
 test('json-response - validatePatchProposalJson cases', () => {

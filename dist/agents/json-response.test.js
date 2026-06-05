@@ -60,6 +60,20 @@ const json_response_1 = require("./json-response");
     node_assert_1.default.throws(() => {
         (0, json_response_1.validateTaskContractJson)({ ...valid, successCriteria: [] });
     }, /successCriteria/);
+    // Valid allowedSymbolChanges
+    const validWithSymbols = {
+        ...valid,
+        allowedSymbolChanges: ['myFunc', 'MyClass.myMethod']
+    };
+    const parsedWithSymbols = (0, json_response_1.validateTaskContractJson)(validWithSymbols);
+    node_assert_1.default.deepStrictEqual(parsedWithSymbols.allowedSymbolChanges, ['myFunc', 'MyClass.myMethod']);
+    // Invalid allowedSymbolChanges
+    node_assert_1.default.throws(() => {
+        (0, json_response_1.validateTaskContractJson)({ ...valid, allowedSymbolChanges: 'not-an-array' });
+    }, /allowedSymbolChanges/);
+    node_assert_1.default.throws(() => {
+        (0, json_response_1.validateTaskContractJson)({ ...valid, allowedSymbolChanges: [123] });
+    }, /allowedSymbolChanges/);
 });
 (0, node_test_1.default)('json-response - validatePatchProposalJson cases', () => {
     const valid = {

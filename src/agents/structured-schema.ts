@@ -52,6 +52,11 @@ export const TaskContractSchema = {
     preserveExistingTests: {
       type: 'boolean',
       description: 'Set to true if the user instructs to keep existing tests exactly as they are'
+    },
+    allowedSymbolChanges: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'List of specific class/function/type names or signatures allowed to be deleted or modified'
     }
   },
   required: [

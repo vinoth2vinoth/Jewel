@@ -179,3 +179,55 @@ test('diff guard - AST semantic dependency checks', () => {
 
   cleanupSandbox();
 });
+
+test('diff guard - AST allowed symbol changes bypass block', () => {
+  cleanupSandbox();
+
+  const originalDir = path.join(sandboxDir, 'backup');
+  const currentDir = path.join(sandboxDir, 'current');
+
+  fs.mkdirSync(originalDir, { recursive: true });
+  fs.mkdirSync(currentDir, { recursive: true });
+
+  const checkpoint: CheckpointMetadata = {
+    timestamp: '123',
+    isGit: false,
+    backupPath: originalDir
+  };
+
+  const astConfig: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useASTDiffGuard: true
+  };
+
+  // Original files: math.ts contains add and subtract
+  fs.writeFileSync(
+    path.join(originalDir, 'math.ts'),
+    'export function add(a: number, b: number): number { return a + b; }\nexport function subtract(a: number, b: number): number { return a - b; }\n'
+  );
+
+  // Current files: delete subtract
+  fs.writeFileSync(
+    path.join(currentDir, 'math.ts'),
+    'export function add(a: number, b: number): number { return a + b; }\n'
+  );
+
+  // 1. Without allowed symbol changes: blocked
+  const analysisBlocked = runDiffGuard(checkpoint, astConfig, currentDir);
+  assert.strictEqual(analysisBlocked.status, 'BLOCK');
+  assert.ok(analysisBlocked.findings.some(f => f.includes("Deleted or modified signature of 'function subtract(a,b)'")));
+
+  // 2. With allowed symbol changes containing 'subtract': passes
+  const analysisPassed = runDiffGuard(checkpoint, astConfig, currentDir, ['subtract']);
+  assert.strictEqual(analysisPassed.status, 'PASS');
+
+  // 3. With config-level allowed symbol changes containing 'subtract': passes
+  const configWithAllowed: JewelConfig = {
+    ...astConfig,
+    allowedSymbolChanges: ['subtract']
+  };
+  const analysisPassedConfig = runDiffGuard(checkpoint, configWithAllowed, currentDir);
+  assert.strictEqual(analysisPassedConfig.status, 'PASS');
+
+  cleanupSandbox();
+});
