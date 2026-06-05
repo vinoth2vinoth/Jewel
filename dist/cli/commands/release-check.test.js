@@ -43,7 +43,7 @@ const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const child_process_1 = require("child_process");
 const release_check_1 = require("./release-check");
-function createMockReleaseWorkspace(version = '0.8.0', withDocs = true, withFiles = true) {
+function createMockReleaseWorkspace(version = '0.9.0', withDocs = true, withFiles = true) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jewel-release-check-test-'));
     // Git init
     (0, child_process_1.execSync)('git init', { cwd: tempDir, stdio: 'ignore' });
@@ -100,7 +100,7 @@ function cleanupWorkspace(dir) {
     console.log = (...args) => {
         logs.push(args.join(' '));
     };
-    const workspace = createMockReleaseWorkspace('0.8.0', true, true);
+    const workspace = createMockReleaseWorkspace('0.9.0', true, true);
     try {
         (0, release_check_1.runReleaseCheck)(workspace);
         node_assert_1.default.strictEqual(exitCode, 0);
@@ -135,7 +135,7 @@ function cleanupWorkspace(dir) {
         (0, release_check_1.runReleaseCheck)(workspace);
         // Since missing docs produces warnings (not failures), it should still exit with 0!
         node_assert_1.default.strictEqual(exitCode, 0);
-        node_assert_1.default.ok(logs.some(log => log.includes('[WARN] Package version 0.7.0 is below current target 0.8.0.')));
+        node_assert_1.default.ok(logs.some(log => log.includes('[WARN] Package version 0.7.0 is below current target 0.9.0.')));
         node_assert_1.default.ok(logs.some(log => log.includes('[WARN] docs/ directory is missing.')));
     }
     finally {
@@ -156,7 +156,7 @@ function cleanupWorkspace(dir) {
     console.log = (...args) => {
         logs.push(args.join(' '));
     };
-    const workspace = createMockReleaseWorkspace('0.8.0', true, true);
+    const workspace = createMockReleaseWorkspace('0.9.0', true, true);
     fs.mkdirSync(path.join(workspace, 'scripts'), { recursive: true });
     try {
         // Scenario 1: verify script exits with 0 (fixture is broken/passes validation)

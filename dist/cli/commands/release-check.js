@@ -61,10 +61,10 @@ function runReleaseCheck(cwd = process.cwd()) {
             pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
             if (pkg.version) {
                 report('PASS', `Package version exists: ${pkg.version}`);
-                // 12. warn if version is below release target (0.8.0)
+                // 12. warn if version is below release target (0.9.0)
                 const parts = pkg.version.split('.').map((p) => parseInt(p, 10));
-                if (parts[0] < 0 || (parts[0] === 0 && parts[1] < 8)) {
-                    report('WARN', `Package version ${pkg.version} is below current target 0.8.0.`);
+                if (parts[0] < 0 || (parts[0] === 0 && parts[1] < 9)) {
+                    report('WARN', `Package version ${pkg.version} is below current target 0.9.0.`);
                 }
             }
             else {

@@ -6,7 +6,7 @@ import * as os from 'os';
 import { execSync } from 'child_process';
 import { runReleaseCheck } from './release-check';
 
-function createMockReleaseWorkspace(version = '0.8.0', withDocs = true, withFiles = true): string {
+function createMockReleaseWorkspace(version = '0.9.0', withDocs = true, withFiles = true): string {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jewel-release-check-test-'));
 
   // Git init
@@ -83,7 +83,7 @@ test('release-check - successful validation on compliant workspace', async () =>
     logs.push(args.join(' '));
   };
 
-  const workspace = createMockReleaseWorkspace('0.8.0', true, true);
+  const workspace = createMockReleaseWorkspace('0.9.0', true, true);
 
   try {
     runReleaseCheck(workspace);
@@ -123,7 +123,7 @@ test('release-check - warns on missing docs and below version target', async () 
     runReleaseCheck(workspace);
     // Since missing docs produces warnings (not failures), it should still exit with 0!
     assert.strictEqual(exitCode, 0);
-    assert.ok(logs.some(log => log.includes('[WARN] Package version 0.7.0 is below current target 0.8.0.')));
+    assert.ok(logs.some(log => log.includes('[WARN] Package version 0.7.0 is below current target 0.9.0.')));
     assert.ok(logs.some(log => log.includes('[WARN] docs/ directory is missing.')));
   } finally {
     process.exit = originalExit;
@@ -147,7 +147,7 @@ test('release-check - dogfood fixture check behaves correctly', async () => {
     logs.push(args.join(' '));
   };
 
-  const workspace = createMockReleaseWorkspace('0.8.0', true, true);
+  const workspace = createMockReleaseWorkspace('0.9.0', true, true);
   fs.mkdirSync(path.join(workspace, 'scripts'), { recursive: true });
 
   try {

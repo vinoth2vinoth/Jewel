@@ -19,10 +19,10 @@ Follow these steps to verify that the CLI, git checkpointing, verification flow,
    npm run build
    npm pack
    ```
-   This creates a file named `jewel-cli-0.8.0.tgz` (or current package version).
+   This creates a file named `jewel-cli-0.9.0.tgz` (or current package version).
 2. Install Jewel globally using the generated tarball:
    ```bash
-   npm install -g ./jewel-cli-0.8.0.tgz
+   npm install -g ./jewel-cli-0.9.0.tgz
    ```
 3. Verify that the global installation works:
    ```bash

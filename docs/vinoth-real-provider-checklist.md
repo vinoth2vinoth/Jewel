@@ -1,6 +1,6 @@
-# Vinoth's Real Provider Validation Checklist (Jewel v0.8.0)
+# Vinoth's Real Provider Validation Checklist (Jewel v0.9.0)
 
-This checklist is custom-tailored for Windows PowerShell verification of Jewel `0.8.0` against Gemini and OpenRouter.
+This checklist is custom-tailored for Windows PowerShell verification of Jewel `0.9.0` against Gemini and OpenRouter.
 
 ## ⚠️ Safety Warnings
 * **DO NOT run these commands on production or uncommitted repositories.**
@@ -21,14 +21,14 @@ npm run build
 npm pack
 
 # 3. Install globally from generated tarball
-npm install -g .\jewel-cli-0.8.0.tgz
+npm install -g .\jewel-cli-0.9.0.tgz
 ```
 
 ### Step 2: Verify CLI version
 ```powershell
 jewel version
 ```
-*Expected PASS point:* Output shows `Jewel version: 0.8.0`.
+*Expected PASS point:* Output shows `Jewel version: 0.9.0`.
 
 ### Step 3: Run release checks
 ```powershell

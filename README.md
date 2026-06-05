@@ -56,10 +56,10 @@ You can package and install Jewel globally from a local tarball to verify its be
    ```bash
    npm pack
    ```
-   This generates a file like `jewel-cli-0.8.0.tgz`.
+   This generates a file like `jewel-cli-0.9.0.tgz`.
 2. Install the package globally from the local tarball:
    ```bash
-   npm install -g ./jewel-cli-0.8.0.tgz
+   npm install -g ./jewel-cli-0.9.0.tgz
    ```
 3. Verify that the global command is available:
    ```bash

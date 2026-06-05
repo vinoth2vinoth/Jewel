@@ -2,6 +2,18 @@
 
 All notable changes to the Jewel project will be documented in this file.
 
+## [0.9.0] - 2026-06-05
+
+This release introduces multi-agent collaboration, Abstract Syntax Tree (AST) difference tracking, sandbox verification containment, and a local Web UI execution dashboard.
+
+### Added
+- **Phase 1: Multi-Agent Collaboration**: Spawns specialized domain critics (e.g. `security`, `architect`, `linter`) in parallel to review patches before they are applied.
+- **Phase 2: AST-Based Semantic Diff Guard**: Parses source files into Abstract Syntax Trees to verify only allowed code symbols/nodes are added, modified, or deleted.
+- **Phase 3: Isolated Sandbox Verification Runner**: Contains test runs inside lightweight isolated Docker container environments.
+- **Phase 4: Local Web UI Dashboard**: Serves a local HTTP server with real-time SSE stream reporting, console logs, findings, and interactive decision modal panels.
+
+---
+
 ## [0.8.0] - 2026-06-05
 
 This release introduces major safety hardening features, budget protections, interactive loops, and version updates to `0.8.0`.
