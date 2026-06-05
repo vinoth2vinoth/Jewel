@@ -11,3 +11,4 @@ export declare function getGitStatus(cwd?: string): string;
 export declare function getGitHead(cwd?: string): string;
 export declare function createCheckpoint(sessionId: string, cwd?: string): CheckpointMetadata;
 export declare function rollbackCheckpoint(metadata: CheckpointMetadata, cwd?: string): void;
+export declare function revertFileToCheckpoint(file: string, checkpoint: CheckpointMetadata, cwd?: string): void;

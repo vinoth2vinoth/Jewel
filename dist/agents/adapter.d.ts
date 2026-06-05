@@ -21,6 +21,7 @@ export interface PatchInput {
     sessionPath?: string;
     customHint?: string;
     criticResult?: CriticResult;
+    failedDiff?: string;
 }
 export interface PatchProposal {
     summary: string;

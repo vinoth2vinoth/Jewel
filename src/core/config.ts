@@ -50,6 +50,9 @@ export interface JewelConfig {
   sandboxVolumes?: Record<string, string>;
   sandboxEnv?: Record<string, string>;
   allowedSymbolChanges?: string[];
+  sandboxNetwork?: 'none' | 'host' | 'bridge';
+  sandboxReadOnlyRoot?: boolean;
+  sandboxWritePaths?: string[];
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -109,7 +112,10 @@ export const DEFAULT_CONFIG: JewelConfig = {
   sandboxImage: 'node:18-slim',
   sandboxVolumes: {},
   sandboxEnv: {},
-  allowedSymbolChanges: []
+  allowedSymbolChanges: [],
+  sandboxNetwork: 'none',
+  sandboxReadOnlyRoot: true,
+  sandboxWritePaths: []
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -354,6 +360,57 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
       }
       config.sandboxEnv[key] = val;
     }
+  }
+
+  if (parsed.sandboxNetwork !== undefined) {
+    if (!['none', 'host', 'bridge'].includes(parsed.sandboxNetwork)) {
+      throw new Error('Invalid config: "sandboxNetwork" must be one of "none", "host", or "bridge".');
+    }
+    config.sandboxNetwork = parsed.sandboxNetwork;
+  }
+
+  if (parsed.sandboxReadOnlyRoot !== undefined) {
+    if (typeof parsed.sandboxReadOnlyRoot !== 'boolean') {
+      throw new Error('Invalid config: "sandboxReadOnlyRoot" must be a boolean.');
+    }
+    config.sandboxReadOnlyRoot = parsed.sandboxReadOnlyRoot;
+  }
+
+  if (parsed.sandboxWritePaths !== undefined) {
+    if (!Array.isArray(parsed.sandboxWritePaths)) {
+      throw new Error('Invalid config: "sandboxWritePaths" must be an array of strings.');
+    }
+    const normalizedList = parsed.sandboxWritePaths.map((item: any, i: number) => {
+      if (typeof item !== 'string') {
+        throw new Error(`Invalid config: "sandboxWritePaths[${i}]" must be a string.`);
+      }
+      
+      // Block colons to prevent drive-relative escapes (e.g., C:foo) and NTFS Alternate Data Streams (ADS)
+      if (item.includes(':')) {
+        throw new Error(`Invalid config: "sandboxWritePaths[${i}]" contains a colon (":") which is not allowed.`);
+      }
+
+      // Convert backslashes to forward slashes before normalizing to ensure cross-platform consistency
+      const posixPath = item.replace(/\\/g, '/');
+      const isAbsolute = path.isAbsolute(item) || posixPath.startsWith('/');
+      let normalized = path.normalize(posixPath).replace(/\\/g, '/');
+
+      // Strip trailing slashes unless path is exactly /
+      if (normalized.endsWith('/') && normalized !== '/') {
+        normalized = normalized.slice(0, -1);
+      }
+
+      // Block root reference escapes, empty paths, and parent traversals
+      const isRoot = normalized === '.' || normalized === './' || normalized === '';
+      const isTraversal = normalized === '..' || normalized.startsWith('../');
+
+      if (isAbsolute || isRoot || isTraversal) {
+        throw new Error(`Invalid config: "sandboxWritePaths[${i}]" must be a relative path inside the workspace root and cannot escape it.`);
+      }
+      return normalized; // Return canonical normalized path
+    });
+
+    config.sandboxWritePaths = Array.from(new Set(normalizedList));
   }
 
   return config;

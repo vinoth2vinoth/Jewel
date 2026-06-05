@@ -82,6 +82,23 @@ function askQuestion(query) {
         resolve(ans);
     }));
 }
+function broadcastState(uiServer, stateUpdate, config, adapter) {
+    if (!uiServer)
+        return;
+    const costUpdate = adapter && adapter.usage ? {
+        cost: {
+            totalTokens: adapter.usage.totalTokens || 0,
+            promptTokens: adapter.usage.inputTokens || 0,
+            completionTokens: adapter.usage.outputTokens || 0,
+            totalUSD: adapter.usage.estimatedCostUsd || 0,
+            maxCost: config.maxSessionCost
+        }
+    } : {};
+    uiServer.updateState({
+        ...stateUpdate,
+        ...costUpdate
+    });
+}
 function generateRepoSummary(cwd) {
     const files = [];
     try {
@@ -122,6 +139,14 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         if (!task || task.trim() === '') {
             throw new errors_1.JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
         }
+        console.log(`\x1b[36m
+     💎   _ _______        _______ _     
+         | |  ___\\ \\      / /  ___| |    
+      _  | | |_   \\ \\ /\\ / /| |_  | |    
+     | |_| |  _|   \\ V  V / | |___| |___ 
+      \\___/|_|      \\_/\\_/  |_____|_____|
+\x1b[35m              Strict AI Coding Safety Harness CLI\x1b[0m
+`);
         console.log(`Starting Jewel Harness for task: "${task}"`);
         let reviewRequired = false;
         let approved = true;
@@ -208,14 +233,14 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         sessionPath = sessionData.sessionPath;
         contractPath = sessionData.contractPath;
         if (uiServer) {
-            uiServer.updateState({
+            broadcastState(uiServer, {
                 sessionId,
                 files: filesNeeded,
                 overrides: {
                     provider: config.provider,
                     model: config.model
                 }
-            });
+            }, config, adapter);
         }
         adapter = null;
         if (isAgentMode) {
@@ -227,7 +252,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 throw new errors_1.JewelError('ADAPTER_INSTANTIATION_FAILED', `Error instantiating agent adapter: ${err.message}`, 'Verify provider settings and environment.', err);
             }
             if (uiServer) {
-                uiServer.updateState({ stage: 'planning' });
+                broadcastState(uiServer, { stage: 'planning' }, config, adapter);
             }
             console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
             const repoSummary = generateRepoSummary(cwd);
@@ -281,7 +306,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             else {
                 let approvedScope = false;
                 if (useUI && uiServer) {
-                    uiServer.updateState({ stage: 'review' });
+                    broadcastState(uiServer, { stage: 'review' }, config, adapter);
                     const res = await uiServer.waitForApproval('scope-expansion', {
                         message: `Estimated scope exceeds limits. Files: ${estimatedFiles}/${config.maxFilesChanged}, Lines: ${estimatedLines}/${config.maxLinesChanged}. Approve to expand limits?`
                     });
@@ -440,18 +465,41 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     console.log('(Git diff preview is not available in non-Git backup mode)');
                 }
                 console.log('======================================\n');
-                let choice = '';
+                let approvedFiles = [];
                 if (useUI && uiServer) {
-                    uiServer.updateState({ stage: 'review' });
-                    const res = await uiServer.waitForApproval('patch-review', { diff: diffContent });
-                    choice = res.action === 'approve' ? 'y' : 'n';
+                    broadcastState(uiServer, { stage: 'review' }, config, adapter);
+                    const res = await uiServer.waitForApproval('patch-review', {
+                        diff: diffContent,
+                        files: diffAnalysisForReview.changedFiles,
+                        astDiffs: diffAnalysisForReview.astDiffs
+                    });
+                    if (res.action === 'approve') {
+                        approvedFiles = res.approvedFiles || [];
+                        approved = approvedFiles.length > 0; // Reject if no files approved
+                    }
+                    else {
+                        approved = false;
+                    }
                 }
                 else {
                     const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
-                    choice = response.toLowerCase().trim();
+                    const choice = response.toLowerCase().trim();
+                    if (choice === 'y') {
+                        approved = true;
+                        approvedFiles = diffAnalysisForReview.changedFiles;
+                    }
+                    else {
+                        approved = false;
+                    }
                 }
-                if (choice !== 'y') {
-                    approved = false;
+                if (approved) {
+                    const rejectedFiles = diffAnalysisForReview.changedFiles.filter(f => !approvedFiles.includes(f));
+                    if (rejectedFiles.length > 0) {
+                        console.log(`Reverting rejected files: ${rejectedFiles.join(', ')}`);
+                        for (const file of rejectedFiles) {
+                            (0, git_1.revertFileToCheckpoint)(file, checkpoint, cwd);
+                        }
+                    }
                 }
             }
             if (!approved) {
@@ -553,7 +601,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 // B. Run verification commands
                 console.log('\nRunning verification tests...');
                 if (uiServer) {
-                    uiServer.updateState({ stage: 'verification' });
+                    broadcastState(uiServer, { stage: 'verification' }, config, adapter);
                 }
                 verification = await (0, runner_1.runVerification)(config, cwd, (progress) => {
                     if (uiServer) {
@@ -572,7 +620,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                         else {
                             currentResults.push(item);
                         }
-                        uiServer.updateState({ verificationResults: [...currentResults] });
+                        broadcastState(uiServer, { verificationResults: [...currentResults] }, config, adapter);
                     }
                 });
                 console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
@@ -585,7 +633,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     catch { }
                 }
                 if (uiServer) {
-                    uiServer.updateState({ stage: 'critic' });
+                    broadcastState(uiServer, { stage: 'critic' }, config, adapter);
                 }
                 critic = await (0, critic_1.runMultiAgentCriticReview)(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
                 console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
@@ -620,9 +668,6 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 if (((verification && verification.overallStatus === 'FAIL') || existingTestModified) && isAgentMode && adapter && adapter.reviewTestCorrectness) {
                     console.log('\n[Critic] Analyzing test failure correctness...');
                     try {
-                        const diffContent = checkpoint.isGit && checkpoint.gitCheckpointSha
-                            ? (0, child_process_1.execSync)(`git diff ${checkpoint.gitCheckpointSha}`, { cwd, encoding: 'utf8', env: { ...process.env, PAGER: 'cat' } })
-                            : '';
                         testCriticResult = await adapter.reviewTestCorrectness({
                             taskContract: contract,
                             diff: diffContent,
@@ -752,7 +797,8 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                             criticResult: critic || undefined,
                             config,
                             sessionPath,
-                            customHint
+                            customHint,
+                            failedDiff: diffContent
                         });
                         (0, json_response_1.validatePatchProposalJson)(patch);
                         if (patch.noChangeNeeded === true) {

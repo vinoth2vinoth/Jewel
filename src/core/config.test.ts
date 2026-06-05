@@ -154,3 +154,90 @@ test('config loader - allowedSymbolChanges validation', () => {
   }, /allowedSymbolChanges\[0\].*must be a string/);
 });
 
+test('config loader - sandbox network, read-only root, and write paths validation', () => {
+  const defaults = validateAndMergeConfig({});
+  assert.strictEqual(defaults.sandboxNetwork, 'none');
+  assert.strictEqual(defaults.sandboxReadOnlyRoot, true);
+  assert.deepStrictEqual(defaults.sandboxWritePaths, []);
+
+  const valid = validateAndMergeConfig({
+    sandboxNetwork: 'bridge',
+    sandboxReadOnlyRoot: false,
+    sandboxWritePaths: ['coverage', 'src/temp']
+  });
+  assert.strictEqual(valid.sandboxNetwork, 'bridge');
+  assert.strictEqual(valid.sandboxReadOnlyRoot, false);
+  assert.deepStrictEqual(valid.sandboxWritePaths, ['coverage', 'src/temp']);
+
+  // Invalid sandboxNetwork
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxNetwork: 'invalid-net' });
+  }, /sandboxNetwork.*must be one of/);
+
+  // Invalid sandboxReadOnlyRoot
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxReadOnlyRoot: 'not-a-bool' });
+  }, /sandboxReadOnlyRoot.*must be a boolean/);
+
+  // Invalid sandboxWritePaths type
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: 'not-an-array' });
+  }, /sandboxWritePaths.*must be an array/);
+
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: [123] });
+  }, /sandboxWritePaths\[0\].*must be a string/);
+
+  // Path Escape & Traversal rejections
+  // 1. Colon detection
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['C:escaped'] });
+  }, /contains a colon/);
+
+  // 2. Absolute paths
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['/absolute'] });
+  }, /must be a relative path/);
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['\\\\unc\\path'] });
+  }, /must be a relative path/);
+
+  // 3. Root references
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['.'] });
+  }, /must be a relative path/);
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['./'] });
+  }, /must be a relative path/);
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: [''] });
+  }, /must be a relative path/);
+
+  // 4. Parent directory traversals (lexical)
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['..'] });
+  }, /must be a relative path/);
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['../escaped'] });
+  }, /must be a relative path/);
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['foo/../../escaped'] });
+  }, /must be a relative path/);
+  assert.throws(() => {
+    validateAndMergeConfig({ sandboxWritePaths: ['foo\\..\\..\\escaped'] });
+  }, /must be a relative path/);
+
+  // Deduplication and canonical normalization
+  const deduplicated = validateAndMergeConfig({
+    sandboxWritePaths: [
+      'coverage/',
+      'coverage',
+      'foo/bar',
+      'foo\\bar',
+      'foo/bar/'
+    ]
+  });
+  assert.deepStrictEqual(deduplicated.sandboxWritePaths, ['coverage', 'foo/bar']);
+});
+
+

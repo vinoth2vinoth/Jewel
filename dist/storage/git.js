@@ -38,6 +38,7 @@ exports.getGitStatus = getGitStatus;
 exports.getGitHead = getGitHead;
 exports.createCheckpoint = createCheckpoint;
 exports.rollbackCheckpoint = rollbackCheckpoint;
+exports.revertFileToCheckpoint = revertFileToCheckpoint;
 const child_process_1 = require("child_process");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
@@ -156,5 +157,59 @@ function rollbackCheckpoint(metadata, cwd = process.cwd()) {
     }
     catch (err) {
         throw new Error(`Failed to rollback git checkpoint: ${err.message}`);
+    }
+}
+function revertFileToCheckpoint(file, checkpoint, cwd = process.cwd()) {
+    const absolutePath = path.resolve(cwd, file);
+    if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+        try {
+            // Check if file existed in checkpoint commit
+            let fileExisted = false;
+            try {
+                (0, child_process_1.execSync)(`git show ${checkpoint.gitCheckpointSha}:"${file}"`, { cwd, stdio: 'ignore' });
+                fileExisted = true;
+            }
+            catch { }
+            if (fileExisted) {
+                (0, child_process_1.execSync)(`git checkout ${checkpoint.gitCheckpointSha} -- "${file}"`, { cwd, stdio: 'ignore' });
+            }
+            else {
+                // Did not exist - delete from disk
+                if (fs.existsSync(absolutePath)) {
+                    fs.unlinkSync(absolutePath);
+                }
+                // Remove from git index
+                try {
+                    (0, child_process_1.execSync)(`git rm --cached -f "${file}"`, { cwd, stdio: 'ignore' });
+                }
+                catch { }
+            }
+        }
+        catch (err) {
+            console.warn(`[Warning] Failed to revert file ${file} via Git: ${err.message}`);
+        }
+    }
+    else if (checkpoint.backupPath) {
+        const backupFilePath = path.join(checkpoint.backupPath, file);
+        if (fs.existsSync(backupFilePath)) {
+            try {
+                // Ensure parent directory exists for deeply nested files
+                fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+                fs.copyFileSync(backupFilePath, absolutePath);
+            }
+            catch (err) {
+                console.warn(`[Warning] Failed to restore backup for ${file}: ${err.message}`);
+            }
+        }
+        else {
+            try {
+                if (fs.existsSync(absolutePath)) {
+                    fs.unlinkSync(absolutePath);
+                }
+            }
+            catch (err) {
+                console.warn(`[Warning] Failed to delete temporary file ${file}: ${err.message}`);
+            }
+        }
     }
 }

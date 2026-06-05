@@ -245,8 +245,9 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd(), allowedSymbolChan
     ]
         .map(s => s.trim())
         .filter(s => s.length > 0);
+    const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, mergedAllowedSymbols);
+    const astDiffs = astResult.astDiffs;
     if (config.useASTDiffGuard) {
-        const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, mergedAllowedSymbols);
         findings.push(...astResult.findings);
         if (astResult.status === 'BLOCK') {
             status = 'BLOCK';
@@ -254,6 +255,10 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd(), allowedSymbolChan
         else if (astResult.status === 'WARN' && status !== 'BLOCK') {
             status = 'WARN';
         }
+    }
+    else {
+        // If not enabled, we still log findings as info for visual display in the UI
+        findings.push(...astResult.findings.map(f => `[INFO] ${f}`));
     }
     return {
         status,
@@ -264,7 +269,8 @@ function runDiffGuard(checkpoint, config, cwd = process.cwd(), allowedSymbolChan
         protectedFilesChanged,
         dependenciesChanged,
         lockfilesChanged,
-        findings
+        findings,
+        astDiffs
     };
 }
 let ts = null;
@@ -354,9 +360,10 @@ function extractASTSignatures(fileName, content) {
 function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, allowedSymbolChanges = []) {
     const findings = [];
     let status = 'PASS';
+    const astDiffs = [];
     if (!ts) {
         findings.push("AST Diff Guard: TypeScript module not found. Falling back to line-by-line checks.");
-        return { status: 'WARN', findings };
+        return { status: 'WARN', findings, astDiffs };
     }
     // 1. AST comparison for each changed JS/TS file
     for (const item of changedFiles) {
@@ -398,6 +405,7 @@ function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, allowedSymbol
         try {
             const oldSignatures = extractASTSignatures(file, oldContent);
             const newSignatures = extractASTSignatures(file, newContent);
+            const items = [];
             for (const sig of oldSignatures) {
                 if (!newSignatures.has(sig)) {
                     const isAllowed = allowedSymbolChanges.some(allowed => {
@@ -411,7 +419,16 @@ function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, allowedSymbol
                         findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
                         status = 'BLOCK';
                     }
+                    items.push({ type: 'deleted', signature: sig });
                 }
+            }
+            for (const sig of newSignatures) {
+                if (!oldSignatures.has(sig)) {
+                    items.push({ type: 'added', signature: sig });
+                }
+            }
+            if (items.length > 0) {
+                astDiffs.push({ file, items });
             }
         }
         catch (err) {
@@ -485,5 +502,5 @@ function runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, allowedSymbol
             }
         }
     }
-    return { status, findings };
+    return { status, findings, astDiffs };
 }

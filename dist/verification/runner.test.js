@@ -265,6 +265,7 @@ function cleanupSandbox() {
     const config = {
         ...config_1.DEFAULT_CONFIG,
         useSandbox: true,
+        sandboxReadOnlyRoot: false,
         sandboxImage: 'node:custom',
         sandboxVolumes: { './my-host-data': '/opt/data' },
         sandboxEnv: {
@@ -364,5 +365,111 @@ function cleanupSandbox() {
     node_assert_1.default.strictEqual(testResultSig.status, 'FAIL');
     node_assert_1.default.strictEqual(testResultSig.exitCode, 1);
     node_assert_1.default.ok(testResultSig.stderr.includes('SIGKILL'));
+    cleanupSandbox();
+});
+(0, node_test_1.default)('verification runner - sandbox read-only root and network and write paths mapping', async (t) => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => true);
+    let capturedArgs = [];
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', async (args, cwd, env, onChunk) => {
+        capturedArgs = args;
+        return {
+            status: 0,
+            signal: null,
+            stdout: 'Success',
+            stderr: '',
+            error: undefined
+        };
+    });
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        sandboxReadOnlyRoot: true,
+        sandboxNetwork: 'bridge',
+        sandboxWritePaths: ['my-writable-dir', '..dotdir'],
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'npm run test'
+        }
+    };
+    // Run verification
+    const report = await (0, runner_1.runVerification)(config, sandboxDir);
+    node_assert_1.default.strictEqual(report.overallStatus, 'PASS');
+    // Verify network argument
+    node_assert_1.default.ok(capturedArgs.includes('--network'));
+    node_assert_1.default.strictEqual(capturedArgs[capturedArgs.indexOf('--network') + 1], 'bridge');
+    // Verify read-only mount
+    const expectedCwdMount = path.resolve(sandboxDir).replace(/\\/g, '/');
+    node_assert_1.default.ok(capturedArgs.includes(`${expectedCwdMount}:/workspace:ro`));
+    // Verify write paths read-write mounts
+    const expectedWritePath1 = path.resolve(sandboxDir, 'my-writable-dir').replace(/\\/g, '/');
+    node_assert_1.default.ok(capturedArgs.includes(`${expectedWritePath1}:/workspace/my-writable-dir:rw`));
+    const expectedWritePath2 = path.resolve(sandboxDir, '..dotdir').replace(/\\/g, '/');
+    node_assert_1.default.ok(capturedArgs.includes(`${expectedWritePath2}:/workspace/..dotdir:rw`));
+    // Verify directories are created on the host recursively
+    node_assert_1.default.ok(fs.existsSync(path.resolve(sandboxDir, 'my-writable-dir')));
+    node_assert_1.default.ok(fs.existsSync(path.resolve(sandboxDir, '..dotdir')));
+    cleanupSandbox();
+});
+(0, node_test_1.default)('verification runner - sandbox write path symlink escape protection', async (t) => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => true);
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', async () => {
+        return { status: 0, signal: null, stdout: '', stderr: '' };
+    });
+    // Create a real directory that we mock resolving outside the workspace
+    const mockEscapedLinkDir = path.join(sandboxDir, 'escaped-link');
+    fs.mkdirSync(mockEscapedLinkDir, { recursive: true });
+    const resolvedOutsidePath = path.resolve(sandboxDir, '../outside-test-dir-escaped').replace(/\\/g, '/');
+    const rawFs = require('node:fs');
+    const originalRealpathSync = rawFs.realpathSync;
+    t.mock.method(rawFs, 'realpathSync', (p) => {
+        const resolvedPath = path.resolve(p).replace(/\\/g, '/');
+        const targetLinkPath = mockEscapedLinkDir.replace(/\\/g, '/');
+        if (resolvedPath === targetLinkPath) {
+            return resolvedOutsidePath;
+        }
+        return originalRealpathSync(p);
+    });
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        sandboxReadOnlyRoot: true,
+        sandboxWritePaths: ['escaped-link'],
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'npm run test'
+        }
+    };
+    await node_assert_1.default.rejects(async () => {
+        await (0, runner_1.runVerification)(config, sandboxDir);
+    }, /resolves outside the workspace root/);
+    cleanupSandbox();
+});
+(0, node_test_1.default)('verification runner - sandbox write path type checking (file vs directory)', async (t) => {
+    cleanupSandbox();
+    fs.mkdirSync(sandboxDir, { recursive: true });
+    t.mock.method(runner_1.dockerUtils, 'isDockerAvailable', () => true);
+    t.mock.method(runner_1.dockerUtils, 'executeDocker', async () => {
+        return { status: 0, signal: null, stdout: '', stderr: '' };
+    });
+    // Create a file where a directory is expected
+    const filePath = path.join(sandboxDir, 'not-a-directory');
+    fs.writeFileSync(filePath, 'some file content', 'utf8');
+    const config = {
+        ...config_1.DEFAULT_CONFIG,
+        useSandbox: true,
+        sandboxReadOnlyRoot: true,
+        sandboxWritePaths: ['not-a-directory'],
+        commands: {
+            ...config_1.DEFAULT_CONFIG.commands,
+            test: 'npm run test'
+        }
+    };
+    await node_assert_1.default.rejects(async () => {
+        await (0, runner_1.runVerification)(config, sandboxDir);
+    }, /exists on host but is a file/);
     cleanupSandbox();
 });

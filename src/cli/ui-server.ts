@@ -4,6 +4,7 @@ import * as cp from 'child_process';
 import * as net from 'net';
 import { DASHBOARD_HTML } from './dashboard-html';
 import { redactSecrets } from '../safety/secret-redactor';
+import { ASTFileDiff } from '../safety/diff-guard';
 
 export interface UIState {
   stage: 'init' | 'planning' | 'review' | 'verification' | 'critic' | 'finalizing' | 'completed' | 'failed';
@@ -34,6 +35,15 @@ export interface UIState {
   approvalDetails?: {
     message?: string;
     diff?: string;
+    files?: string[];
+    astDiffs?: ASTFileDiff[];
+  };
+  cost?: {
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalUSD: number;
+    maxCost?: number;
   };
 }
 
@@ -45,7 +55,7 @@ export class UIServer {
   private clients: Set<http.ServerResponse> = new Set();
   private state: UIState;
 
-  private approvalResolver: ((val: { action: 'approve' | 'reject' | 'retry' | 'override' | 'abort', comment?: string }) => void) | null = null;
+  private approvalResolver: ((val: { action: 'approve' | 'reject' | 'retry' | 'override' | 'abort', comment?: string, approvedFiles?: string[] }) => void) | null = null;
   private exitResolver: (() => void) | null = null;
 
   constructor(options: { startPort?: number } = {}) {
@@ -204,8 +214,8 @@ export class UIServer {
         }
 
         try {
-          const parsed = JSON.parse(body);
-          const { action, comment } = parsed;
+           const parsed = JSON.parse(body);
+          const { action, comment, approvedFiles } = parsed;
 
           if (!action || typeof action !== 'string') {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -232,7 +242,7 @@ export class UIServer {
             const resolver = this.approvalResolver;
             this.approvalResolver = null;
             this.updateState({ awaitingApproval: false });
-            resolver({ action: action as any, comment });
+            resolver({ action: action as any, comment, approvedFiles });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
             return;
@@ -303,8 +313,8 @@ export class UIServer {
 
   public waitForApproval(
     promptType: 'scope-expansion' | 'patch-review' | 'retry-choice',
-    details?: { message?: string; diff?: string }
-  ): Promise<{ action: 'approve' | 'reject' | 'retry' | 'override' | 'abort'; comment?: string }> {
+    details?: { message?: string; diff?: string; files?: string[]; astDiffs?: ASTFileDiff[] }
+  ): Promise<{ action: 'approve' | 'reject' | 'retry' | 'override' | 'abort'; comment?: string; approvedFiles?: string[] }> {
     return new Promise((resolve) => {
       this.approvalResolver = resolve;
       this.updateState({

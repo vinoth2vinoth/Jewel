@@ -1,9 +1,33 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.formatVerificationResult = formatVerificationResult;
 exports.buildPlanningPrompt = buildPlanningPrompt;
 exports.buildPatchProposalPrompt = buildPatchProposalPrompt;
 exports.buildDiffReviewPrompt = buildDiffReviewPrompt;
 exports.buildTestCriticPrompt = buildTestCriticPrompt;
+function formatVerificationResult(report, fallback = 'No test runs performed yet.') {
+    if (!report)
+        return fallback;
+    let formatted = `Test run status: ${report.overallStatus}\nResults:\n`;
+    for (const r of report.results) {
+        formatted += `- ${r.commandKey} (${r.status}): ${r.errorMsg || ''}\n`;
+        if (r.status === 'FAIL') {
+            const formatLogSection = (header, content) => {
+                if (!content || content.trim() === '')
+                    return '';
+                const limit = 4000;
+                let trimmed = content.trim();
+                if (trimmed.length > limit) {
+                    trimmed = `[... truncated output ...]\n` + trimmed.slice(-limit);
+                }
+                return `  ${header}:\n  ` + trimmed.split('\n').join('\n  ') + '\n';
+            };
+            formatted += formatLogSection('STDOUT', r.stdout);
+            formatted += formatLogSection('STDERR', r.stderr);
+        }
+    }
+    return formatted.trim();
+}
 function buildPlanningPrompt(input) {
     const skillsStr = input.skills.map(s => `- ${s.name}: ${s.description}`).join('\n');
     const allowedModes = 'strict | lax';
@@ -57,8 +81,11 @@ function buildPatchProposalPrompt(input) {
     const contract = input.taskContract;
     const filesList = input.allowedFiles.map(f => `- ${f}`).join('\n');
     const verificationStr = input.verificationResult
-        ? `Test runner output from previous attempt:\nStatus: ${input.verificationResult.overallStatus}\nResults:\n${input.verificationResult.results.map(r => `- ${r.commandKey} (${r.status}): ${r.errorMsg || ''}`).join('\n')}`
+        ? `Test runner output from previous attempt:\n` + formatVerificationResult(input.verificationResult, 'No previous test runs.')
         : 'No previous test runs.';
+    const failedDiffStr = input.failedDiff
+        ? `\nProposed Diff that failed verification:\n\`\`\`diff\n${input.failedDiff}\n\`\`\`\n`
+        : '';
     const criticFeedbackStr = input.testCriticResult
         ? `\nCritic Feedback on previous failure:\nVerdict: ${input.testCriticResult.verdict}\nExplanation: ${input.testCriticResult.explanation}\nSuggested Fix: ${input.testCriticResult.suggestedFix}\n`
         : '';
@@ -97,7 +124,7 @@ ${contract.successCriteria.map(c => `- ${c}`).join('\n')}
 
 Previous Verification:
 ${verificationStr}
-${criticFeedbackStr}
+${failedDiffStr}${criticFeedbackStr}
 ${generalCriticFeedbackStr}
 ${customHintStr}
 
@@ -166,9 +193,7 @@ You must respond with a single valid JSON object adhering to the ReviewResult sc
 }
 function buildTestCriticPrompt(input) {
     const contract = input.taskContract;
-    const verificationStr = input.verificationResult
-        ? `Test run status: ${input.verificationResult.overallStatus}\nResults:\n${input.verificationResult.results.map(r => `- ${r.commandKey} (${r.status}): ${r.errorMsg || ''}`).join('\n')}`
-        : 'No test runs performed yet.';
+    const verificationStr = formatVerificationResult(input.verificationResult, 'No test runs performed yet.');
     return `You are a test correctness critic operating inside Jewel.
 Your task is to analyze the test failures resulting from the proposed changes and determine if they are due to:
 1. BAD_GENERATED_TEST: The generated test case contains incorrect expectations, invalid logic, or wrong domain rules (for example, expecting a valid matrix multiplication to throw a dimension mismatch error).

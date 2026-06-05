@@ -229,5 +229,18 @@ test('diff guard - AST allowed symbol changes bypass block', () => {
   const analysisPassedConfig = runDiffGuard(checkpoint, configWithAllowed, currentDir);
   assert.strictEqual(analysisPassedConfig.status, 'PASS');
 
+  // Verify that AST diffs are populated even when useASTDiffGuard is false
+  const configDisabledGuard: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useASTDiffGuard: false
+  };
+  const analysisDisabled = runDiffGuard(checkpoint, configDisabledGuard, currentDir);
+  assert.ok(analysisDisabled.astDiffs && analysisDisabled.astDiffs.length > 0, 'Should collect astDiffs when guard is disabled');
+  const mathDiff = analysisDisabled.astDiffs.find(d => d.file === 'math.ts');
+  assert.ok(mathDiff, 'Should find AST diff for math.ts');
+  const hasDeleted = mathDiff.items.some(i => i.type === 'deleted' && i.signature.includes('subtract'));
+  assert.ok(hasDeleted, 'Should contain deleted subtract signature');
+
   cleanupSandbox();
 });
+

@@ -155,3 +155,39 @@ test('ui-server - limit payload checks', async (t) => {
 
   await server.close();
 });
+
+test('ui-server - handles approvedFiles payload during patch-review', async (t) => {
+  const server = new UIServer({ startPort: 0 });
+  await server.start(false);
+
+  const port = (server as any).activePort;
+  const token = server.getToken();
+
+  const approvalPromise = server.waitForApproval('patch-review', {
+    message: 'Testing patch proposal',
+    diff: '+++ test.ts',
+    files: ['src/foo.ts', 'src/bar.ts']
+  });
+
+  const targetUrl = `http://127.0.0.1:${port}/api/action`;
+  const res = await fetch(targetUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ 
+      action: 'approve', 
+      comment: 'good code', 
+      approvedFiles: ['src/foo.ts'] 
+    })
+  });
+
+  assert.strictEqual(res.status, 200);
+  const result = await approvalPromise;
+  assert.strictEqual(result.action, 'approve');
+  assert.deepStrictEqual(result.approvedFiles, ['src/foo.ts']);
+
+  await server.close();
+});
+

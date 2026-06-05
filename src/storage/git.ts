@@ -136,3 +136,52 @@ export function rollbackCheckpoint(metadata: CheckpointMetadata, cwd: string = p
     throw new Error(`Failed to rollback git checkpoint: ${err.message}`);
   }
 }
+
+export function revertFileToCheckpoint(file: string, checkpoint: CheckpointMetadata, cwd: string = process.cwd()): void {
+  const absolutePath = path.resolve(cwd, file);
+  if (checkpoint.isGit && checkpoint.gitCheckpointSha) {
+    try {
+      // Check if file existed in checkpoint commit
+      let fileExisted = false;
+      try {
+        execSync(`git show ${checkpoint.gitCheckpointSha}:"${file}"`, { cwd, stdio: 'ignore' });
+        fileExisted = true;
+      } catch {}
+
+      if (fileExisted) {
+        execSync(`git checkout ${checkpoint.gitCheckpointSha} -- "${file}"`, { cwd, stdio: 'ignore' });
+      } else {
+        // Did not exist - delete from disk
+        if (fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+        // Remove from git index
+        try {
+          execSync(`git rm --cached -f "${file}"`, { cwd, stdio: 'ignore' });
+        } catch {}
+      }
+    } catch (err: any) {
+      console.warn(`[Warning] Failed to revert file ${file} via Git: ${err.message}`);
+    }
+  } else if (checkpoint.backupPath) {
+    const backupFilePath = path.join(checkpoint.backupPath, file);
+    if (fs.existsSync(backupFilePath)) {
+      try {
+        // Ensure parent directory exists for deeply nested files
+        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+        fs.copyFileSync(backupFilePath, absolutePath);
+      } catch (err: any) {
+        console.warn(`[Warning] Failed to restore backup for ${file}: ${err.message}`);
+      }
+    } else {
+      try {
+        if (fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (err: any) {
+        console.warn(`[Warning] Failed to delete temporary file ${file}: ${err.message}`);
+      }
+    }
+  }
+}
+

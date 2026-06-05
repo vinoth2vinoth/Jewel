@@ -115,11 +115,73 @@ const session_1 = require("../core/session");
         ],
         stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
     };
-    const prompt = (0, prompt_builder_1.buildDiffReviewPrompt)({
+    const prompt = (0, prompt_builder_1.buildTestCriticPrompt)({
         diff: '+ added lines',
         verificationResult,
         taskContract: contract
     });
     node_assert_1.default.ok(prompt.includes('+ added lines'), 'Contains diff');
     node_assert_1.default.ok(prompt.includes('AssertionError: expected 2 to be 3'), 'Contains verification failures');
+});
+(0, node_test_1.default)('prompt-builder - buildTestCriticPrompt formats and includes truncated stdout and stderr of failed commands', () => {
+    const contract = (0, session_1.generateLocalContract)('Fix division', config_1.DEFAULT_CONFIG, ['math.js']);
+    const verificationResult = {
+        projectName: 'test-project',
+        date: new Date().toISOString(),
+        mode: 'strict',
+        overallStatus: 'FAIL',
+        results: [
+            {
+                commandKey: 'test',
+                commandLine: 'npm run test',
+                status: 'FAIL',
+                stdout: 'Tests run: 1, Failures: 1\nAssertionError: expected 2 to be 3',
+                stderr: 'compilation warning: deprecated API used',
+                errorMsg: 'AssertionError: expected 2 to be 3'
+            }
+        ],
+        stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
+    };
+    const prompt = (0, prompt_builder_1.buildTestCriticPrompt)({
+        diff: '+ added lines',
+        verificationResult,
+        taskContract: contract
+    });
+    node_assert_1.default.ok(prompt.includes('AssertionError: expected 2 to be 3'), 'Contains errorMsg');
+    node_assert_1.default.ok(prompt.includes('STDOUT:'), 'Contains STDOUT header');
+    node_assert_1.default.ok(prompt.includes('Tests run: 1, Failures: 1'), 'Contains stdout logs');
+    node_assert_1.default.ok(prompt.includes('STDERR:'), 'Contains STDERR header');
+    node_assert_1.default.ok(prompt.includes('compilation warning: deprecated API used'), 'Contains stderr logs');
+    node_assert_1.default.ok(prompt.includes('BAD_GENERATED_TEST'), 'Contains JSON schema verdicts instructions');
+});
+(0, node_test_1.default)('prompt-builder - buildPatchProposalPrompt contains failedDiff and detailed verification logs', () => {
+    const contract = (0, session_1.generateLocalContract)('Fix division', config_1.DEFAULT_CONFIG, ['math.js']);
+    const verificationResult = {
+        projectName: 'test-project',
+        date: new Date().toISOString(),
+        mode: 'strict',
+        overallStatus: 'FAIL',
+        results: [
+            {
+                commandKey: 'test',
+                commandLine: 'npm run test',
+                status: 'FAIL',
+                stdout: 'Failed test details',
+                stderr: 'Error details',
+                errorMsg: 'Failure'
+            }
+        ],
+        stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
+    };
+    const prompt = (0, prompt_builder_1.buildPatchProposalPrompt)({
+        taskContract: contract,
+        allowedFiles: contract.filesLikelyNeeded,
+        repoContext: 'some context',
+        verificationResult,
+        failedDiff: 'diff --git a/math.js b/math.js\n+ const broken = true;'
+    });
+    node_assert_1.default.ok(prompt.includes('Proposed Diff that failed verification:'), 'Contains failed diff section header');
+    node_assert_1.default.ok(prompt.includes('+ const broken = true;'), 'Contains failed diff');
+    node_assert_1.default.ok(prompt.includes('STDOUT:'), 'Contains detailed stdout log section');
+    node_assert_1.default.ok(prompt.includes('Failed test details'), 'Contains detailed stdout logs');
 });

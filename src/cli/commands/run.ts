@@ -5,7 +5,7 @@ import { execSync } from 'child_process';
 import { loadConfig } from '../../core/config';
 import { loadSkills } from '../../skills/loader';
 import { createSession, TaskContract, validateContract, generateLocalContract } from '../../core/session';
-import { createCheckpoint, rollbackCheckpoint, CheckpointMetadata } from '../../storage/git';
+import { createCheckpoint, rollbackCheckpoint, revertFileToCheckpoint, CheckpointMetadata } from '../../storage/git';
 import { runDiffGuard } from '../../safety/diff-guard';
 import { runVerification, VerificationReport } from '../../verification/runner';
 import { runCriticReview, runMultiAgentCriticReview } from '../../safety/critic';
@@ -47,6 +47,23 @@ function askQuestion(query: string): Promise<string> {
     rl.close();
     resolve(ans);
   }));
+}
+
+function broadcastState(uiServer: UIServer | undefined, stateUpdate: any, config: any, adapter: any) {
+  if (!uiServer) return;
+  const costUpdate = adapter && adapter.usage ? {
+    cost: {
+      totalTokens: adapter.usage.totalTokens || 0,
+      promptTokens: adapter.usage.inputTokens || 0,
+      completionTokens: adapter.usage.outputTokens || 0,
+      totalUSD: adapter.usage.estimatedCostUsd || 0,
+      maxCost: config.maxSessionCost
+    }
+  } : {};
+  uiServer.updateState({
+    ...stateUpdate,
+    ...costUpdate
+  });
 }
 
 function generateRepoSummary(cwd: string): string {
@@ -106,6 +123,14 @@ export async function runTask(
       throw new JewelError('INVALID_INPUT', 'Task description cannot be empty.', 'Provide a non-empty task description.');
     }
 
+  console.log(`\x1b[36m
+     💎   _ _______        _______ _     
+         | |  ___\\ \\      / /  ___| |    
+      _  | | |_   \\ \\ /\\ / /| |_  | |    
+     | |_| |  _|   \\ V  V / | |___| |___ 
+      \\___/|_|      \\_/\\_/  |_____|_____|
+\x1b[35m              Strict AI Coding Safety Harness CLI\x1b[0m
+`);
   console.log(`Starting Jewel Harness for task: "${task}"`);
 
   let reviewRequired = false;
@@ -204,14 +229,14 @@ export async function runTask(
   contractPath = sessionData.contractPath;
 
   if (uiServer) {
-    uiServer.updateState({
+    broadcastState(uiServer, {
       sessionId,
       files: filesNeeded,
       overrides: {
         provider: config.provider,
         model: config.model
       }
-    });
+    }, config, adapter);
   }
 
   adapter = null;
@@ -224,7 +249,7 @@ export async function runTask(
     }
 
     if (uiServer) {
-      uiServer.updateState({ stage: 'planning' });
+      broadcastState(uiServer, { stage: 'planning' }, config, adapter);
     }
 
     console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
@@ -282,7 +307,7 @@ export async function runTask(
     } else {
       let approvedScope = false;
       if (useUI && uiServer) {
-        uiServer.updateState({ stage: 'review' });
+        broadcastState(uiServer, { stage: 'review' }, config, adapter);
         const res = await uiServer.waitForApproval('scope-expansion', {
           message: `Estimated scope exceeds limits. Files: ${estimatedFiles}/${config.maxFilesChanged}, Lines: ${estimatedLines}/${config.maxLinesChanged}. Approve to expand limits?`
         });
@@ -455,17 +480,39 @@ export async function runTask(
       }
       console.log('======================================\n');
 
-      let choice = '';
+      let approvedFiles: string[] = [];
       if (useUI && uiServer) {
-        uiServer.updateState({ stage: 'review' });
-        const res = await uiServer.waitForApproval('patch-review', { diff: diffContent });
-        choice = res.action === 'approve' ? 'y' : 'n';
+        broadcastState(uiServer, { stage: 'review' }, config, adapter);
+        const res = await uiServer.waitForApproval('patch-review', {
+          diff: diffContent,
+          files: diffAnalysisForReview.changedFiles,
+          astDiffs: diffAnalysisForReview.astDiffs
+        });
+        if (res.action === 'approve') {
+          approvedFiles = res.approvedFiles || [];
+          approved = approvedFiles.length > 0; // Reject if no files approved
+        } else {
+          approved = false;
+        }
       } else {
         const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
-        choice = response.toLowerCase().trim();
+        const choice = response.toLowerCase().trim();
+        if (choice === 'y') {
+          approved = true;
+          approvedFiles = diffAnalysisForReview.changedFiles;
+        } else {
+          approved = false;
+        }
       }
-      if (choice !== 'y') {
-        approved = false;
+
+      if (approved) {
+        const rejectedFiles = diffAnalysisForReview.changedFiles.filter(f => !approvedFiles.includes(f));
+        if (rejectedFiles.length > 0) {
+          console.log(`Reverting rejected files: ${rejectedFiles.join(', ')}`);
+          for (const file of rejectedFiles) {
+            revertFileToCheckpoint(file, checkpoint, cwd);
+          }
+        }
       }
     }
     
@@ -584,7 +631,7 @@ export async function runTask(
       // B. Run verification commands
       console.log('\nRunning verification tests...');
       if (uiServer) {
-        uiServer.updateState({ stage: 'verification' });
+        broadcastState(uiServer, { stage: 'verification' }, config, adapter);
       }
       verification = await runVerification(config, cwd, (progress) => {
         if (uiServer) {
@@ -602,7 +649,7 @@ export async function runTask(
           } else {
             currentResults.push(item);
           }
-          uiServer.updateState({ verificationResults: [...currentResults] });
+          broadcastState(uiServer, { verificationResults: [...currentResults] }, config, adapter);
         }
       });
       console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
@@ -615,7 +662,7 @@ export async function runTask(
         } catch {}
       }
       if (uiServer) {
-        uiServer.updateState({ stage: 'critic' });
+        broadcastState(uiServer, { stage: 'critic' }, config, adapter);
       }
       critic = await runMultiAgentCriticReview(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
       console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
@@ -651,9 +698,6 @@ export async function runTask(
       if (((verification && verification.overallStatus === 'FAIL') || existingTestModified) && isAgentMode && adapter && adapter.reviewTestCorrectness) {
         console.log('\n[Critic] Analyzing test failure correctness...');
         try {
-          const diffContent = checkpoint.isGit && checkpoint.gitCheckpointSha 
-            ? execSync(`git diff ${checkpoint.gitCheckpointSha}`, { cwd, encoding: 'utf8', env: { ...process.env, PAGER: 'cat' } })
-            : '';
           testCriticResult = await adapter.reviewTestCorrectness({
             taskContract: contract,
             diff: diffContent,
@@ -794,7 +838,8 @@ export async function runTask(
             criticResult: critic || undefined,
             config,
             sessionPath,
-            customHint
+            customHint,
+            failedDiff: diffContent
           });
 
           validatePatchProposalJson(patch);

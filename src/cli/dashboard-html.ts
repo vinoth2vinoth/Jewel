@@ -528,6 +528,79 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
       background: rgba(239, 68, 68, 0.08);
     }
 
+    /* AST Signature Tree Diff */
+    .ast-tree-details {
+      margin-top: 8px;
+      padding: 6px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+    }
+    .ast-tree-summary {
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--accent);
+      padding: 4px;
+      user-select: none;
+    }
+    .ast-tree-summary:hover {
+      text-decoration: underline;
+    }
+    .ast-tree-list {
+      list-style: none;
+      padding-left: 14px;
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+    .ast-added {
+      color: var(--success);
+      margin-bottom: 2px;
+    }
+    .ast-deleted {
+      color: var(--danger);
+      margin-bottom: 2px;
+    }
+
+    /* Checklist */
+    .checklist-container {
+      margin: 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.15);
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .checklist-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .checklist-item input {
+      cursor: pointer;
+    }
+    .file-diff-section {
+      margin-bottom: 12px;
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 4px;
+    }
+    .file-diff-header {
+      background: rgba(255,255,255,0.03);
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      color: var(--text-muted);
+    }
+
     /* Exit Banner */
     .exit-banner {
       display: flex;
@@ -680,6 +753,41 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
             <div class="timeline-step" id="step-finalizing">
               <div class="timeline-dot"></div>
               <div class="timeline-label">Session Finalizing</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live API Cost Gauge -->
+        <div class="card glass" id="cost-card" style="display: block;">
+          <div class="card-title">Cumulative Session Cost</div>
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 12px 0;">
+            <div style="position: relative; width: 120px; height: 120px;">
+              <svg width="120" height="120" viewBox="0 0 120 120" style="transform: rotate(-90deg);">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="8"></circle>
+                <circle id="cost-gauge-ring" cx="60" cy="60" r="50" fill="none" stroke="var(--accent)" stroke-width="8" stroke-dasharray="314.16" stroke-dashoffset="314.16" stroke-linecap="round" style="transition: stroke-dashoffset 0.5s ease;"></circle>
+              </svg>
+              <div style="position: absolute; top: 0; left: 0; width: 120px; height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <span id="cost-usd" style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--text);">$0.00</span>
+                <span id="cost-percent" style="font-size: 0.75rem; color: var(--text-muted);">0% of max</span>
+              </div>
+            </div>
+            <div class="meta-list" style="width: 100%; margin-top: 8px;">
+              <div class="meta-item">
+                <span class="meta-key">Prompt Tokens</span>
+                <span id="cost-prompt-tokens" class="meta-val">0</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Completion Tokens</span>
+                <span id="cost-completion-tokens" class="meta-val">0</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Total Tokens</span>
+                <span id="cost-total-tokens" class="meta-val">0</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Budget Limit</span>
+                <span id="cost-limit" class="meta-val">No Limit</span>
+              </div>
             </div>
           </div>
         </div>
@@ -885,6 +993,42 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
       }
       renderLogs();
 
+      // 3b. Update Cost Card
+      if (state.cost) {
+        const totalUSD = state.cost.totalUSD || 0;
+        const maxCost = state.cost.maxCost || 0;
+        const promptTokens = state.cost.promptTokens || 0;
+        const completionTokens = state.cost.completionTokens || 0;
+        const totalTokens = state.cost.totalTokens || 0;
+
+        document.getElementById('cost-usd').innerText = \`$\${totalUSD.toFixed(4)}\`;
+        document.getElementById('cost-prompt-tokens').innerText = promptTokens.toLocaleString();
+        document.getElementById('cost-completion-tokens').innerText = completionTokens.toLocaleString();
+        document.getElementById('cost-total-tokens').innerText = totalTokens.toLocaleString();
+
+        const ring = document.getElementById('cost-gauge-ring');
+        if (maxCost > 0) {
+          document.getElementById('cost-limit').innerText = \`$\${maxCost.toFixed(2)}\`;
+          const percentage = Math.min((totalUSD / maxCost) * 100, 100);
+          document.getElementById('cost-percent').innerText = \`\${percentage.toFixed(1)}% of max\`;
+          // Ring length = 2 * PI * r = 2 * 3.14159 * 50 = 314.16
+          const offset = 314.16 - (percentage / 100) * 314.16;
+          ring.setAttribute('stroke-dashoffset', offset.toString());
+          if (percentage >= 90) {
+            ring.setAttribute('stroke', 'var(--danger)');
+          } else if (percentage >= 70) {
+            ring.setAttribute('stroke', 'var(--warning)');
+          } else {
+            ring.setAttribute('stroke', 'var(--accent)');
+          }
+        } else {
+          document.getElementById('cost-limit').innerText = 'No Limit';
+          document.getElementById('cost-percent').innerText = '0% of max';
+          ring.setAttribute('stroke-dashoffset', '314.16');
+          ring.setAttribute('stroke', 'var(--accent)');
+        }
+      }
+
       // 4. Critic Findings
       const findingsCard = document.getElementById('findings-card');
       const findingsList = document.getElementById('findings-list');
@@ -956,12 +1100,97 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
           <button class="btn btn-primary" onclick="submitAction('approve')">Approve Scope</button>
         \`;
       } else if (type === 'patch-review') {
-        title.innerText = 'Review Propose Patch';
-        desc.innerText = 'Review the diff file changes below. Approve to apply the patch, or reject to try again.';
+        title.innerText = 'Review Proposed Patch';
+        desc.innerText = 'Review structural AST diffs and file changes below. Uncheck files to revert them. Approve to apply.';
+
+        // 1. Checklist
+        window.allApprovedFiles = [...(details?.files || [])];
+        const checklistDiv = document.createElement('div');
+        checklistDiv.className = 'checklist-container';
         
+        const label = document.createElement('div');
+        label.style.fontSize = '0.75rem';
+        label.style.fontWeight = 'bold';
+        label.style.color = 'var(--text-muted)';
+        label.style.marginBottom = '4px';
+        label.innerText = 'SELECT FILES TO APPLY:';
+        checklistDiv.appendChild(label);
+
+        (details?.files || []).forEach(file => {
+          const itemLabel = document.createElement('label');
+          itemLabel.className = 'checklist-item';
+          
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = true;
+          cb.onchange = (e) => {
+            if (e.target.checked) {
+              if (!window.allApprovedFiles.includes(file)) {
+                window.allApprovedFiles.push(file);
+              }
+            } else {
+              window.allApprovedFiles = window.allApprovedFiles.filter(f => f !== file);
+            }
+            updateDiffVisibility();
+          };
+          
+          itemLabel.appendChild(cb);
+          const txt = document.createTextNode(' ' + file);
+          itemLabel.appendChild(txt);
+          checklistDiv.appendChild(itemLabel);
+        });
+        diffContainer.appendChild(checklistDiv);
+
+        // 2. AST Diff Explorer
+        if (details?.astDiffs && details.astDiffs.length > 0) {
+          const astHeading = document.createElement('div');
+          astHeading.style.fontSize = '0.75rem';
+          astHeading.style.fontWeight = 'bold';
+          astHeading.style.color = 'var(--text-muted)';
+          astHeading.style.marginTop = '12px';
+          astHeading.innerText = 'STRUCTURAL AST DIFFERENCES:';
+          diffContainer.appendChild(astHeading);
+
+          details.astDiffs.forEach(astDiff => {
+            const detailsEl = document.createElement('details');
+            detailsEl.className = 'ast-tree-details';
+            detailsEl.open = true;
+
+            const summaryEl = document.createElement('summary');
+            summaryEl.className = 'ast-tree-summary';
+            summaryEl.innerText = \`\${astDiff.file} (\${astDiff.items.length} changes)\`;
+            detailsEl.appendChild(summaryEl);
+
+            const ul = document.createElement('ul');
+            ul.className = 'ast-tree-list';
+
+            astDiff.items.forEach(item => {
+              const li = document.createElement('li');
+              li.className = item.type === 'added' ? 'ast-added' : 'ast-deleted';
+              // XSS Safe textContent insertion
+              li.textContent = \`\${item.type === 'added' ? '[+]' : '[-]'} \${item.signature}\`;
+              ul.appendChild(li);
+            });
+
+            detailsEl.appendChild(ul);
+            diffContainer.appendChild(detailsEl);
+          });
+        }
+
+        // 3. Diff content (split by file)
+        const diffHeading = document.createElement('div');
+        diffHeading.style.fontSize = '0.75rem';
+        diffHeading.style.fontWeight = 'bold';
+        diffHeading.style.color = 'var(--text-muted)';
+        diffHeading.style.marginTop = '12px';
+        diffHeading.style.marginBottom = '6px';
+        diffHeading.innerText = 'FILE DIFFS:';
+        diffContainer.appendChild(diffHeading);
+
         if (details?.diff) {
           diffContainer.style.display = 'block';
           renderDiffHTML(diffContainer, details.diff);
+          updateDiffVisibility();
         }
 
         actions.innerHTML = \`
@@ -984,24 +1213,102 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
       }
     }
 
-    function renderDiffHTML(container, diffText) {
-      const lines = diffText.split('\\n');
-      lines.forEach(l => {
-        const span = document.createElement('span');
-        span.className = 'diff-line';
-        if (l.startsWith('+')) {
-          span.classList.add('diff-add');
-        } else if (l.startsWith('-')) {
-          span.classList.add('diff-del');
+    function updateDiffVisibility() {
+      const sections = document.querySelectorAll('.file-diff-section');
+      sections.forEach(sec => {
+        const file = sec.getAttribute('data-file');
+        if (file === 'header') return;
+        if (window.allApprovedFiles.includes(file)) {
+          sec.style.display = 'block';
+        } else {
+          sec.style.display = 'none';
         }
-        span.innerText = l;
-        container.appendChild(span);
+      });
+    }
+
+    function renderDiffHTML(container, diffText) {
+      if (!diffText || diffText.includes('Git diff preview is not available')) {
+        const div = document.createElement('div');
+        div.style.padding = '8px';
+        div.style.color = 'var(--text-muted)';
+        div.innerText = diffText || 'No diff preview available (full workspace restore only).';
+        container.appendChild(div);
+        return;
+      }
+
+      // Split diff by file blocks
+      const sections = [];
+      const lines = diffText.split('\n');
+      let currentSection = null;
+
+      for (const line of lines) {
+        if (line.startsWith('diff --git ')) {
+          if (currentSection) {
+            sections.push(currentSection);
+          }
+          // Extract filename: e.g. diff --git a/src/cli/ui-server.ts b/src/cli/ui-server.ts
+          let fileName = 'unknown';
+          const parts = line.split(' b/');
+          if (parts.length > 1) {
+            fileName = parts[1].trim();
+          } else {
+            const match = line.match(/b\/(.+)$/);
+            if (match) fileName = match[1].trim();
+          }
+          currentSection = {
+            file: fileName,
+            lines: [line]
+          };
+        } else {
+          if (currentSection) {
+            currentSection.lines.push(line);
+          } else {
+            currentSection = {
+              file: 'header',
+              lines: [line]
+            };
+          }
+        }
+      }
+      if (currentSection) {
+        sections.push(currentSection);
+      }
+
+      sections.forEach(sec => {
+        const secDiv = document.createElement('div');
+        secDiv.className = 'file-diff-section';
+        secDiv.setAttribute('data-file', sec.file);
+
+        const header = document.createElement('div');
+        header.className = 'file-diff-header';
+        header.innerText = sec.file;
+        secDiv.appendChild(header);
+
+        const body = document.createElement('div');
+        body.style.padding = '8px';
+        sec.lines.forEach(l => {
+          const span = document.createElement('span');
+          span.className = 'diff-line';
+          if (l.startsWith('+')) {
+            span.classList.add('diff-add');
+          } else if (l.startsWith('-')) {
+            span.classList.add('diff-del');
+          }
+          span.innerText = l;
+          body.appendChild(span);
+        });
+        secDiv.appendChild(body);
+        container.appendChild(secDiv);
       });
     }
 
     async function submitAction(action) {
       const comment = document.getElementById('comment-text').value;
-      const body = { action, comment };
+      const body = { 
+        action, 
+        comment,
+        approvedFiles: window.allApprovedFiles 
+      };
       
       try {
         const res = await fetch('/api/action', {

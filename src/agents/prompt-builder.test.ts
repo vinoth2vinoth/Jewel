@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt } from './prompt-builder';
+import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt, buildTestCriticPrompt } from './prompt-builder';
 import { DEFAULT_CONFIG } from '../core/config';
 import { generateLocalContract } from '../core/session';
 
@@ -123,7 +123,7 @@ test('prompt-builder - buildTestCriticPrompt contains diff and verification resu
     stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
   };
 
-  const prompt = buildDiffReviewPrompt({
+  const prompt = buildTestCriticPrompt({
     diff: '+ added lines',
     verificationResult,
     taskContract: contract
@@ -131,5 +131,73 @@ test('prompt-builder - buildTestCriticPrompt contains diff and verification resu
 
   assert.ok(prompt.includes('+ added lines'), 'Contains diff');
   assert.ok(prompt.includes('AssertionError: expected 2 to be 3'), 'Contains verification failures');
+});
+
+test('prompt-builder - buildTestCriticPrompt formats and includes truncated stdout and stderr of failed commands', () => {
+  const contract = generateLocalContract('Fix division', DEFAULT_CONFIG, ['math.js']);
+  const verificationResult = {
+    projectName: 'test-project',
+    date: new Date().toISOString(),
+    mode: 'strict' as const,
+    overallStatus: 'FAIL' as const,
+    results: [
+      {
+        commandKey: 'test',
+        commandLine: 'npm run test',
+        status: 'FAIL' as const,
+        stdout: 'Tests run: 1, Failures: 1\nAssertionError: expected 2 to be 3',
+        stderr: 'compilation warning: deprecated API used',
+        errorMsg: 'AssertionError: expected 2 to be 3'
+      }
+    ],
+    stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
+  };
+
+  const prompt = buildTestCriticPrompt({
+    diff: '+ added lines',
+    verificationResult,
+    taskContract: contract
+  });
+
+  assert.ok(prompt.includes('AssertionError: expected 2 to be 3'), 'Contains errorMsg');
+  assert.ok(prompt.includes('STDOUT:'), 'Contains STDOUT header');
+  assert.ok(prompt.includes('Tests run: 1, Failures: 1'), 'Contains stdout logs');
+  assert.ok(prompt.includes('STDERR:'), 'Contains STDERR header');
+  assert.ok(prompt.includes('compilation warning: deprecated API used'), 'Contains stderr logs');
+  assert.ok(prompt.includes('BAD_GENERATED_TEST'), 'Contains JSON schema verdicts instructions');
+});
+
+test('prompt-builder - buildPatchProposalPrompt contains failedDiff and detailed verification logs', () => {
+  const contract = generateLocalContract('Fix division', DEFAULT_CONFIG, ['math.js']);
+  const verificationResult = {
+    projectName: 'test-project',
+    date: new Date().toISOString(),
+    mode: 'strict' as const,
+    overallStatus: 'FAIL' as const,
+    results: [
+      {
+        commandKey: 'test',
+        commandLine: 'npm run test',
+        status: 'FAIL' as const,
+        stdout: 'Failed test details',
+        stderr: 'Error details',
+        errorMsg: 'Failure'
+      }
+    ],
+    stats: { passed: 0, failed: 1, skipped: 0, blocked: 0 }
+  };
+
+  const prompt = buildPatchProposalPrompt({
+    taskContract: contract,
+    allowedFiles: contract.filesLikelyNeeded,
+    repoContext: 'some context',
+    verificationResult,
+    failedDiff: 'diff --git a/math.js b/math.js\n+ const broken = true;'
+  });
+
+  assert.ok(prompt.includes('Proposed Diff that failed verification:'), 'Contains failed diff section header');
+  assert.ok(prompt.includes('+ const broken = true;'), 'Contains failed diff');
+  assert.ok(prompt.includes('STDOUT:'), 'Contains detailed stdout log section');
+  assert.ok(prompt.includes('Failed test details'), 'Contains detailed stdout logs');
 });
 

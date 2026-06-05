@@ -47,6 +47,9 @@ export interface JewelConfig {
     sandboxVolumes?: Record<string, string>;
     sandboxEnv?: Record<string, string>;
     allowedSymbolChanges?: string[];
+    sandboxNetwork?: 'none' | 'host' | 'bridge';
+    sandboxReadOnlyRoot?: boolean;
+    sandboxWritePaths?: string[];
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

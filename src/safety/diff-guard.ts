@@ -5,6 +5,16 @@ import { JewelConfig } from '../core/config';
 import { CheckpointMetadata } from '../storage/git';
 import { isProtectedPath, isDependencyPath, isLockfilePath } from './path-policy';
 
+export interface ASTDiffItem {
+  type: 'added' | 'deleted';
+  signature: string;
+}
+
+export interface ASTFileDiff {
+  file: string;
+  items: ASTDiffItem[];
+}
+
 export interface DiffAnalysis {
   status: 'PASS' | 'WARN' | 'BLOCK';
   changedFilesCount: number;
@@ -15,7 +25,9 @@ export interface DiffAnalysis {
   dependenciesChanged: boolean;
   lockfilesChanged: string[];
   findings: string[];
+  astDiffs?: ASTFileDiff[];
 }
+
 
 export function runDiffGuard(
   checkpoint: CheckpointMetadata,
@@ -241,14 +253,19 @@ export function runDiffGuard(
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
+  const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, mergedAllowedSymbols);
+  const astDiffs = astResult.astDiffs;
+
   if (config.useASTDiffGuard) {
-    const astResult = runASTDiffAnalysis(checkpoint, config, changedFiles, cwd, mergedAllowedSymbols);
     findings.push(...astResult.findings);
     if (astResult.status === 'BLOCK') {
       status = 'BLOCK';
     } else if (astResult.status === 'WARN' && status !== 'BLOCK') {
       status = 'WARN';
     }
+  } else {
+    // If not enabled, we still log findings as info for visual display in the UI
+    findings.push(...astResult.findings.map(f => `[INFO] ${f}`));
   }
 
   return {
@@ -260,7 +277,8 @@ export function runDiffGuard(
     protectedFilesChanged,
     dependenciesChanged,
     lockfilesChanged,
-    findings
+    findings,
+    astDiffs
   };
 }
 
@@ -349,13 +367,14 @@ function runASTDiffAnalysis(
   changedFiles: { file: string; added: number; removed: number }[],
   cwd: string,
   allowedSymbolChanges: string[] = []
-): { status: 'PASS' | 'WARN' | 'BLOCK'; findings: string[] } {
+): { status: 'PASS' | 'WARN' | 'BLOCK'; findings: string[]; astDiffs: ASTFileDiff[] } {
   const findings: string[] = [];
   let status: 'PASS' | 'WARN' | 'BLOCK' = 'PASS';
+  const astDiffs: ASTFileDiff[] = [];
 
   if (!ts) {
     findings.push("AST Diff Guard: TypeScript module not found. Falling back to line-by-line checks.");
-    return { status: 'WARN', findings };
+    return { status: 'WARN', findings, astDiffs };
   }
 
   // 1. AST comparison for each changed JS/TS file
@@ -397,6 +416,7 @@ function runASTDiffAnalysis(
     try {
       const oldSignatures = extractASTSignatures(file, oldContent);
       const newSignatures = extractASTSignatures(file, newContent);
+      const items: ASTDiffItem[] = [];
 
       for (const sig of oldSignatures) {
         if (!newSignatures.has(sig)) {
@@ -412,7 +432,18 @@ function runASTDiffAnalysis(
             findings.push(`AST Diff Guard: Deleted or modified signature of '${sig}' in '${file}'.`);
             status = 'BLOCK';
           }
+          items.push({ type: 'deleted', signature: sig });
         }
+      }
+
+      for (const sig of newSignatures) {
+        if (!oldSignatures.has(sig)) {
+          items.push({ type: 'added', signature: sig });
+        }
+      }
+
+      if (items.length > 0) {
+        astDiffs.push({ file, items });
       }
     } catch (err: any) {
       findings.push(`AST Diff Guard: Failed to parse AST for '${file}': ${err.message}. Falling back to line-by-line checks.`);
@@ -421,6 +452,7 @@ function runASTDiffAnalysis(
       }
     }
   }
+
 
   // 2. Semantic Dependency mapping
   const changedJSFiles = changedFiles
@@ -490,5 +522,5 @@ function runASTDiffAnalysis(
     }
   }
 
-  return { status, findings };
+  return { status, findings, astDiffs };
 }

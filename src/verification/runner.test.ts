@@ -274,6 +274,7 @@ test('verification runner - sandbox docker execution and command assembly', asyn
   const config: JewelConfig = {
     ...DEFAULT_CONFIG,
     useSandbox: true,
+    sandboxReadOnlyRoot: false,
     sandboxImage: 'node:custom',
     sandboxVolumes: { './my-host-data': '/opt/data' },
     sandboxEnv: {
@@ -392,6 +393,137 @@ test('verification runner - sandbox process error and signal handling', async (t
   assert.strictEqual(testResultSig.status, 'FAIL');
   assert.strictEqual(testResultSig.exitCode, 1);
   assert.ok(testResultSig.stderr.includes('SIGKILL'));
+
+  cleanupSandbox();
+});
+
+test('verification runner - sandbox read-only root and network and write paths mapping', async (t) => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  t.mock.method(dockerUtils, 'isDockerAvailable', () => true);
+
+  let capturedArgs: string[] = [];
+  t.mock.method(dockerUtils, 'executeDocker', async (args: string[], cwd: string, env: any, onChunk?: any) => {
+    capturedArgs = args;
+    return {
+      status: 0,
+      signal: null,
+      stdout: 'Success',
+      stderr: '',
+      error: undefined
+    };
+  });
+
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    sandboxReadOnlyRoot: true,
+    sandboxNetwork: 'bridge',
+    sandboxWritePaths: ['my-writable-dir', '..dotdir'],
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'npm run test'
+    }
+  };
+
+  // Run verification
+  const report = await runVerification(config, sandboxDir);
+  assert.strictEqual(report.overallStatus, 'PASS');
+
+  // Verify network argument
+  assert.ok(capturedArgs.includes('--network'));
+  assert.strictEqual(capturedArgs[capturedArgs.indexOf('--network') + 1], 'bridge');
+
+  // Verify read-only mount
+  const expectedCwdMount = path.resolve(sandboxDir).replace(/\\/g, '/');
+  assert.ok(capturedArgs.includes(`${expectedCwdMount}:/workspace:ro`));
+
+  // Verify write paths read-write mounts
+  const expectedWritePath1 = path.resolve(sandboxDir, 'my-writable-dir').replace(/\\/g, '/');
+  assert.ok(capturedArgs.includes(`${expectedWritePath1}:/workspace/my-writable-dir:rw`));
+
+  const expectedWritePath2 = path.resolve(sandboxDir, '..dotdir').replace(/\\/g, '/');
+  assert.ok(capturedArgs.includes(`${expectedWritePath2}:/workspace/..dotdir:rw`));
+
+  // Verify directories are created on the host recursively
+  assert.ok(fs.existsSync(path.resolve(sandboxDir, 'my-writable-dir')));
+  assert.ok(fs.existsSync(path.resolve(sandboxDir, '..dotdir')));
+
+  cleanupSandbox();
+});
+
+test('verification runner - sandbox write path symlink escape protection', async (t) => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  t.mock.method(dockerUtils, 'isDockerAvailable', () => true);
+  t.mock.method(dockerUtils, 'executeDocker', async () => {
+    return { status: 0, signal: null, stdout: '', stderr: '' };
+  });
+
+  // Create a real directory that we mock resolving outside the workspace
+  const mockEscapedLinkDir = path.join(sandboxDir, 'escaped-link');
+  fs.mkdirSync(mockEscapedLinkDir, { recursive: true });
+
+  const resolvedOutsidePath = path.resolve(sandboxDir, '../outside-test-dir-escaped').replace(/\\/g, '/');
+  
+  const rawFs = require('node:fs');
+  const originalRealpathSync = rawFs.realpathSync;
+  t.mock.method(rawFs, 'realpathSync', (p: string) => {
+    const resolvedPath = path.resolve(p).replace(/\\/g, '/');
+    const targetLinkPath = mockEscapedLinkDir.replace(/\\/g, '/');
+    if (resolvedPath === targetLinkPath) {
+      return resolvedOutsidePath;
+    }
+    return originalRealpathSync(p);
+  });
+
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    sandboxReadOnlyRoot: true,
+    sandboxWritePaths: ['escaped-link'],
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'npm run test'
+    }
+  };
+
+  await assert.rejects(async () => {
+    await runVerification(config, sandboxDir);
+  }, /resolves outside the workspace root/);
+
+  cleanupSandbox();
+});
+
+test('verification runner - sandbox write path type checking (file vs directory)', async (t) => {
+  cleanupSandbox();
+  fs.mkdirSync(sandboxDir, { recursive: true });
+
+  t.mock.method(dockerUtils, 'isDockerAvailable', () => true);
+  t.mock.method(dockerUtils, 'executeDocker', async () => {
+    return { status: 0, signal: null, stdout: '', stderr: '' };
+  });
+
+  // Create a file where a directory is expected
+  const filePath = path.join(sandboxDir, 'not-a-directory');
+  fs.writeFileSync(filePath, 'some file content', 'utf8');
+
+  const config: JewelConfig = {
+    ...DEFAULT_CONFIG,
+    useSandbox: true,
+    sandboxReadOnlyRoot: true,
+    sandboxWritePaths: ['not-a-directory'],
+    commands: {
+      ...DEFAULT_CONFIG.commands,
+      test: 'npm run test'
+    }
+  };
+
+  await assert.rejects(async () => {
+    await runVerification(config, sandboxDir);
+  }, /exists on host but is a file/);
 
   cleanupSandbox();
 });

@@ -151,7 +151,10 @@ Default config contents:
     "functions": 80,
     "branches": 75
   },
-  "coverageReportPath": "./coverage/coverage-summary.json"
+  "coverageReportPath": "./coverage/coverage-summary.json",
+  "sandboxNetwork": "none",
+  "sandboxReadOnlyRoot": true,
+  "sandboxWritePaths": []
 }
 ```
 

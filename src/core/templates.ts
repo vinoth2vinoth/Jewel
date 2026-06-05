@@ -37,7 +37,10 @@ export const DEFAULT_CONFIG_CONTENT = `{
     "src/security/**"
   ],
   "dangerousCommandPolicy": "block",
-  "reportFormat": ["markdown", "json"]
+  "reportFormat": ["markdown", "json"],
+  "sandboxNetwork": "none",
+  "sandboxReadOnlyRoot": true,
+  "sandboxWritePaths": []
 }`;
 
 export const AGENTS_MD_CONTENT = `# AGENTS.md

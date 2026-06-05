@@ -132,3 +132,78 @@ const config_1 = require("./config");
         (0, config_1.validateAndMergeConfig)({ allowedSymbolChanges: [123] });
     }, /allowedSymbolChanges\[0\].*must be a string/);
 });
+(0, node_test_1.default)('config loader - sandbox network, read-only root, and write paths validation', () => {
+    const defaults = (0, config_1.validateAndMergeConfig)({});
+    node_assert_1.default.strictEqual(defaults.sandboxNetwork, 'none');
+    node_assert_1.default.strictEqual(defaults.sandboxReadOnlyRoot, true);
+    node_assert_1.default.deepStrictEqual(defaults.sandboxWritePaths, []);
+    const valid = (0, config_1.validateAndMergeConfig)({
+        sandboxNetwork: 'bridge',
+        sandboxReadOnlyRoot: false,
+        sandboxWritePaths: ['coverage', 'src/temp']
+    });
+    node_assert_1.default.strictEqual(valid.sandboxNetwork, 'bridge');
+    node_assert_1.default.strictEqual(valid.sandboxReadOnlyRoot, false);
+    node_assert_1.default.deepStrictEqual(valid.sandboxWritePaths, ['coverage', 'src/temp']);
+    // Invalid sandboxNetwork
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxNetwork: 'invalid-net' });
+    }, /sandboxNetwork.*must be one of/);
+    // Invalid sandboxReadOnlyRoot
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxReadOnlyRoot: 'not-a-bool' });
+    }, /sandboxReadOnlyRoot.*must be a boolean/);
+    // Invalid sandboxWritePaths type
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: 'not-an-array' });
+    }, /sandboxWritePaths.*must be an array/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: [123] });
+    }, /sandboxWritePaths\[0\].*must be a string/);
+    // Path Escape & Traversal rejections
+    // 1. Colon detection
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['C:escaped'] });
+    }, /contains a colon/);
+    // 2. Absolute paths
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['/absolute'] });
+    }, /must be a relative path/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['\\\\unc\\path'] });
+    }, /must be a relative path/);
+    // 3. Root references
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['.'] });
+    }, /must be a relative path/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['./'] });
+    }, /must be a relative path/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: [''] });
+    }, /must be a relative path/);
+    // 4. Parent directory traversals (lexical)
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['..'] });
+    }, /must be a relative path/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['../escaped'] });
+    }, /must be a relative path/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['foo/../../escaped'] });
+    }, /must be a relative path/);
+    node_assert_1.default.throws(() => {
+        (0, config_1.validateAndMergeConfig)({ sandboxWritePaths: ['foo\\..\\..\\escaped'] });
+    }, /must be a relative path/);
+    // Deduplication and canonical normalization
+    const deduplicated = (0, config_1.validateAndMergeConfig)({
+        sandboxWritePaths: [
+            'coverage/',
+            'coverage',
+            'foo/bar',
+            'foo\\bar',
+            'foo/bar/'
+        ]
+    });
+    node_assert_1.default.deepStrictEqual(deduplicated.sandboxWritePaths, ['coverage', 'foo/bar']);
+});

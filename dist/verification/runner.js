@@ -120,6 +120,41 @@ function executeHost(cmdLine, cwd, env, onChunk) {
     });
 }
 async function runVerification(config, cwd = process.cwd(), onProgress) {
+    // Validate and pre-create write paths if sandbox is enabled
+    if (config.useSandbox && config.sandboxReadOnlyRoot && config.sandboxWritePaths) {
+        const realCwd = fs.realpathSync(cwd);
+        for (const wp of config.sandboxWritePaths) {
+            const absWritePath = path.resolve(cwd, wp);
+            // Verify type if host path exists
+            if (fs.existsSync(absWritePath)) {
+                if (!fs.statSync(absWritePath).isDirectory()) {
+                    throw new Error(`Invalid sandboxWritePath: "${wp}" exists on host but is a file, not a directory.`);
+                }
+            }
+            else {
+                // Host pre-creation of writable directory
+                try {
+                    fs.mkdirSync(absWritePath, { recursive: true });
+                }
+                catch { }
+            }
+            // Resolve realpath with user-friendly error wrapping
+            let realWritePath;
+            try {
+                realWritePath = fs.realpathSync(absWritePath);
+            }
+            catch (err) {
+                throw new Error(`Invalid sandboxWritePath: "${wp}" could not be resolved or created on the host. Error: ${err.message}`);
+            }
+            // Symlink escape validation via path.relative checks
+            const relative = path.relative(realCwd, realWritePath);
+            const normalizedRelative = relative.replace(/\\/g, '/');
+            const isOutsideOrSame = normalizedRelative === '' || normalizedRelative === '..' || normalizedRelative.startsWith('../') || path.isAbsolute(relative);
+            if (isOutsideOrSame) {
+                throw new Error(`Security Violation: sandboxWritePath "${wp}" resolves outside the workspace root.`);
+            }
+        }
+    }
     const results = [];
     const commands = config.commands;
     const orderKeys = ['lint', 'typecheck', 'test', 'build', 'e2e'];
@@ -222,10 +257,29 @@ async function runVerification(config, cwd = process.cwd(), onProgress) {
                     const dockerArgs = [
                         'run',
                         '--rm',
-                        '-i',
-                        '-v', `${path.resolve(cwd).replace(/\\/g, '/')}:/workspace`,
-                        '-w', '/workspace'
+                        '-i'
                     ];
+                    // Mount workspace based on read-only setting
+                    const resolvedCwd = path.resolve(cwd).replace(/\\/g, '/');
+                    if (config.sandboxReadOnlyRoot) {
+                        dockerArgs.push('-v', `${resolvedCwd}:/workspace:ro`);
+                        // Add read-write mounts
+                        if (config.sandboxWritePaths) {
+                            for (const wp of config.sandboxWritePaths) {
+                                const absWritePath = path.resolve(cwd, wp);
+                                const resolvedWritePath = absWritePath.replace(/\\/g, '/');
+                                const containerWritePath = wp.replace(/\\/g, '/');
+                                dockerArgs.push('-v', `${resolvedWritePath}:/workspace/${containerWritePath}:rw`);
+                            }
+                        }
+                    }
+                    else {
+                        dockerArgs.push('-v', `${resolvedCwd}:/workspace`);
+                    }
+                    dockerArgs.push('-w', '/workspace');
+                    // Network restriction configuration
+                    const net = config.sandboxNetwork || 'none';
+                    dockerArgs.push('--network', net);
                     if (process.getuid && process.getgid) {
                         dockerArgs.push('--user', `${process.getuid()}:${process.getgid()}`);
                     }

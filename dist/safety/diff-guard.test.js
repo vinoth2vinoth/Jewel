@@ -200,5 +200,16 @@ function cleanupSandbox() {
     };
     const analysisPassedConfig = (0, diff_guard_1.runDiffGuard)(checkpoint, configWithAllowed, currentDir);
     node_assert_1.default.strictEqual(analysisPassedConfig.status, 'PASS');
+    // Verify that AST diffs are populated even when useASTDiffGuard is false
+    const configDisabledGuard = {
+        ...config_1.DEFAULT_CONFIG,
+        useASTDiffGuard: false
+    };
+    const analysisDisabled = (0, diff_guard_1.runDiffGuard)(checkpoint, configDisabledGuard, currentDir);
+    node_assert_1.default.ok(analysisDisabled.astDiffs && analysisDisabled.astDiffs.length > 0, 'Should collect astDiffs when guard is disabled');
+    const mathDiff = analysisDisabled.astDiffs.find(d => d.file === 'math.ts');
+    node_assert_1.default.ok(mathDiff, 'Should find AST diff for math.ts');
+    const hasDeleted = mathDiff.items.some(i => i.type === 'deleted' && i.signature.includes('subtract'));
+    node_assert_1.default.ok(hasDeleted, 'Should contain deleted subtract signature');
     cleanupSandbox();
 });
