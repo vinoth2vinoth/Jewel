@@ -11,7 +11,8 @@
       "useMock": true,
       "preCheck": "broken-tests",
       "verifyCommand": "npm test",
-      "cleanup": [".jewel", "dist"]
+      "cleanup": [".jewel", "dist"],
+      "resetFixture": true
     },
     {
       "id": "dogfood-math-auto",
@@ -22,7 +23,8 @@
       "useMock": true,
       "preCheck": "broken-tests",
       "verifyCommand": "npm test",
-      "cleanup": [".jewel", "dist"]
+      "cleanup": [".jewel", "dist"],
+      "resetFixture": true
     }
   ]
 }

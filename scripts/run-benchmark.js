@@ -22,6 +22,24 @@ const results = [];
 let passed = 0;
 let failed = 0;
 
+const BROKEN_MATH_TS = `export function add(a: number, b: number): number {
+  return a + b;
+}
+
+export function divide(a: number, b: number): number {
+  return a / b;
+}
+`;
+
+function resetDogfoodFixture(taskDir) {
+  const mathPath = path.join(taskDir, 'src', 'math.ts');
+  fs.writeFileSync(mathPath, BROKEN_MATH_TS, 'utf8');
+  const distPath = path.join(taskDir, 'dist');
+  const jewelPath = path.join(taskDir, '.jewel');
+  if (fs.existsSync(distPath)) fs.rmSync(distPath, { recursive: true, force: true });
+  if (fs.existsSync(jewelPath)) fs.rmSync(jewelPath, { recursive: true, force: true });
+}
+
 console.log(`\nJewel Benchmark Harness (${manifest.version})\n${'='.repeat(50)}`);
 
 for (const task of manifest.tasks) {
@@ -30,6 +48,7 @@ for (const task of manifest.tasks) {
   process.stdout.write(`\n[${label}] ${task.description} ... `);
 
   if (task.preCheck === 'broken-tests') {
+    resetDogfoodFixture(taskDir);
     try {
       execSync('npm test', { cwd: taskDir, stdio: 'ignore' });
       console.log('SKIP (fixture not broken)');
@@ -94,6 +113,10 @@ for (const task of manifest.tasks) {
         }
       } catch {}
     }
+  }
+
+  if (task.resetFixture) {
+    resetDogfoodFixture(taskDir);
   }
 }
 
