@@ -201,7 +201,24 @@ export async function runTask(
       sessionPath,
       initialFiles: resolvedFiles,
       onStep: uiServer
-        ? (record) => uiServer!.updateState({ explorationStep: record.step, explorationTool: record.decision.tool || 'done' })
+        ? (record) => {
+            const prev = uiServer!.getState().explorationSteps || [];
+            uiServer!.updateState({
+              stage: 'exploring',
+              explorationStep: record.step,
+              explorationTool: record.decision.tool || 'done',
+              explorationSteps: [
+                ...prev,
+                {
+                  step: record.step,
+                  tool: record.decision.tool || 'done',
+                  reason: record.decision.reason,
+                  success: record.success,
+                  preview: record.result.slice(0, 400)
+                }
+              ]
+            });
+          }
         : undefined
     });
 

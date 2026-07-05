@@ -50,7 +50,7 @@ function createTempWorkspace(): string {
         test: 'npm run test'
       },
       requireHumanDiffApproval: false,
-      requireVerificationBeforeDone: false
+      agentToolLoopEnabled: false
     }, null, 2),
     'utf8'
   );
@@ -914,7 +914,7 @@ test('run command - provider none metadata is correct in report', async () => {
         test: 'npm run test'
       },
       requireHumanDiffApproval: false,
-      requireVerificationBeforeDone: false
+      agentToolLoopEnabled: false
     }, null, 2),
     'utf8'
   );

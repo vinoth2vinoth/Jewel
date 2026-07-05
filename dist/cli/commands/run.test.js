@@ -76,7 +76,7 @@ function createTempWorkspace() {
             test: 'npm run test'
         },
         requireHumanDiffApproval: false,
-        requireVerificationBeforeDone: false
+        agentToolLoopEnabled: false
     }, null, 2), 'utf8');
     return tempDir;
 }
@@ -896,7 +896,7 @@ function cleanupWorkspace(dir) {
             test: 'npm run test'
         },
         requireHumanDiffApproval: false,
-        requireVerificationBeforeDone: false
+        agentToolLoopEnabled: false
     }, null, 2), 'utf8');
     try {
         try {

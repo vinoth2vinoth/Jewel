@@ -7,6 +7,8 @@ import { runAudit } from './commands/audit';
 import { runTask } from './commands/run';
 import { runVersion } from './commands/version';
 import { runTui } from './commands/tui';
+import { runWatch } from './commands/watch';
+import { getSessionForResume } from '../core/session-history';
 import { toJewelError } from './errors';
 
 function printHelp(): void {
@@ -28,6 +30,8 @@ Commands:
   smoke-provider             Run provider validation smoke tests.
   provider-ready             Verify provider configuration, capability registry, and run connection checks.
   release-check              Verify public package and release readiness checklist.
+  watch                      Run verification continuously when source files change.
+  resume [session-id]        Re-run a previous session task from history.
   version                    Print the version info.
 
 Options:
@@ -107,6 +111,33 @@ export async function main(): Promise<void> {
         break;
       }
 
+      case 'watch': {
+        let intervalMs = 2000;
+        let debounceMs = 1000;
+        let once = false;
+        const remainingArgs = args.slice(1);
+        for (let i = 0; i < remainingArgs.length; i++) {
+          const arg = remainingArgs[i];
+          if (arg === '--interval') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              intervalMs = parseInt(val, 10);
+              i++;
+            }
+          } else if (arg === '--debounce') {
+            const val = remainingArgs[i + 1];
+            if (val && !val.startsWith('-')) {
+              debounceMs = parseInt(val, 10);
+              i++;
+            }
+          } else if (arg === '--once') {
+            once = true;
+          }
+        }
+        await runWatch(process.cwd(), { intervalMs, debounceMs, once });
+        break;
+      }
+
       case 'smoke-provider': {
         let providerOverride: string | undefined;
         let modelOverride: string | undefined;
@@ -169,6 +200,75 @@ export async function main(): Promise<void> {
 
       case 'audit': {
         runAudit();
+        break;
+      }
+
+      case 'resume': {
+        let sessionId: string | undefined;
+        let argStart = 1;
+        if (args[1] && !args[1].startsWith('-')) {
+          sessionId = args[1];
+          argStart = 2;
+        }
+
+        const payload = getSessionForResume(process.cwd(), sessionId);
+        if (!payload) {
+          console.error('Error: No session found to resume. Run jewel status to see recent sessions.');
+          process.exit(1);
+        }
+
+        let useMock = false;
+        let yesFlag = false;
+        let noReview = false;
+        let keepFailed = false;
+        let providerOverride: string | undefined;
+        let modelOverride: string | undefined;
+        let temperatureOverride: number | undefined;
+        let maxOutputTokensOverride: number | undefined;
+        let dryRun = false;
+        let uiFlag = false;
+
+        for (let i = argStart; i < args.length; i++) {
+          const arg = args[i];
+          if (arg === '-m' || arg === '--mock') useMock = true;
+          else if (arg === '--yes') yesFlag = true;
+          else if (arg === '--no-review') noReview = true;
+          else if (arg === '--keep-failed') keepFailed = true;
+          else if (arg === '--dry-run') dryRun = true;
+          else if (arg === '--ui') uiFlag = true;
+          else if (arg === '--provider') {
+            const val = args[i + 1];
+            if (val && !val.startsWith('-')) { providerOverride = val; i++; }
+          } else if (arg === '--model') {
+            const val = args[i + 1];
+            if (val && !val.startsWith('-')) { modelOverride = val; i++; }
+          } else if (arg === '--temperature') {
+            const val = args[i + 1];
+            if (val && !val.startsWith('-')) { temperatureOverride = parseFloat(val); i++; }
+          } else if (arg === '--max-output-tokens') {
+            const val = args[i + 1];
+            if (val && !val.startsWith('-')) { maxOutputTokensOverride = parseInt(val, 10); i++; }
+          }
+        }
+
+        console.log(`[+] Resuming session ${payload.sessionId}: "${payload.task}"`);
+        await runTask(
+          payload.task,
+          payload.files,
+          useMock,
+          process.cwd(),
+          yesFlag,
+          noReview,
+          keepFailed,
+          {
+            provider: providerOverride,
+            model: modelOverride,
+            temperature: temperatureOverride,
+            maxOutputTokens: maxOutputTokensOverride
+          },
+          dryRun,
+          uiFlag
+        );
         break;
       }
 

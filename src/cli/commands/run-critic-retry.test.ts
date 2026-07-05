@@ -48,7 +48,8 @@ function createTempWorkspace(): string {
         test: 'node test-runner.js'
       },
       requireHumanDiffApproval: false,
-      requireVerificationBeforeDone: true
+      requireVerificationBeforeDone: true,
+      agentToolLoopEnabled: false
     }, null, 2),
     'utf8'
   );

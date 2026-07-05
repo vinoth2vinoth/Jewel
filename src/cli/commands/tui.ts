@@ -11,6 +11,7 @@ import { runDiff } from './diff';
 import { runReleaseCheck } from './release-check';
 import { runSmokeProvider } from './smoke-provider';
 import { runProviderReady } from './provider-ready';
+import { formatSessionHistoryTable, getSessionForResume, listRecentSessions } from '../../core/session-history';
 
 export function tokenizeInput(input: string): string[] {
   const tokens: string[] = [];
@@ -239,6 +240,8 @@ Available TUI Slash Commands:
   /smoke-provider            Run validation smoke tests. Support flags: --provider, --model, --schema, --no-write.
   /provider-ready            Verify model config. Support flags: --provider, --model.
   /run <task>                Start a safe AI coding task. Support standard flags like --mock.
+  /history                   Show recent session task history.
+  /resume [session-id]       Re-run a previous session task. Supports --mock, --yes, --ui flags.
   /help, /h                  Show this help menu.
   /exit, /quit               Exit the interactive shell.
 `);
@@ -314,6 +317,46 @@ Available TUI Slash Commands:
           case '/provider-ready': {
             const { options } = parseOptions(tokens.slice(1));
             await executeWithSafetyPatch(() => runProviderReady(options.provider || '', options.model, cwd));
+            promptLoop();
+            break;
+          }
+
+          case '/history':
+          case '/hist': {
+            const sessions = listRecentSessions(cwd, 10);
+            console.log(formatSessionHistoryTable(sessions));
+            promptLoop();
+            break;
+          }
+
+          case '/resume': {
+            const { options, remaining } = parseOptions(tokens.slice(1));
+            const sessionId = remaining[0];
+            const payload = getSessionForResume(cwd, sessionId);
+            if (!payload) {
+              console.error('Error: No session found to resume. Use /history to list sessions.');
+              promptLoop();
+              break;
+            }
+            console.log(`[+] Resuming session ${payload.sessionId}: "${payload.task}"`);
+            const overrides = {
+              provider: options.provider,
+              model: options.model,
+              temperature: options.temperature,
+              maxOutputTokens: options.maxOutputTokens
+            };
+            await executeWithSafetyPatch(() => runTask(
+              payload.task,
+              payload.files,
+              !!options.mock,
+              cwd,
+              !!options.yes,
+              !!options.noReview,
+              !!options.keepFailed,
+              overrides,
+              !!options.dryRun,
+              !!options.ui
+            ));
             promptLoop();
             break;
           }

@@ -10,6 +10,8 @@ const audit_1 = require("./commands/audit");
 const run_1 = require("./commands/run");
 const version_1 = require("./commands/version");
 const tui_1 = require("./commands/tui");
+const watch_1 = require("./commands/watch");
+const session_history_1 = require("../core/session-history");
 const errors_1 = require("./errors");
 function printHelp() {
     console.log(`
@@ -30,6 +32,8 @@ Commands:
   smoke-provider             Run provider validation smoke tests.
   provider-ready             Verify provider configuration, capability registry, and run connection checks.
   release-check              Verify public package and release readiness checklist.
+  watch                      Run verification continuously when source files change.
+  resume [session-id]        Re-run a previous session task from history.
   version                    Print the version info.
 
 Options:
@@ -96,6 +100,34 @@ async function main() {
                 runReleaseCheck();
                 break;
             }
+            case 'watch': {
+                let intervalMs = 2000;
+                let debounceMs = 1000;
+                let once = false;
+                const remainingArgs = args.slice(1);
+                for (let i = 0; i < remainingArgs.length; i++) {
+                    const arg = remainingArgs[i];
+                    if (arg === '--interval') {
+                        const val = remainingArgs[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            intervalMs = parseInt(val, 10);
+                            i++;
+                        }
+                    }
+                    else if (arg === '--debounce') {
+                        const val = remainingArgs[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            debounceMs = parseInt(val, 10);
+                            i++;
+                        }
+                    }
+                    else if (arg === '--once') {
+                        once = true;
+                    }
+                }
+                await (0, watch_1.runWatch)(process.cwd(), { intervalMs, debounceMs, once });
+                break;
+            }
             case 'smoke-provider': {
                 let providerOverride;
                 let modelOverride;
@@ -156,6 +188,80 @@ async function main() {
             }
             case 'audit': {
                 (0, audit_1.runAudit)();
+                break;
+            }
+            case 'resume': {
+                let sessionId;
+                let argStart = 1;
+                if (args[1] && !args[1].startsWith('-')) {
+                    sessionId = args[1];
+                    argStart = 2;
+                }
+                const payload = (0, session_history_1.getSessionForResume)(process.cwd(), sessionId);
+                if (!payload) {
+                    console.error('Error: No session found to resume. Run jewel status to see recent sessions.');
+                    process.exit(1);
+                }
+                let useMock = false;
+                let yesFlag = false;
+                let noReview = false;
+                let keepFailed = false;
+                let providerOverride;
+                let modelOverride;
+                let temperatureOverride;
+                let maxOutputTokensOverride;
+                let dryRun = false;
+                let uiFlag = false;
+                for (let i = argStart; i < args.length; i++) {
+                    const arg = args[i];
+                    if (arg === '-m' || arg === '--mock')
+                        useMock = true;
+                    else if (arg === '--yes')
+                        yesFlag = true;
+                    else if (arg === '--no-review')
+                        noReview = true;
+                    else if (arg === '--keep-failed')
+                        keepFailed = true;
+                    else if (arg === '--dry-run')
+                        dryRun = true;
+                    else if (arg === '--ui')
+                        uiFlag = true;
+                    else if (arg === '--provider') {
+                        const val = args[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            providerOverride = val;
+                            i++;
+                        }
+                    }
+                    else if (arg === '--model') {
+                        const val = args[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            modelOverride = val;
+                            i++;
+                        }
+                    }
+                    else if (arg === '--temperature') {
+                        const val = args[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            temperatureOverride = parseFloat(val);
+                            i++;
+                        }
+                    }
+                    else if (arg === '--max-output-tokens') {
+                        const val = args[i + 1];
+                        if (val && !val.startsWith('-')) {
+                            maxOutputTokensOverride = parseInt(val, 10);
+                            i++;
+                        }
+                    }
+                }
+                console.log(`[+] Resuming session ${payload.sessionId}: "${payload.task}"`);
+                await (0, run_1.runTask)(payload.task, payload.files, useMock, process.cwd(), yesFlag, noReview, keepFailed, {
+                    provider: providerOverride,
+                    model: modelOverride,
+                    temperature: temperatureOverride,
+                    maxOutputTokens: maxOutputTokensOverride
+                }, dryRun, uiFlag);
                 break;
             }
             case 'run': {

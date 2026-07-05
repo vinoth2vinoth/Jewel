@@ -734,6 +734,10 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
               <div class="timeline-dot"></div>
               <div class="timeline-label">Initialization</div>
             </div>
+            <div class="timeline-step" id="step-exploring">
+              <div class="timeline-dot"></div>
+              <div class="timeline-label">Repo Exploration</div>
+            </div>
             <div class="timeline-step" id="step-planning">
               <div class="timeline-dot"></div>
               <div class="timeline-label">Task Planning</div>
@@ -755,6 +759,12 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
               <div class="timeline-label">Session Finalizing</div>
             </div>
           </div>
+        </div>
+
+        <!-- Exploration Tool Loop -->
+        <div class="card glass" id="exploration-card" style="display: none;">
+          <div class="card-title">Agent Exploration</div>
+          <div id="exploration-steps" class="findings-list"></div>
         </div>
 
         <!-- Live API Cost Gauge -->
@@ -945,7 +955,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
       document.getElementById('provider-model').innerText = \`\${provider} / \${model}\`;
 
       // 2. Timeline Step styling
-      const steps = ['init', 'planning', 'review', 'verification', 'critic', 'finalizing'];
+      const steps = ['init', 'exploring', 'planning', 'review', 'verification', 'critic', 'finalizing'];
       steps.forEach(step => {
         const el = document.getElementById(\`step-\${step}\`);
         if (el) {
@@ -992,6 +1002,25 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
         });
       }
       renderLogs();
+
+      // 2b. Exploration steps panel
+      const explorationCard = document.getElementById('exploration-card');
+      const explorationStepsEl = document.getElementById('exploration-steps');
+      if (state.explorationSteps && state.explorationSteps.length > 0) {
+        explorationCard.style.display = 'block';
+        explorationStepsEl.innerHTML = state.explorationSteps.map(s => \`
+          <div class="finding-item \${s.success ? 'pass' : 'warn'}">
+            <div class="finding-title">Step \${s.step}: \${s.tool}</div>
+            <div class="finding-message">\${s.reason}</div>
+            <div class="finding-message" style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; opacity: 0.85; margin-top: 4px;">\${(s.preview || '').replace(/</g, '&lt;').slice(0, 200)}</div>
+          </div>
+        \`).join('');
+      } else if (state.stage === 'exploring') {
+        explorationCard.style.display = 'block';
+        explorationStepsEl.innerHTML = '<div class="finding-message">Exploring repository...</div>';
+      } else {
+        explorationCard.style.display = 'none';
+      }
 
       // 3b. Update Cost Card
       if (state.cost) {
@@ -1204,6 +1233,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
         indicator.style.boxShadow = '0 0 16px var(--warning-glow)';
 
         commentContainer.style.display = 'flex';
+        document.getElementById('comment-text').placeholder = 'Describe what the agent should fix on retry (e.g. guard divide-by-zero in math.ts)...';
 
         actions.innerHTML = \`
           <button class="btn btn-danger" onclick="submitAction('abort')">Abort & Rollback</button>

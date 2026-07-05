@@ -35,7 +35,7 @@ export interface RunReportOptions {
     overallStatus: string;
     results: Array<{ status: string; commandLine?: string }>;
     stats: { passed: number; failed: number; blocked: number; skipped: number };
-  };
+  } | null;
   critic?: { status: string; confidence: string; findings: string[] };
   reviewRequired?: boolean;
   approved?: boolean;

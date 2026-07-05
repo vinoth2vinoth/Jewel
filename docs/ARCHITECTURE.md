@@ -131,6 +131,13 @@ Results are written to `.jewel/benchmarks/latest.json`.
 | 3 | IDE extension, TUI polish, `jewel watch` |
 | 4 | Plugin system, MCP server mode, public benchmark results |
 
+## Phase 3 — Developer UX (shipped)
+
+- **TUI**: `/history`, `/resume [session-id]` slash commands
+- **CLI**: `jewel resume [session-id]`, `jewel watch [--interval ms] [--debounce ms] [--once]`
+- **Web UI**: Repo exploration timeline step, live exploration log panel, retry hint placeholder
+- **Session history**: `src/core/session-history.ts` reads `.jewel/sessions/` for resume
+
 ---
 
 *Updated as the architecture evolves.*

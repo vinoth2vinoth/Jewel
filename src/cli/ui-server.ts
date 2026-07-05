@@ -7,8 +7,8 @@ import { redactSecrets } from '../safety/secret-redactor';
 import { ASTFileDiff } from '../safety/diff-guard';
 
 export interface UIState {
-  stage: 'init' | 'planning' | 'review' | 'verification' | 'critic' | 'finalizing' | 'completed' | 'failed';
-  prevStage?: 'init' | 'planning' | 'review' | 'verification' | 'critic' | 'finalizing' | 'completed' | 'failed';
+  stage: 'init' | 'exploring' | 'planning' | 'review' | 'verification' | 'critic' | 'finalizing' | 'completed' | 'failed';
+  prevStage?: 'init' | 'exploring' | 'planning' | 'review' | 'verification' | 'critic' | 'finalizing' | 'completed' | 'failed';
   task?: string;
   sessionId?: string;
   files?: string[];
@@ -45,6 +45,15 @@ export interface UIState {
     totalUSD: number;
     maxCost?: number;
   };
+  explorationSteps?: Array<{
+    step: number;
+    tool: string;
+    reason: string;
+    success: boolean;
+    preview: string;
+  }>;
+  explorationStep?: number;
+  explorationTool?: string;
 }
 
 export class UIServer {

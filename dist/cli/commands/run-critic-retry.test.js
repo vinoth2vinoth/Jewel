@@ -75,7 +75,8 @@ function createTempWorkspace() {
             test: 'node test-runner.js'
         },
         requireHumanDiffApproval: false,
-        requireVerificationBeforeDone: true
+        requireVerificationBeforeDone: true,
+        agentToolLoopEnabled: false
     }, null, 2), 'utf8');
     // Write default test-runner.js that fails unless math.js content contains 'correct'
     fs.writeFileSync(path.join(tempDir, 'test-runner.js'), `const fs = require('fs');
