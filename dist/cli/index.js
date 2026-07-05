@@ -12,7 +12,10 @@ const version_1 = require("./commands/version");
 const tui_1 = require("./commands/tui");
 const watch_1 = require("./commands/watch");
 const mcp_1 = require("./commands/mcp");
+const lsp_1 = require("./commands/lsp");
 const benchmark_1 = require("./commands/benchmark");
+const continue_1 = require("./commands/continue");
+const ship_1 = require("./commands/ship");
 const session_history_1 = require("../core/session-history");
 const errors_1 = require("./errors");
 function printHelp() {
@@ -36,8 +39,11 @@ Commands:
   release-check              Verify public package and release readiness checklist.
   watch                      Run verification continuously when source files change.
   resume [session-id]        Re-run a previous session task from history.
+  continue [session-id] "<feedback>"  Continue a prior session with follow-up feedback.
+  ship [session-id]          Commit session changes to a branch with PR body template.
   benchmark                  Run curated benchmark tasks (use --mock for deterministic runs).
   mcp                        Start Jewel MCP server on stdio (Cursor / Claude Desktop).
+  lsp                        Start Jewel Language Server on stdio (VS Code extension).
   version                    Print the version info.
 
 Options:
@@ -51,6 +57,7 @@ Options:
   --temperature <temp>       Override temperature.
   --max-output-tokens <n>    Override max output tokens.
   --dry-run                  Preview the task contract and files scope without creating a session or applying changes.
+  --plan-only                Generate and preview plan (creates session metadata, no patch/verify).
   --ui                       Start a local HTTP server for interactive dashboard.
   -h, --help                 Print this help menu.
 `);
@@ -194,6 +201,92 @@ async function main() {
                 (0, audit_1.runAudit)();
                 break;
             }
+            case 'ship': {
+                let sessionId;
+                let branch;
+                let message;
+                const remaining = args.slice(1);
+                for (let i = 0; i < remaining.length; i++) {
+                    const arg = remaining[i];
+                    if (arg === '--branch') {
+                        branch = remaining[i + 1];
+                        i++;
+                    }
+                    else if (arg === '--message') {
+                        message = remaining[i + 1];
+                        i++;
+                    }
+                    else if (!arg.startsWith('-') && !sessionId) {
+                        sessionId = arg;
+                    }
+                }
+                (0, ship_1.runShip)({ sessionId, branch, message, cwd: process.cwd() });
+                break;
+            }
+            case 'continue': {
+                let sessionId;
+                let feedback;
+                let argStart = 1;
+                if (args[1] && !args[1].startsWith('-') && !args[1].startsWith('"')) {
+                    sessionId = args[1];
+                    argStart = 2;
+                }
+                feedback = args[argStart];
+                if (feedback && (feedback.startsWith('"') || feedback.startsWith("'"))) {
+                    feedback = feedback.slice(1, -1);
+                }
+                let useMock = false;
+                let yesFlag = false;
+                let noReview = false;
+                let keepFailed = false;
+                let dryRun = false;
+                let uiFlag = false;
+                let providerOverride;
+                let modelOverride;
+                let temperatureOverride;
+                let maxOutputTokensOverride;
+                for (let i = argStart + (feedback ? 1 : 0); i < args.length; i++) {
+                    const arg = args[i];
+                    if (arg === '-m' || arg === '--mock')
+                        useMock = true;
+                    else if (arg === '--yes')
+                        yesFlag = true;
+                    else if (arg === '--no-review')
+                        noReview = true;
+                    else if (arg === '--keep-failed')
+                        keepFailed = true;
+                    else if (arg === '--dry-run')
+                        dryRun = true;
+                    else if (arg === '--ui')
+                        uiFlag = true;
+                    else if (arg === '--provider') {
+                        providerOverride = args[++i];
+                    }
+                    else if (arg === '--model') {
+                        modelOverride = args[++i];
+                    }
+                    else if (arg === '--temperature') {
+                        temperatureOverride = parseFloat(args[++i]);
+                    }
+                    else if (arg === '--max-output-tokens') {
+                        maxOutputTokensOverride = parseInt(args[++i], 10);
+                    }
+                    else if (!feedback && !arg.startsWith('-')) {
+                        feedback = arg;
+                    }
+                }
+                if (!feedback) {
+                    console.error('Error: Feedback required. Example: jewel continue "Handle edge case when input is zero"');
+                    process.exit(1);
+                }
+                await (0, continue_1.runContinueCommand)(feedback, sessionId, useMock, process.cwd(), yesFlag, noReview, keepFailed, {
+                    provider: providerOverride,
+                    model: modelOverride,
+                    temperature: temperatureOverride,
+                    maxOutputTokens: maxOutputTokensOverride
+                }, dryRun, uiFlag);
+                break;
+            }
             case 'benchmark': {
                 const useMock = args.includes('--mock') || !args.includes('--live');
                 (0, benchmark_1.runBenchmarkCommand)(useMock);
@@ -201,6 +294,10 @@ async function main() {
             }
             case 'mcp': {
                 (0, mcp_1.runMcp)(process.cwd());
+                break;
+            }
+            case 'lsp': {
+                (0, lsp_1.runLsp)(process.cwd());
                 break;
             }
             case 'resume': {
@@ -295,6 +392,7 @@ async function main() {
                 let maxOutputTokensOverride;
                 let dryRun = false;
                 let uiFlag = false;
+                let planOnly = false;
                 const remainingArgs = args.slice(2);
                 for (let i = 0; i < remainingArgs.length; i++) {
                     const arg = remainingArgs[i];
@@ -348,6 +446,9 @@ async function main() {
                     else if (arg === '--dry-run') {
                         dryRun = true;
                     }
+                    else if (arg === '--plan-only') {
+                        planOnly = true;
+                    }
                     else if (arg === '--ui') {
                         uiFlag = true;
                     }
@@ -358,7 +459,7 @@ async function main() {
                     temperature: temperatureOverride,
                     maxOutputTokens: maxOutputTokensOverride
                 };
-                await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun, uiFlag);
+                await (0, run_1.runTask)(taskText, filesNeeded, useMock, process.cwd(), yesFlag, noReview, keepFailed, overrides, dryRun, uiFlag, { planOnly, approvePlan: yesFlag });
                 break;
             }
             default: {

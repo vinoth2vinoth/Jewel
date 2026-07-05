@@ -25,7 +25,7 @@ const config_1 = require("../core/config");
     });
     const firstFile = patch.files[0];
     node_assert_1.default.ok(firstFile);
-    node_assert_1.default.ok(firstFile.content.includes('Task executed successfully'));
+    node_assert_1.default.ok(typeof firstFile.content === 'string' && firstFile.content.includes('Task executed successfully'));
     const review = await adapter.reviewDiff({
         diff: 'diff content',
         verificationResult: null,

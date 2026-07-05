@@ -1,6 +1,6 @@
 let buffer = Buffer.alloc(0);
 
-export function startMcpServer(cwd: string, onMessage: (msg: Record<string, unknown>) => void): void {
+export function startStdioRpc(onMessage: (msg: Record<string, unknown>) => void): void {
   process.stdin.on('data', (chunk: Buffer) => {
     buffer = Buffer.concat([buffer, chunk]);
 
@@ -29,7 +29,7 @@ export function startMcpServer(cwd: string, onMessage: (msg: Record<string, unkn
   });
 }
 
-export function writeMcpMessage(msg: Record<string, unknown>): void {
+export function writeStdioRpc(msg: Record<string, unknown>): void {
   const body = JSON.stringify(msg);
   const header = `Content-Length: ${Buffer.byteLength(body, 'utf8')}\r\n\r\n`;
   process.stdout.write(header + body);

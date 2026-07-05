@@ -102,7 +102,12 @@ exports.DEFAULT_CONFIG = {
     agentToolLoopEnabled: true,
     agentToolLoopMaxSteps: 8,
     agentToolLoopMaxContextChars: 80_000,
-    pluginsEnabled: true
+    pluginsEnabled: true,
+    semanticIndexEnabled: true,
+    requirePlanApproval: false,
+    fastPathEnabled: true,
+    fastPathMaxFiles: 1,
+    fastPathMaxRisk: 'low'
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -133,7 +138,7 @@ function validateAndMergeConfig(parsed) {
         }
         config.mode = parsed.mode;
     }
-    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars'];
+    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars', 'fastPathMaxFiles'];
     for (const field of numericFields) {
         if (parsed[field] !== undefined) {
             const val = Number(parsed[field]);
@@ -158,7 +163,10 @@ function validateAndMergeConfig(parsed) {
         'useSandbox',
         'sandboxFallbackToHost',
         'agentToolLoopEnabled',
-        'pluginsEnabled'
+        'pluginsEnabled',
+        'semanticIndexEnabled',
+        'requirePlanApproval',
+        'fastPathEnabled'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {
@@ -367,6 +375,12 @@ function validateAndMergeConfig(parsed) {
             return normalized; // Return canonical normalized path
         });
         config.sandboxWritePaths = Array.from(new Set(normalizedList));
+    }
+    if (parsed.fastPathMaxRisk !== undefined) {
+        if (!['low', 'medium', 'high'].includes(parsed.fastPathMaxRisk)) {
+            throw new Error('Invalid config: "fastPathMaxRisk" must be "low", "medium", or "high".');
+        }
+        config.fastPathMaxRisk = parsed.fastPathMaxRisk;
     }
     return config;
 }

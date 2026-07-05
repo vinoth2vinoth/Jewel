@@ -56,7 +56,10 @@ const run_helpers_1 = require("./run-helpers");
 const run_report_1 = require("./run-report");
 const context_builder_1 = require("../../exploration/context-builder");
 const tool_loop_1 = require("../../agents/tool-loop");
-async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false, useUI = false) {
+const risk_path_1 = require("../../core/risk-path");
+const session_continue_1 = require("../../core/session-continue");
+const plan_preview_1 = require("../plan-preview");
+async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false, useUI = false, runOptions) {
     let config = null;
     let adapter = null;
     let sessionId = '';
@@ -135,8 +138,15 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 config.maxOutputTokens = cliOverrides.maxOutputTokens;
             }
         }
-        let resolvedFiles = (0, context_builder_1.resolveFilesForTask)(cwd, task, filesNeeded);
-        if (dryRun) {
+        let resolvedFiles = (0, context_builder_1.resolveFilesForTask)(cwd, task, filesNeeded, config);
+        let continuationAppendix = '';
+        if (runOptions?.parentSessionId && runOptions?.continuationFeedback) {
+            const ctx = (0, session_continue_1.loadContinuationContext)(cwd, runOptions.continuationFeedback, runOptions.parentSessionId);
+            if (ctx) {
+                continuationAppendix = (0, session_continue_1.buildContinuationRepoAppendix)(ctx);
+            }
+        }
+        if (dryRun && !runOptions?.planOnly) {
             const contract = (0, session_1.generateLocalContract)(task, config, resolvedFiles);
             console.log('\n======================================');
             console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
@@ -171,6 +181,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         sessionId = sessionData.sessionId;
         sessionPath = sessionData.sessionPath;
         contractPath = sessionData.contractPath;
+        if (runOptions?.parentSessionId && runOptions?.continuationFeedback) {
+            (0, session_continue_1.writeSessionLinkMetadata)(sessionPath, runOptions.parentSessionId, runOptions.continuationFeedback);
+        }
         if (uiServer) {
             (0, run_helpers_1.broadcastState)(uiServer, {
                 sessionId,
@@ -193,45 +206,59 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             if (uiServer) {
                 (0, run_helpers_1.broadcastState)(uiServer, { stage: 'exploring' }, config, adapter);
             }
-            const exploration = await (0, tool_loop_1.runAgentToolLoop)({
-                task,
-                cwd,
-                config,
-                adapter,
-                sessionPath,
-                initialFiles: resolvedFiles,
-                onStep: uiServer
-                    ? (record) => {
-                        const prev = uiServer.getState().explorationSteps || [];
-                        uiServer.updateState({
-                            stage: 'exploring',
-                            explorationStep: record.step,
-                            explorationTool: record.decision.tool || 'done',
-                            explorationSteps: [
-                                ...prev,
-                                {
-                                    step: record.step,
-                                    tool: record.decision.tool || 'done',
-                                    reason: record.decision.reason,
-                                    success: record.success,
-                                    preview: record.result.slice(0, 400)
-                                }
-                            ]
-                        });
-                    }
-                    : undefined
-            });
-            if (exploration.discoveredFiles.length > 0) {
-                const merged = new Set([...resolvedFiles, ...exploration.discoveredFiles]);
-                resolvedFiles = Array.from(merged);
+            const fastPathDecision = (0, risk_path_1.shouldUseFastPath)(config, { riskLevel: (0, session_1.assessRiskLevel)(task, resolvedFiles, config), requiresApproval: false }, resolvedFiles, runOptions);
+            const skipToolLoop = config.agentToolLoopEnabled === false || fastPathDecision.enabled;
+            if (fastPathDecision.enabled) {
+                console.log(`[+] Fast path enabled (${fastPathDecision.reasons.join('; ')}) — skipping tool loop`);
+            }
+            let explorationSummary = '';
+            let explorationContext = '';
+            if (!skipToolLoop) {
+                const exploration = await (0, tool_loop_1.runAgentToolLoop)({
+                    task,
+                    cwd,
+                    config,
+                    adapter,
+                    sessionPath,
+                    initialFiles: resolvedFiles,
+                    onStep: uiServer
+                        ? (record) => {
+                            const prev = uiServer.getState().explorationSteps || [];
+                            uiServer.updateState({
+                                stage: 'exploring',
+                                explorationStep: record.step,
+                                explorationTool: record.decision.tool || 'done',
+                                explorationSteps: [
+                                    ...prev,
+                                    {
+                                        step: record.step,
+                                        tool: record.decision.tool || 'done',
+                                        reason: record.decision.reason,
+                                        success: record.success,
+                                        preview: record.result.slice(0, 400)
+                                    }
+                                ]
+                            });
+                        }
+                        : undefined
+                });
+                if (exploration.discoveredFiles.length > 0) {
+                    const merged = new Set([...resolvedFiles, ...exploration.discoveredFiles]);
+                    resolvedFiles = Array.from(merged);
+                }
+                explorationSummary = exploration.summary;
+                explorationContext = exploration.context;
             }
             if (uiServer) {
                 (0, run_helpers_1.broadcastState)(uiServer, { stage: 'planning' }, config, adapter);
             }
             console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
             let repoSummary = (0, context_builder_1.buildEnrichedRepoSummary)(cwd, task);
-            if (exploration.context) {
-                repoSummary += `\n\n--- Agent Tool Loop Exploration ---\n${exploration.summary}\n\n${exploration.context}`;
+            if (explorationContext) {
+                repoSummary += `\n\n--- Agent Tool Loop Exploration ---\n${explorationSummary}\n\n${explorationContext}`;
+            }
+            if (continuationAppendix) {
+                repoSummary += `\n${continuationAppendix}`;
             }
             let contractFromAdapter;
             try {
@@ -258,6 +285,29 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             fs.writeFileSync(contractPath, JSON.stringify(contractFromAdapter, null, 2), 'utf8');
         }
         const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+        let effectiveConfig = config;
+        const fastPathAtContract = (0, risk_path_1.shouldUseFastPath)(config, contract, resolvedFiles, runOptions);
+        if (fastPathAtContract.enabled) {
+            effectiveConfig = (0, risk_path_1.applyFastPathConfig)(config);
+        }
+        const planDecision = await (0, plan_preview_1.handlePlanApproval)(contract, resolvedFiles, config, {
+            planOnly: runOptions?.planOnly,
+            approvePlan: runOptions?.approvePlan,
+            yesFlag,
+            uiServer
+        });
+        if (planDecision === 'plan-only') {
+            fs.writeFileSync(path.join(sessionPath, 'plan-preview.json'), JSON.stringify({
+                contract,
+                files: resolvedFiles,
+                previewedAt: new Date().toISOString()
+            }, null, 2), 'utf8');
+            console.log(`[+] Plan saved to ${path.join(sessionPath, 'plan-preview.json')}`);
+            process.exit(0);
+        }
+        if (planDecision === 'abort') {
+            throw new errors_1.JewelError('PLAN_REJECTED', 'Plan was rejected by reviewer. No checkpoint created.', 'Revise the task description or approve the plan to proceed.');
+        }
         console.log(`\n--- Enforced Task Contract (Session: ${sessionId}) ---`);
         console.log(`Task: ${contract.task}`);
         console.log(`Risk Level: ${contract.riskLevel}`);
@@ -602,7 +652,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 if (uiServer) {
                     (0, run_helpers_1.broadcastState)(uiServer, { stage: 'critic' }, config, adapter);
                 }
-                critic = await (0, critic_1.runMultiAgentCriticReview)(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
+                critic = await (0, critic_1.runMultiAgentCriticReview)(contract, diffAnalysis, verification, effectiveConfig, adapter, sessionPath, diffContent);
                 console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
                 if (critic.findings.length > 0) {
                     console.log('Findings:');

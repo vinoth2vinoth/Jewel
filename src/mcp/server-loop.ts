@@ -1,5 +1,5 @@
 import { handleToolCall } from './tools';
-import { startMcpServer, writeMcpMessage } from './transport';
+import { startStdioRpc, writeStdioRpc } from '../rpc/stdio-transport';
 
 const TOOLS = [
   { name: 'jewel_verify', description: 'Run Jewel verification commands.', inputSchema: { type: 'object', properties: {} } },
@@ -10,13 +10,13 @@ const TOOLS = [
 ];
 
 export function runMcpServerLoop(cwd: string = process.cwd()): void {
-  startMcpServer(cwd, (msg) => {
+  startStdioRpc((msg) => {
     const id = msg.id;
     const method = msg.method as string;
     const params = (msg.params || {}) as Record<string, unknown>;
 
     if (method === 'initialize') {
-      writeMcpMessage({
+      writeStdioRpc({
         jsonrpc: '2.0',
         id,
         result: {
@@ -29,7 +29,7 @@ export function runMcpServerLoop(cwd: string = process.cwd()): void {
     }
 
     if (method === 'tools/list') {
-      writeMcpMessage({ jsonrpc: '2.0', id, result: { tools: TOOLS } });
+      writeStdioRpc({ jsonrpc: '2.0', id, result: { tools: TOOLS } });
       return;
     }
 
@@ -38,7 +38,7 @@ export function runMcpServerLoop(cwd: string = process.cwd()): void {
       const args = (params.arguments || {}) as Record<string, unknown>;
       handleToolCall(name, args, cwd)
         .then(result => {
-          writeMcpMessage({
+          writeStdioRpc({
             jsonrpc: '2.0',
             id,
             result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: false }
@@ -46,7 +46,7 @@ export function runMcpServerLoop(cwd: string = process.cwd()): void {
         })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
-          writeMcpMessage({
+          writeStdioRpc({
             jsonrpc: '2.0',
             id,
             result: { content: [{ type: 'text', text: message }], isError: true }
@@ -56,7 +56,7 @@ export function runMcpServerLoop(cwd: string = process.cwd()): void {
     }
 
     if (id !== undefined) {
-      writeMcpMessage({
+      writeStdioRpc({
         jsonrpc: '2.0',
         id,
         error: { code: -32601, message: `Method not found: ${method}` }

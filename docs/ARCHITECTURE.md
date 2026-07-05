@@ -126,9 +126,17 @@ jewel mcp
 
 Tools: `jewel_verify`, `jewel_status`, `jewel_grep`, `jewel_read_file`, `jewel_run_preview`. See `docs/mcp-setup.md`.
 
-### VS Code Extension — Phase 4 (scaffold)
+### VS Code Extension — Phase 4+ (LSP + diff panel)
 
-`extensions/jewel-vscode/` — Run Task, Verify, Status commands via integrated terminal.
+`extensions/jewel-vscode/` — Language Server client, session sidebar, diff preview webview, Problems panel diagnostics.
+
+Start the language server standalone:
+
+```bash
+jewel lsp
+```
+
+Custom LSP requests: `jewel/listSessions`, `jewel/getSessionDiff`, `jewel/runVerify`.
 
 ## Current State
 
@@ -143,7 +151,7 @@ Tools: `jewel_verify`, `jewel_status`, `jewel_grep`, `jewel_read_file`, `jewel_r
 
 - `run.ts` orchestrator is still large (helpers extracted; further modularization planned)
 - Exploration is keyword/heuristic based (no embedding index yet)
-- VS Code extension is a minimal scaffold (no Language Server Protocol yet)
+- VS Code extension requires `jewel lsp` on PATH (or `jewel.cliPath` setting)
 
 ## Roadmap
 
@@ -167,8 +175,17 @@ Tools: `jewel_verify`, `jewel_status`, `jewel_grep`, `jewel_read_file`, `jewel_r
 - **Plugins**: `.jewel/plugins/<name>/plugin.json` — verifier and critic hooks
 - **MCP**: `jewel mcp` stdio server — see `docs/mcp-setup.md`
 - **Benchmark CLI**: `jewel benchmark [--mock|--live]` with JSON + Markdown reports
-- **VS Code scaffold**: `extensions/jewel-vscode/` — Run Task, Verify, Status
+- **VS Code extension**: LSP client, session sidebar, diff preview webview
 - **Example plugin**: `examples/plugin-example/`
+
+## Phase 5 — Competitive UX (shipped)
+
+- **`jewel continue [session-id] "feedback"`** — bounded follow-up with session lineage
+- **`jewel ship [session-id]`** — branch, commit, PR body template under `.jewel/ship/`
+- **`--plan-only`** / **`requirePlanApproval`** — plan preview gate before checkpoint
+- **Semantic index** — local `.jewel/index/semantic.json` for file discovery (no API cost)
+- **Fast path** — low-risk single-file tasks skip tool loop and reduce critic depth
+- **VS Code**: plan preview panel, diff approve/reject review artifacts
 
 ---
 

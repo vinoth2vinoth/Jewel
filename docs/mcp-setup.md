@@ -39,3 +39,9 @@ Use an absolute path to `jewel` if it is not on PATH.
 ## Plugins
 
 Place custom verifiers and critics under `.jewel/plugins/<name>/plugin.json`. See `examples/plugin-example/`.
+
+## VS Code extension (LSP)
+
+The VS Code extension connects to `jewel lsp` over stdio. Configure in Cursor/VS Code settings or use defaults when `jewel` is on PATH.
+
+See `extensions/jewel-vscode/README.md` for development setup.

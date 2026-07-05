@@ -1,29 +1,120 @@
 {
   "name": "jewel-vscode",
   "displayName": "Jewel",
-  "description": "Run Jewel tasks, verify, and status from VS Code",
-  "version": "0.1.0",
+  "description": "Jewel AI coding agent — LSP diagnostics, session history, and diff preview",
+  "version": "0.2.0",
   "publisher": "jewel-cli",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": [],
+  "categories": ["Other", "Linters"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Jewel",
+      "properties": {
+        "jewel.cliPath": {
+          "type": "string",
+          "default": "jewel",
+          "description": "Path to the jewel CLI executable"
+        },
+        "jewel.cliArgs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra arguments before the lsp subcommand (e.g. node path/to/dist/cli/index.js)"
+        },
+        "jewel.useLspSubcommand": {
+          "type": "boolean",
+          "default": true,
+          "description": "When false, cliPath should point to dist/cli/index.js and lsp is passed as first arg"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "jewel",
+          "title": "Jewel",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "jewel": [
+        {
+          "id": "jewelSessions",
+          "name": "Sessions"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "jewel.runTask",
-        "title": "Jewel: Run Task"
+        "title": "Jewel: Run Task",
+        "icon": "$(play)"
       },
       {
         "command": "jewel.verify",
-        "title": "Jewel: Verify"
+        "title": "Jewel: Verify",
+        "icon": "$(check)"
       },
       {
         "command": "jewel.status",
-        "title": "Jewel: Status"
+        "title": "Jewel: Status",
+        "icon": "$(info)"
+      },
+      {
+        "command": "jewel.refreshSessions",
+        "title": "Jewel: Refresh Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "jewel.openSessionDiff",
+        "title": "Jewel: Open Session Diff",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "jewel.openLatestDiff",
+        "title": "Jewel: Open Latest Session Diff",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "jewel.previewPlan",
+        "title": "Jewel: Preview Plan",
+        "icon": "$(list-flat)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "jewel.refreshSessions",
+          "when": "view == jewelSessions",
+          "group": "navigation"
+        },
+        {
+          "command": "jewel.openLatestDiff",
+          "when": "view == jewelSessions",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "jewel.openSessionDiff",
+          "when": "view == jewelSessions && viewItem == jewelSession",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
   }
 }

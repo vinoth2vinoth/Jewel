@@ -54,6 +54,11 @@ export interface JewelConfig {
     agentToolLoopMaxSteps?: number;
     agentToolLoopMaxContextChars?: number;
     pluginsEnabled?: boolean;
+    semanticIndexEnabled?: boolean;
+    requirePlanApproval?: boolean;
+    fastPathEnabled?: boolean;
+    fastPathMaxFiles?: number;
+    fastPathMaxRisk?: 'low' | 'medium' | 'high';
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

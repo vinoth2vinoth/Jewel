@@ -3,7 +3,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { loadConfig } from '../../core/config';
 import { loadSkills } from '../../skills/loader';
-import { createSession, TaskContract, validateContract, generateLocalContract } from '../../core/session';
+import { createSession, TaskContract, validateContract, generateLocalContract, assessRiskLevel } from '../../core/session';
 import { createCheckpoint, rollbackCheckpoint, revertFileToCheckpoint, CheckpointMetadata } from '../../storage/git';
 import { runDiffGuard } from '../../safety/diff-guard';
 import { runVerification, VerificationReport } from '../../verification/runner';
@@ -20,6 +20,10 @@ import { askQuestion, broadcastState, buildRepoContext, waitForExitAcknowledgmen
 import { writeRunReport } from './run-report';
 import { buildEnrichedRepoSummary, resolveFilesForTask } from '../../exploration/context-builder';
 import { runAgentToolLoop } from '../../agents/tool-loop';
+import { RunTaskOptions } from '../../core/run-task-options';
+import { shouldUseFastPath, applyFastPathConfig } from '../../core/risk-path';
+import { buildContinuationRepoAppendix, loadContinuationContext, writeSessionLinkMetadata } from '../../core/session-continue';
+import { handlePlanApproval } from '../plan-preview';
 
 export async function runTask(
   task: string,
@@ -36,7 +40,8 @@ export async function runTask(
     maxOutputTokens?: number;
   },
   dryRun: boolean = false,
-  useUI: boolean = false
+  useUI: boolean = false,
+  runOptions?: RunTaskOptions
 ): Promise<void> {
   let config: any = null;
   let adapter: any = null;
@@ -126,9 +131,17 @@ export async function runTask(
     }
   }
 
-  let resolvedFiles = resolveFilesForTask(cwd, task, filesNeeded);
+  let resolvedFiles = resolveFilesForTask(cwd, task, filesNeeded, config);
 
-  if (dryRun) {
+  let continuationAppendix = '';
+  if (runOptions?.parentSessionId && runOptions?.continuationFeedback) {
+    const ctx = loadContinuationContext(cwd, runOptions.continuationFeedback, runOptions.parentSessionId);
+    if (ctx) {
+      continuationAppendix = buildContinuationRepoAppendix(ctx);
+    }
+  }
+
+  if (dryRun && !runOptions?.planOnly) {
     const contract = generateLocalContract(task, config, resolvedFiles);
     console.log('\n======================================');
     console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
@@ -169,6 +182,10 @@ export async function runTask(
   sessionPath = sessionData.sessionPath;
   contractPath = sessionData.contractPath;
 
+  if (runOptions?.parentSessionId && runOptions?.continuationFeedback) {
+    writeSessionLinkMetadata(sessionPath, runOptions.parentSessionId, runOptions.continuationFeedback);
+  }
+
   if (uiServer) {
     broadcastState(uiServer, {
       sessionId,
@@ -193,38 +210,57 @@ export async function runTask(
       broadcastState(uiServer, { stage: 'exploring' }, config, adapter);
     }
 
-    const exploration = await runAgentToolLoop({
-      task,
-      cwd,
+    const fastPathDecision = shouldUseFastPath(
       config,
-      adapter,
-      sessionPath,
-      initialFiles: resolvedFiles,
-      onStep: uiServer
-        ? (record) => {
-            const prev = uiServer!.getState().explorationSteps || [];
-            uiServer!.updateState({
-              stage: 'exploring',
-              explorationStep: record.step,
-              explorationTool: record.decision.tool || 'done',
-              explorationSteps: [
-                ...prev,
-                {
-                  step: record.step,
-                  tool: record.decision.tool || 'done',
-                  reason: record.decision.reason,
-                  success: record.success,
-                  preview: record.result.slice(0, 400)
-                }
-              ]
-            });
-          }
-        : undefined
-    });
+      { riskLevel: assessRiskLevel(task, resolvedFiles, config), requiresApproval: false } as TaskContract,
+      resolvedFiles,
+      runOptions
+    );
+    const skipToolLoop = config.agentToolLoopEnabled === false || fastPathDecision.enabled;
 
-    if (exploration.discoveredFiles.length > 0) {
-      const merged = new Set([...resolvedFiles, ...exploration.discoveredFiles]);
-      resolvedFiles = Array.from(merged);
+    if (fastPathDecision.enabled) {
+      console.log(`[+] Fast path enabled (${fastPathDecision.reasons.join('; ')}) — skipping tool loop`);
+    }
+
+    let explorationSummary = '';
+    let explorationContext = '';
+
+    if (!skipToolLoop) {
+      const exploration = await runAgentToolLoop({
+        task,
+        cwd,
+        config,
+        adapter,
+        sessionPath,
+        initialFiles: resolvedFiles,
+        onStep: uiServer
+          ? (record) => {
+              const prev = uiServer!.getState().explorationSteps || [];
+              uiServer!.updateState({
+                stage: 'exploring',
+                explorationStep: record.step,
+                explorationTool: record.decision.tool || 'done',
+                explorationSteps: [
+                  ...prev,
+                  {
+                    step: record.step,
+                    tool: record.decision.tool || 'done',
+                    reason: record.decision.reason,
+                    success: record.success,
+                    preview: record.result.slice(0, 400)
+                  }
+                ]
+              });
+            }
+          : undefined
+      });
+
+      if (exploration.discoveredFiles.length > 0) {
+        const merged = new Set([...resolvedFiles, ...exploration.discoveredFiles]);
+        resolvedFiles = Array.from(merged);
+      }
+      explorationSummary = exploration.summary;
+      explorationContext = exploration.context;
     }
 
     if (uiServer) {
@@ -233,8 +269,11 @@ export async function runTask(
 
     console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
     let repoSummary = buildEnrichedRepoSummary(cwd, task);
-    if (exploration.context) {
-      repoSummary += `\n\n--- Agent Tool Loop Exploration ---\n${exploration.summary}\n\n${exploration.context}`;
+    if (explorationContext) {
+      repoSummary += `\n\n--- Agent Tool Loop Exploration ---\n${explorationSummary}\n\n${explorationContext}`;
+    }
+    if (continuationAppendix) {
+      repoSummary += `\n${continuationAppendix}`;
     }
     let contractFromAdapter;
     try {
@@ -262,6 +301,37 @@ export async function runTask(
   }
 
   const contract: TaskContract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+
+  let effectiveConfig = config;
+  const fastPathAtContract = shouldUseFastPath(config, contract, resolvedFiles, runOptions);
+  if (fastPathAtContract.enabled) {
+    effectiveConfig = applyFastPathConfig(config);
+  }
+
+  const planDecision = await handlePlanApproval(contract, resolvedFiles, config, {
+    planOnly: runOptions?.planOnly,
+    approvePlan: runOptions?.approvePlan,
+    yesFlag,
+    uiServer
+  });
+
+  if (planDecision === 'plan-only') {
+    fs.writeFileSync(path.join(sessionPath, 'plan-preview.json'), JSON.stringify({
+      contract,
+      files: resolvedFiles,
+      previewedAt: new Date().toISOString()
+    }, null, 2), 'utf8');
+    console.log(`[+] Plan saved to ${path.join(sessionPath, 'plan-preview.json')}`);
+    process.exit(0);
+  }
+
+  if (planDecision === 'abort') {
+    throw new JewelError(
+      'PLAN_REJECTED',
+      'Plan was rejected by reviewer. No checkpoint created.',
+      'Revise the task description or approve the plan to proceed.'
+    );
+  }
 
   console.log(`\n--- Enforced Task Contract (Session: ${sessionId}) ---`);
   console.log(`Task: ${contract.task}`);
@@ -637,7 +707,7 @@ export async function runTask(
       if (uiServer) {
         broadcastState(uiServer, { stage: 'critic' }, config, adapter);
       }
-      critic = await runMultiAgentCriticReview(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
+      critic = await runMultiAgentCriticReview(contract, diffAnalysis, verification, effectiveConfig, adapter, sessionPath, diffContent);
       console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
       if (critic.findings.length > 0) {
         console.log('Findings:');

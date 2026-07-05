@@ -1,4 +1,24 @@
 import { discoverRelevantFiles, grep, listDir, readFile } from './repo-explorer';
+import { ensureSemanticIndex, scoreFilesBySemanticIndex } from './semantic-index';
+import { JewelConfig } from '../core/config';
+
+function rerankWithSemanticIndex(cwd: string, task: string, files: string[]): string[] {
+  const index = ensureSemanticIndex(cwd);
+  const scores = scoreFilesBySemanticIndex(index, task);
+  if (scores.size === 0) return files;
+
+  const combined = new Set(files);
+  for (const file of scores.keys()) combined.add(file);
+
+  return Array.from(combined)
+    .map(file => ({
+      file,
+      score: (scores.get(file) || 0) + (files.indexOf(file) >= 0 ? 10 : 0)
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map(e => e.file);
+}
 
 export function buildRepoSummary(cwd: string, maxDepth = 3): string {
   const entries = listDir(cwd, '.', { maxDepth });
@@ -40,13 +60,18 @@ export function buildEnrichedRepoSummary(cwd: string, task: string): string {
 export function resolveFilesForTask(
   cwd: string,
   task: string,
-  userFiles: string[]
+  userFiles: string[],
+  config?: JewelConfig
 ): string[] {
   const normalized = userFiles.map(f => f.replace(/\\/g, '/')).filter(Boolean);
   if (normalized.length > 0) {
     return normalized;
   }
-  return discoverRelevantFiles(cwd, task, 8);
+  const discovered = discoverRelevantFiles(cwd, task, 8);
+  if (config?.semanticIndexEnabled === false) {
+    return discovered;
+  }
+  return rerankWithSemanticIndex(cwd, task, discovered);
 }
 
 export function buildContextForFiles(cwd: string, filePaths: string[], maxBytesPerFile = 50_000): string {

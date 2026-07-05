@@ -57,6 +57,11 @@ export interface JewelConfig {
   agentToolLoopMaxSteps?: number;
   agentToolLoopMaxContextChars?: number;
   pluginsEnabled?: boolean;
+  semanticIndexEnabled?: boolean;
+  requirePlanApproval?: boolean;
+  fastPathEnabled?: boolean;
+  fastPathMaxFiles?: number;
+  fastPathMaxRisk?: 'low' | 'medium' | 'high';
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -123,7 +128,12 @@ export const DEFAULT_CONFIG: JewelConfig = {
   agentToolLoopEnabled: true,
   agentToolLoopMaxSteps: 8,
   agentToolLoopMaxContextChars: 80_000,
-  pluginsEnabled: true
+  pluginsEnabled: true,
+  semanticIndexEnabled: true,
+  requirePlanApproval: false,
+  fastPathEnabled: true,
+  fastPathMaxFiles: 1,
+  fastPathMaxRisk: 'low'
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -160,7 +170,7 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     config.mode = parsed.mode;
   }
 
-  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars'];
+  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars', 'fastPathMaxFiles'];
   for (const field of numericFields) {
     if (parsed[field] !== undefined) {
       const val = Number(parsed[field]);
@@ -186,7 +196,10 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'useSandbox',
     'sandboxFallbackToHost',
     'agentToolLoopEnabled',
-    'pluginsEnabled'
+    'pluginsEnabled',
+    'semanticIndexEnabled',
+    'requirePlanApproval',
+    'fastPathEnabled'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {
@@ -421,6 +434,13 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     });
 
     config.sandboxWritePaths = Array.from(new Set(normalizedList));
+  }
+
+  if (parsed.fastPathMaxRisk !== undefined) {
+    if (!['low', 'medium', 'high'].includes(parsed.fastPathMaxRisk)) {
+      throw new Error('Invalid config: "fastPathMaxRisk" must be "low", "medium", or "high".');
+    }
+    config.fastPathMaxRisk = parsed.fastPathMaxRisk;
   }
 
   return config;

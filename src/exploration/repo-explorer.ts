@@ -38,7 +38,7 @@ function normalizeRelPath(cwd: string, absolutePath: string): string {
   return path.relative(cwd, absolutePath).replace(/\\/g, '/');
 }
 
-function isTextFile(filePath: string): boolean {
+export function isTextFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return DEFAULT_TEXT_EXTENSIONS.has(ext) || path.basename(filePath) === 'Dockerfile';
 }
