@@ -7,6 +7,7 @@ const http_client_1 = require("./http-client");
 const structured_schema_1 = require("../structured-schema");
 const model_capabilities_1 = require("../model-capabilities");
 const response_normalizer_1 = require("./response-normalizer");
+const tool_loop_adapter_helper_1 = require("../tool-loop-adapter-helper");
 /**
  * OpenAI Chat Completions adapter.
  * Currently uses the /v1/chat/completions endpoint. Support for the new Responses API is planned for a later release.
@@ -97,6 +98,9 @@ class OpenAIAdapter {
             throw new Error(`BLOCKED: Invalid JSON in LLM response: ${err.message}`);
         }
     }
+    async decideToolStep(input) {
+        return (0, tool_loop_adapter_helper_1.decideToolStepViaLlm)((messages, config, method, sessionPath) => this.callLLM(messages, config, method, sessionPath), input);
+    }
     async reviewTestCorrectness(input) {
         const prompt = (0, prompt_builder_1.buildTestCriticPrompt)(input);
         const systemPrompt = "You are a test correctness critic. You must return only a valid JSON object adhering to the TestCriticResult schema.";
@@ -163,6 +167,10 @@ class OpenAIAdapter {
             else if (method === 'reviewTestCorrectness') {
                 schema = structured_schema_1.TestCriticResultSchema;
                 name = 'TestCriticResult';
+            }
+            else if (method === 'decideToolStep') {
+                schema = structured_schema_1.ToolLoopDecisionSchema;
+                name = 'ToolLoopDecision';
             }
             if (schema) {
                 requestBody.response_format = {

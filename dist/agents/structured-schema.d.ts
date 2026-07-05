@@ -1,3 +1,5 @@
+import { ToolLoopDecisionSchema } from './tool-loop-schema';
+export { ToolLoopDecisionSchema };
 export declare const TaskContractSchema: {
     $schema: string;
     title: string;

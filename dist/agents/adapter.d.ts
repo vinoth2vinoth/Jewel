@@ -3,6 +3,7 @@ import { TaskContract } from '../core/session';
 import { Skill } from '../skills/loader';
 import { VerificationReport } from '../verification/runner';
 import type { CriticResult } from '../safety/critic';
+import type { ToolLoopDecision, ToolLoopInput } from './tools/types';
 export interface PlanInput {
     task: string;
     repoSummary: string;
@@ -88,6 +89,7 @@ export interface AgentAdapter {
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;
     reviewTestCorrectness?(input: ReviewInput): Promise<TestCriticResult>;
+    decideToolStep?(input: ToolLoopInput): Promise<ToolLoopDecision>;
     usage?: {
         inputTokens?: number;
         outputTokens?: number;
@@ -108,6 +110,7 @@ export declare class MockAgentAdapter implements AgentAdapter {
     private accumulateMockUsage;
     private checkBudget;
     plan(input: PlanInput): Promise<TaskContract>;
+    decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision>;
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;
     reviewTestCorrectness(input: ReviewInput): Promise<TestCriticResult>;

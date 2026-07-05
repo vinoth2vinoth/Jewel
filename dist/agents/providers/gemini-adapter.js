@@ -7,6 +7,7 @@ const http_client_1 = require("./http-client");
 const structured_schema_1 = require("../structured-schema");
 const model_capabilities_1 = require("../model-capabilities");
 const response_normalizer_1 = require("./response-normalizer");
+const tool_loop_adapter_helper_1 = require("../tool-loop-adapter-helper");
 class GeminiAdapter {
     name = 'gemini';
     usage;
@@ -115,6 +116,9 @@ class GeminiAdapter {
             throw new Error(`BLOCKED: Invalid JSON in LLM response: ${err.message}`);
         }
     }
+    async decideToolStep(input) {
+        return (0, tool_loop_adapter_helper_1.decideToolStepViaLlm)((messages, config, method, sessionPath) => this.callLLM(messages, config, method, sessionPath), input);
+    }
     async callLLM(messages, config, method, sessionPath) {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
@@ -169,6 +173,9 @@ class GeminiAdapter {
             }
             else if (method === 'reviewTestCorrectness') {
                 schema = structured_schema_1.TestCriticResultSchema;
+            }
+            else if (method === 'decideToolStep') {
+                schema = structured_schema_1.ToolLoopDecisionSchema;
             }
             requestBody.generationConfig.responseMimeType = 'application/json';
             if (schema) {

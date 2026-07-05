@@ -1,5 +1,6 @@
 import { AgentAdapter, PlanInput, PatchInput, ReviewInput, PatchProposal, ReviewResult, TestCriticResult } from '../adapter';
 import { TaskContract } from '../../core/session';
+import { ToolLoopDecision, ToolLoopInput } from '../tools/types';
 export declare class OpenRouterAdapter implements AgentAdapter {
     name: string;
     usage?: {
@@ -14,5 +15,6 @@ export declare class OpenRouterAdapter implements AgentAdapter {
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;
     reviewTestCorrectness(input: ReviewInput): Promise<TestCriticResult>;
+    decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision>;
     private callLLM;
 }

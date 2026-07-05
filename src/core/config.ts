@@ -53,6 +53,9 @@ export interface JewelConfig {
   sandboxNetwork?: 'none' | 'host' | 'bridge';
   sandboxReadOnlyRoot?: boolean;
   sandboxWritePaths?: string[];
+  agentToolLoopEnabled?: boolean;
+  agentToolLoopMaxSteps?: number;
+  agentToolLoopMaxContextChars?: number;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -115,7 +118,10 @@ export const DEFAULT_CONFIG: JewelConfig = {
   allowedSymbolChanges: [],
   sandboxNetwork: 'none',
   sandboxReadOnlyRoot: true,
-  sandboxWritePaths: []
+  sandboxWritePaths: [],
+  agentToolLoopEnabled: true,
+  agentToolLoopMaxSteps: 8,
+  agentToolLoopMaxContextChars: 80_000
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -152,7 +158,7 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     config.mode = parsed.mode;
   }
 
-  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost'];
+  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars'];
   for (const field of numericFields) {
     if (parsed[field] !== undefined) {
       const val = Number(parsed[field]);
@@ -176,7 +182,8 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'interactiveRetryMode',
     'useASTDiffGuard',
     'useSandbox',
-    'sandboxFallbackToHost'
+    'sandboxFallbackToHost',
+    'agentToolLoopEnabled'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {

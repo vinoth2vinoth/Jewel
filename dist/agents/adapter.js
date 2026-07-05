@@ -31,6 +31,27 @@ class MockAgentAdapter {
         contract.understanding = `Mock understanding of: ${input.task}`;
         return contract;
     }
+    async decideToolStep(input) {
+        this.accumulateMockUsage();
+        this.checkBudget(input.config);
+        if (input.step === 1) {
+            return { action: 'tool', tool: 'list_dir', args: { dir: 'src', maxDepth: 2 }, reason: 'List source directory' };
+        }
+        if (input.step === 2) {
+            const query = input.task.toLowerCase().includes('math') ? 'divide' : 'function';
+            return { action: 'tool', tool: 'grep', args: { query, filePattern: 'src/**/*.ts' }, reason: `Grep for "${query}"` };
+        }
+        const implFile = input.initialFiles.find(f => f.includes('src/') && !f.includes('.test.') && (f.endsWith('.ts') || f.endsWith('.js')));
+        const alreadyRead = input.priorSteps.some(s => s.decision.tool === 'read_file' && s.decision.args?.path === implFile);
+        if (input.step === 3 && implFile && !alreadyRead) {
+            return { action: 'tool', tool: 'read_file', args: { path: implFile }, reason: `Read ${implFile}` };
+        }
+        return {
+            action: 'done',
+            reason: 'Mock exploration complete',
+            summary: `Reviewed source layout and key files for: ${input.task}`
+        };
+    }
     async proposePatch(input) {
         this.accumulateMockUsage();
         this.checkBudget(input.config);

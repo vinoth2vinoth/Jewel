@@ -19,6 +19,7 @@ import { UIServer } from '../ui-server';
 import { askQuestion, broadcastState, buildRepoContext, waitForExitAcknowledgment } from './run-helpers';
 import { writeRunReport } from './run-report';
 import { buildEnrichedRepoSummary, resolveFilesForTask } from '../../exploration/context-builder';
+import { runAgentToolLoop } from '../../agents/tool-loop';
 
 export async function runTask(
   task: string,
@@ -125,7 +126,7 @@ export async function runTask(
     }
   }
 
-  const resolvedFiles = resolveFilesForTask(cwd, task, filesNeeded);
+  let resolvedFiles = resolveFilesForTask(cwd, task, filesNeeded);
 
   if (dryRun) {
     const contract = generateLocalContract(task, config, resolvedFiles);
@@ -189,11 +190,35 @@ export async function runTask(
     }
 
     if (uiServer) {
+      broadcastState(uiServer, { stage: 'exploring' }, config, adapter);
+    }
+
+    const exploration = await runAgentToolLoop({
+      task,
+      cwd,
+      config,
+      adapter,
+      sessionPath,
+      initialFiles: resolvedFiles,
+      onStep: uiServer
+        ? (record) => uiServer!.updateState({ explorationStep: record.step, explorationTool: record.decision.tool || 'done' })
+        : undefined
+    });
+
+    if (exploration.discoveredFiles.length > 0) {
+      const merged = new Set([...resolvedFiles, ...exploration.discoveredFiles]);
+      resolvedFiles = Array.from(merged);
+    }
+
+    if (uiServer) {
       broadcastState(uiServer, { stage: 'planning' }, config, adapter);
     }
 
     console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
-    const repoSummary = buildEnrichedRepoSummary(cwd, task);
+    let repoSummary = buildEnrichedRepoSummary(cwd, task);
+    if (exploration.context) {
+      repoSummary += `\n\n--- Agent Tool Loop Exploration ---\n${exploration.summary}\n\n${exploration.context}`;
+    }
     let contractFromAdapter;
     try {
       contractFromAdapter = await adapter.plan({

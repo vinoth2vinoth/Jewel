@@ -55,6 +55,7 @@ const ui_server_1 = require("../ui-server");
 const run_helpers_1 = require("./run-helpers");
 const run_report_1 = require("./run-report");
 const context_builder_1 = require("../../exploration/context-builder");
+const tool_loop_1 = require("../../agents/tool-loop");
 async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false, useUI = false) {
     let config = null;
     let adapter = null;
@@ -134,7 +135,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 config.maxOutputTokens = cliOverrides.maxOutputTokens;
             }
         }
-        const resolvedFiles = (0, context_builder_1.resolveFilesForTask)(cwd, task, filesNeeded);
+        let resolvedFiles = (0, context_builder_1.resolveFilesForTask)(cwd, task, filesNeeded);
         if (dryRun) {
             const contract = (0, session_1.generateLocalContract)(task, config, resolvedFiles);
             console.log('\n======================================');
@@ -190,10 +191,31 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 throw new errors_1.JewelError('ADAPTER_INSTANTIATION_FAILED', `Error instantiating agent adapter: ${err.message}`, 'Verify provider settings and environment.', err);
             }
             if (uiServer) {
+                (0, run_helpers_1.broadcastState)(uiServer, { stage: 'exploring' }, config, adapter);
+            }
+            const exploration = await (0, tool_loop_1.runAgentToolLoop)({
+                task,
+                cwd,
+                config,
+                adapter,
+                sessionPath,
+                initialFiles: resolvedFiles,
+                onStep: uiServer
+                    ? (record) => uiServer.updateState({ explorationStep: record.step, explorationTool: record.decision.tool || 'done' })
+                    : undefined
+            });
+            if (exploration.discoveredFiles.length > 0) {
+                const merged = new Set([...resolvedFiles, ...exploration.discoveredFiles]);
+                resolvedFiles = Array.from(merged);
+            }
+            if (uiServer) {
                 (0, run_helpers_1.broadcastState)(uiServer, { stage: 'planning' }, config, adapter);
             }
             console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
-            const repoSummary = (0, context_builder_1.buildEnrichedRepoSummary)(cwd, task);
+            let repoSummary = (0, context_builder_1.buildEnrichedRepoSummary)(cwd, task);
+            if (exploration.context) {
+                repoSummary += `\n\n--- Agent Tool Loop Exploration ---\n${exploration.summary}\n\n${exploration.context}`;
+            }
             let contractFromAdapter;
             try {
                 contractFromAdapter = await adapter.plan({

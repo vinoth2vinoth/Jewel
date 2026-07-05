@@ -50,6 +50,9 @@ export interface JewelConfig {
     sandboxNetwork?: 'none' | 'host' | 'bridge';
     sandboxReadOnlyRoot?: boolean;
     sandboxWritePaths?: string[];
+    agentToolLoopEnabled?: boolean;
+    agentToolLoopMaxSteps?: number;
+    agentToolLoopMaxContextChars?: number;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

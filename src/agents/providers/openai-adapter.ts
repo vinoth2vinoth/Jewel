@@ -3,9 +3,11 @@ import { TaskContract } from '../../core/session';
 import { extractJsonObject, validateTaskContractJson, validatePatchProposalJson, validateReviewResultJson, validateTestCriticResultJson } from '../json-response';
 import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt, buildTestCriticPrompt } from '../prompt-builder';
 import { postJsonWithRetry } from './http-client';
-import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema, TestCriticResultSchema } from '../structured-schema';
+import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema, TestCriticResultSchema, ToolLoopDecisionSchema } from '../structured-schema';
 import { getModelCapabilities } from '../model-capabilities';
 import { normalizeResponse } from './response-normalizer';
+import { decideToolStepViaLlm } from '../tool-loop-adapter-helper';
+import { ToolLoopDecision, ToolLoopInput } from '../tools/types';
 
 /**
  * OpenAI Chat Completions adapter.
@@ -111,6 +113,13 @@ export class OpenAIAdapter implements AgentAdapter {
     }
   }
 
+  async decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision> {
+    return decideToolStepViaLlm(
+      (messages, config, method, sessionPath) => this.callLLM(messages, config, method, sessionPath),
+      input
+    );
+  }
+
   async reviewTestCorrectness(input: ReviewInput): Promise<TestCriticResult> {
     const prompt = buildTestCriticPrompt(input);
     const systemPrompt = "You are a test correctness critic. You must return only a valid JSON object adhering to the TestCriticResult schema.";
@@ -182,6 +191,9 @@ export class OpenAIAdapter implements AgentAdapter {
       } else if (method === 'reviewTestCorrectness') {
         schema = TestCriticResultSchema;
         name = 'TestCriticResult';
+      } else if (method === 'decideToolStep') {
+        schema = ToolLoopDecisionSchema;
+        name = 'ToolLoopDecision';
       }
 
       if (schema) {

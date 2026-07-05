@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TestCriticResultSchema = exports.ReviewResultSchema = exports.PatchProposalSchema = exports.TaskContractSchema = void 0;
+exports.TestCriticResultSchema = exports.ReviewResultSchema = exports.PatchProposalSchema = exports.TaskContractSchema = exports.ToolLoopDecisionSchema = void 0;
+const tool_loop_schema_1 = require("./tool-loop-schema");
+Object.defineProperty(exports, "ToolLoopDecisionSchema", { enumerable: true, get: function () { return tool_loop_schema_1.ToolLoopDecisionSchema; } });
 exports.TaskContractSchema = {
     $schema: 'http://json-schema.org/draft-07/schema#',
     title: 'TaskContract',

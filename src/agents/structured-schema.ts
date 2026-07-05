@@ -1,3 +1,7 @@
+import { ToolLoopDecisionSchema } from './tool-loop-schema';
+
+export { ToolLoopDecisionSchema };
+
 export const TaskContractSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   title: 'TaskContract',

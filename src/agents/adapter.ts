@@ -3,6 +3,7 @@ import { TaskContract, generateLocalContract } from '../core/session';
 import { Skill } from '../skills/loader';
 import { VerificationReport } from '../verification/runner';
 import type { CriticResult } from '../safety/critic';
+import type { ToolLoopDecision, ToolLoopInput } from './tools/types';
 
 export interface PlanInput {
   task: string;
@@ -98,6 +99,7 @@ export interface AgentAdapter {
   proposePatch(input: PatchInput): Promise<PatchProposal>;
   reviewDiff(input: ReviewInput): Promise<ReviewResult>;
   reviewTestCorrectness?(input: ReviewInput): Promise<TestCriticResult>;
+  decideToolStep?(input: ToolLoopInput): Promise<ToolLoopDecision>;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
@@ -144,6 +146,29 @@ export class MockAgentAdapter implements AgentAdapter {
     const contract = generateLocalContract(input.task, input.config, files);
     contract.understanding = `Mock understanding of: ${input.task}`;
     return contract;
+  }
+
+  async decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision> {
+    this.accumulateMockUsage();
+    this.checkBudget(input.config);
+
+    if (input.step === 1) {
+      return { action: 'tool', tool: 'list_dir', args: { dir: 'src', maxDepth: 2 }, reason: 'List source directory' };
+    }
+    if (input.step === 2) {
+      const query = input.task.toLowerCase().includes('math') ? 'divide' : 'function';
+      return { action: 'tool', tool: 'grep', args: { query, filePattern: 'src/**/*.ts' }, reason: `Grep for "${query}"` };
+    }
+    const implFile = input.initialFiles.find(f => f.includes('src/') && !f.includes('.test.') && (f.endsWith('.ts') || f.endsWith('.js')));
+    const alreadyRead = input.priorSteps.some(s => s.decision.tool === 'read_file' && s.decision.args?.path === implFile);
+    if (input.step === 3 && implFile && !alreadyRead) {
+      return { action: 'tool', tool: 'read_file', args: { path: implFile }, reason: `Read ${implFile}` };
+    }
+    return {
+      action: 'done',
+      reason: 'Mock exploration complete',
+      summary: `Reviewed source layout and key files for: ${input.task}`
+    };
   }
 
   async proposePatch(input: PatchInput): Promise<PatchProposal> {

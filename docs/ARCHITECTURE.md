@@ -69,6 +69,13 @@ Autonomous codebase context without external dependencies:
 - **`repo-explorer.ts`**: listDir, glob, grep, readFile, discoverRelevantFiles
 - **`context-builder.ts`**: resolveFilesForTask (makes `--files` optional), enriched repo summaries
 
+### Agent Tool Loop (`src/agents/tool-loop.ts`) — Phase 2
+Multi-step read-only exploration before planning:
+- Tools: `list_dir`, `glob`, `grep`, `read_file` (via `src/agents/tools/registry.ts`)
+- LLM-driven steps via `adapter.decideToolStep()` with heuristic fallback
+- Session memory: `.jewel/sessions/<id>/exploration-log.json`
+- Config: `agentToolLoopEnabled`, `agentToolLoopMaxSteps`, `agentToolLoopMaxContextChars`
+
 ### Safety Layer (`src/safety`)
 Transactional patch application with path escape prevention, protected file policy, dependency guards, and atomic rollback. Supports both full-file rewrites and targeted `edits[]` hunks.
 
@@ -79,6 +86,7 @@ Runs configured verification commands on host or inside Docker sandboxes. Includ
 
 ```
 Task → Resolve Files (user scope or auto-discovery)
+     → Tool Loop (list_dir / grep / read_file, up to N steps)
      → Plan (LLM contract)
      → Checkpoint (Git)
      → Patch (full-file or hunk edits)

@@ -3,9 +3,11 @@ import { TaskContract } from '../../core/session';
 import { extractJsonObject, validateTaskContractJson, validatePatchProposalJson, validateReviewResultJson, validateTestCriticResultJson } from '../json-response';
 import { buildPlanningPrompt, buildPatchProposalPrompt, buildDiffReviewPrompt, buildTestCriticPrompt } from '../prompt-builder';
 import { postJsonWithRetry } from './http-client';
-import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema, TestCriticResultSchema } from '../structured-schema';
+import { TaskContractSchema, PatchProposalSchema, ReviewResultSchema, TestCriticResultSchema, ToolLoopDecisionSchema } from '../structured-schema';
 import { getModelCapabilities } from '../model-capabilities';
 import { normalizeResponse } from './response-normalizer';
+import { decideToolStepViaLlm } from '../tool-loop-adapter-helper';
+import { ToolLoopDecision, ToolLoopInput } from '../tools/types';
 
 export class GeminiAdapter implements AgentAdapter {
   name = 'gemini';
@@ -132,6 +134,13 @@ export class GeminiAdapter implements AgentAdapter {
     }
   }
 
+  async decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision> {
+    return decideToolStepViaLlm(
+      (messages, config, method, sessionPath) => this.callLLM(messages, config, method, sessionPath),
+      input
+    );
+  }
+
   private async callLLM(messages: LLMMessage[], config: any, method: string, sessionPath?: string): Promise<string> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -190,6 +199,8 @@ export class GeminiAdapter implements AgentAdapter {
         schema = ReviewResultSchema;
       } else if (method === 'reviewTestCorrectness') {
         schema = TestCriticResultSchema;
+      } else if (method === 'decideToolStep') {
+        schema = ToolLoopDecisionSchema;
       }
 
       requestBody.generationConfig.responseMimeType = 'application/json';
