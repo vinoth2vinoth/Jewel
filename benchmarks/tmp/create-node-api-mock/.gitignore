@@ -1,0 +1,4 @@
+node_modules/
+.jewel/backups/
+.env
+.env.local

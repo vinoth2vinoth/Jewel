@@ -1,0 +1,36 @@
+{
+  "projectName": "create-node-api-mock",
+  "mode": "strict",
+  "maxRetries": 3,
+  "maxFilesChanged": 8,
+  "maxLinesChanged": 500,
+  "requirePlanBeforeEdit": true,
+  "requireVerificationBeforeDone": true,
+  "allowNewDependencies": false,
+  "allowProtectedFileChanges": false,
+  "allowGitPush": false,
+  "requireHumanDiffApproval": false,
+  "provider": "none",
+  "model": "",
+  "temperature": 0,
+  "maxOutputTokens": 4000,
+  "commands": {
+    "lint": "",
+    "typecheck": "",
+    "test": "npm test",
+    "build": "",
+    "e2e": ""
+  },
+  "protectedFiles": [
+    ".env",
+    ".env.local",
+    ".env.*",
+    "package-lock.json",
+    "jewel.config.json"
+  ],
+  "dangerousCommandPolicy": "block",
+  "reportFormat": [
+    "markdown",
+    "json"
+  ]
+}
