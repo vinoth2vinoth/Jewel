@@ -34,8 +34,11 @@ class MockAgentAdapter {
     async proposePatch(input) {
         this.accumulateMockUsage();
         this.checkBudget(input.config);
-        // Propose a simple edit to src/index.ts or the first filesLikelyNeeded
-        const targetFile = input.taskContract.filesLikelyNeeded[0] || 'src/index.ts';
+        const candidates = input.taskContract.filesLikelyNeeded;
+        const targetFile = candidates.find(f => f.endsWith('math.ts') || f.endsWith('math.js'))
+            || candidates.find(f => f.replace(/\\/g, '/').includes('src/') && !f.includes('.test.'))
+            || candidates[0]
+            || 'src/index.ts';
         let content = `// Mock implementation for: ${input.taskContract.task}\nconsole.log("Task executed successfully");\n`;
         if (targetFile.endsWith('math.ts')) {
             content = `export function add(a: number, b: number): number {

@@ -152,6 +152,18 @@ export function readFile(
   }
 }
 
+const AUTO_DISCOVERY_EXCLUDE = new Set([
+  'README.md', 'readme.md', 'package.json', 'package-lock.json',
+  'LICENSE', 'LICENSE.md', 'CHANGELOG.md', '.gitignore'
+]);
+
+function isImplementationSource(file: string): boolean {
+  const norm = file.replace(/\\/g, '/');
+  if (norm.endsWith('.test.ts') || norm.endsWith('.test.js') || norm.endsWith('.spec.ts')) return false;
+  if (norm.includes('/test/') || norm.includes('/tests/')) return false;
+  return norm.startsWith('src/') || norm.startsWith('lib/');
+}
+
 export function extractTaskKeywords(task: string): string[] {
   const stopWords = new Set([
     'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
@@ -193,8 +205,13 @@ export function scoreFileRelevance(
     score += 1;
   }
 
-  if (file.startsWith('src/') || file.startsWith('lib/')) {
-    score += 1;
+  if (isImplementationSource(file)) {
+    score += 4;
+  }
+
+  const baseName = path.basename(lowerFile);
+  if (AUTO_DISCOVERY_EXCLUDE.has(baseName)) {
+    score -= 10;
   }
 
   return score;
@@ -226,16 +243,23 @@ export function discoverRelevantFiles(
 
   const scored = Array.from(candidateSet)
     .filter(f => isTextFile(f))
-    .map(file => ({ file, score: scoreFileRelevance(file, task, keywords, grepHits) }))
-    .filter(entry => entry.score > 0)
-    .sort((a, b) => b.score - a.score);
+    .map(file => ({ file, score: scoreFileRelevance(file, task, keywords, grepHits) }));
 
-  if (scored.length === 0) {
+  const filtered = scored
+    .filter(entry => entry.score > 0 && !AUTO_DISCOVERY_EXCLUDE.has(path.basename(entry.file)))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const aImpl = isImplementationSource(a.file) ? 1 : 0;
+      const bImpl = isImplementationSource(b.file) ? 1 : 0;
+      return bImpl - aImpl;
+    });
+
+  if (filtered.length === 0) {
     return [
       ...globFiles(cwd, 'src/**/*.ts', options),
       ...globFiles(cwd, 'src/**/*.js', options)
     ].slice(0, maxFiles);
   }
 
-  return scored.slice(0, maxFiles).map(s => s.file);
+  return filtered.slice(0, maxFiles).map(s => s.file);
 }
