@@ -118,6 +118,7 @@ CRITICAL SAFETY RULES:
 - Avoid introducing new dependencies.
 - You must write a clear reason for each file modified or created.
 - Scope limits: You must modify or create no more than ${maxFiles} files, and the total lines changed (additions + deletions) must not exceed ${maxLines} lines.
+- Prefer targeted "edits" (search/replace hunks) over full-file rewrites when changing small sections of existing files.
 ${protectReminder}
 Task Contract:
 - Task: ${contract.task}
@@ -142,7 +143,10 @@ You must respond with a single valid JSON object adhering to the PatchProposal s
   "files": [
     {
       "filePath": "repo-relative/path/to/file",
-      "content": "Full new content of the file",
+      "content": "Full new content of the file (optional if using edits)",
+      "edits": [
+        { "search": "exact string to find", "replace": "replacement string" }
+      ],
       "reason": "Detailed justification of why this change is necessary"
     }
   ],

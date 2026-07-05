@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as readline from 'readline';
 import { execSync } from 'child_process';
 import { loadConfig } from '../../core/config';
 import { loadSkills } from '../../skills/loader';
@@ -17,77 +16,9 @@ import { JewelError, toJewelError } from '../errors';
 import { checkTestChangePolicy, getOriginalFileContent } from '../../verification/test-change-policy';
 import { createRetryState, recordRetryAttempt, shouldStopRetry, StopDecision } from '../../core/retry-policy';
 import { UIServer } from '../ui-server';
-
-async function waitForExitAcknowledgment(uiServer: UIServer): Promise<void> {
-  let rl: readline.Interface | null = null;
-  const cliPrompt = new Promise<void>((resolve) => {
-    rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    rl.on('line', () => {
-      resolve();
-    });
-  });
-  await Promise.race([
-    uiServer.waitForExitConfirmation(),
-    cliPrompt
-  ]);
-  if (rl) {
-    (rl as any).close();
-  }
-}
-
-function askQuestion(query: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  return new Promise(resolve => rl.question(query, ans => {
-    rl.close();
-    resolve(ans);
-  }));
-}
-
-function broadcastState(uiServer: UIServer | undefined, stateUpdate: any, config: any, adapter: any) {
-  if (!uiServer) return;
-  const costUpdate = adapter && adapter.usage ? {
-    cost: {
-      totalTokens: adapter.usage.totalTokens || 0,
-      promptTokens: adapter.usage.inputTokens || 0,
-      completionTokens: adapter.usage.outputTokens || 0,
-      totalUSD: adapter.usage.estimatedCostUsd || 0,
-      maxCost: config.maxSessionCost
-    }
-  } : {};
-  uiServer.updateState({
-    ...stateUpdate,
-    ...costUpdate
-  });
-}
-
-function generateRepoSummary(cwd: string): string {
-  const files: string[] = [];
-  try {
-    const listFilesRecursive = (dir: string, depth = 0) => {
-      if (depth > 3) return;
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.jewel') {
-          continue;
-        }
-        const rel = path.relative(cwd, path.join(dir, entry.name)).replace(/\\/g, '/');
-        if (entry.isDirectory()) {
-          listFilesRecursive(path.join(dir, entry.name), depth + 1);
-        } else {
-          files.push(rel);
-        }
-      }
-    };
-    listFilesRecursive(cwd);
-  } catch {}
-  return `Project Structure:\n${files.map(f => `- ${f}`).join('\n')}`;
-}
+import { askQuestion, broadcastState, buildRepoContext, waitForExitAcknowledgment } from './run-helpers';
+import { writeRunReport } from './run-report';
+import { buildEnrichedRepoSummary, resolveFilesForTask } from '../../exploration/context-builder';
 
 export async function runTask(
   task: string,
@@ -194,8 +125,10 @@ export async function runTask(
     }
   }
 
+  const resolvedFiles = resolveFilesForTask(cwd, task, filesNeeded);
+
   if (dryRun) {
-    const contract = generateLocalContract(task, config, filesNeeded);
+    const contract = generateLocalContract(task, config, resolvedFiles);
     console.log('\n======================================');
     console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
     console.log('======================================');
@@ -203,12 +136,19 @@ export async function runTask(
     console.log(`Provider: ${config.provider}`);
     console.log(`Model: ${config.model || 'N/A'}`);
     console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
+    if (filesNeeded.length === 0 && resolvedFiles.length > 0) {
+      console.log(`Auto-discovered Files: ${resolvedFiles.join(', ')}`);
+    }
     console.log(`Risk Level: ${contract.riskLevel}`);
     console.log('Success Criteria:');
     contract.successCriteria.forEach((c: string) => console.log(`  - ${c}`));
     console.log('\n[Dry-Run] No checkpoints will be created, no LLM provider will be called, and no files will be written or verified.');
     console.log('======================================\n');
     process.exit(0);
+  }
+
+  if (filesNeeded.length === 0 && resolvedFiles.length > 0) {
+    console.log(`[+] Auto-discovered ${resolvedFiles.length} relevant file(s): ${resolvedFiles.join(', ')}`);
   }
 
   const skills = loadSkills(cwd);
@@ -223,7 +163,7 @@ export async function runTask(
   const isAgentMode = useMock || config.provider !== 'none';
 
   // 2. Initialize Session & Task Contract
-  const sessionData = createSession(task, config, filesNeeded, cwd);
+  const sessionData = createSession(task, config, resolvedFiles, cwd);
   sessionId = sessionData.sessionId;
   sessionPath = sessionData.sessionPath;
   contractPath = sessionData.contractPath;
@@ -231,7 +171,7 @@ export async function runTask(
   if (uiServer) {
     broadcastState(uiServer, {
       sessionId,
-      files: filesNeeded,
+      files: resolvedFiles,
       overrides: {
         provider: config.provider,
         model: config.model
@@ -253,7 +193,7 @@ export async function runTask(
     }
 
     console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
-    const repoSummary = generateRepoSummary(cwd);
+    const repoSummary = buildEnrichedRepoSummary(cwd, task);
     let contractFromAdapter;
     try {
       contractFromAdapter = await adapter.plan({
@@ -262,7 +202,7 @@ export async function runTask(
         config,
         skills,
         sessionPath,
-        filesNeeded
+        filesNeeded: resolvedFiles
       });
     } catch (err: any) {
       writeRunReport(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
@@ -350,16 +290,7 @@ export async function runTask(
 
   if (isAgentMode) {
     console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
-    let repoContext = '';
-    for (const filePath of contract.filesLikelyNeeded) {
-      const fullPath = path.resolve(cwd, filePath);
-      if (fs.existsSync(fullPath)) {
-        const content = fs.readFileSync(fullPath, 'utf8');
-        repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
-      } else {
-        repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
-      }
-    }
+    const repoContext = buildRepoContext(cwd, contract.filesLikelyNeeded);
 
     let patch: any;
     try {
@@ -815,19 +746,7 @@ export async function runTask(
           console.error(`[-] Pre-retry rollback failed: ${err.message}`);
         }
 
-        // Re-read context
-        let repoContext = '';
-        for (const filePath of contract.filesLikelyNeeded) {
-          const fullPath = path.resolve(cwd, filePath);
-          if (fs.existsSync(fullPath)) {
-            const content = fs.readFileSync(fullPath, 'utf8');
-            repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
-          } else {
-            repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
-          }
-        }
-
-        // Ask model to propose new patch
+        const repoContext = buildRepoContext(cwd, contract.filesLikelyNeeded);
         try {
           const patch = await adapter.proposePatch({
             taskContract: contract,
@@ -1147,207 +1066,3 @@ export async function runTask(
   }
 }
 
-function getPackageVersion(cwd: string): string {
-  try {
-    const pkgPath = path.join(__dirname, '../../../package.json');
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      return pkg.version || '0.5.0-dev';
-    }
-    const devPkgPath = path.join(__dirname, '../../package.json');
-    if (fs.existsSync(devPkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(devPkgPath, 'utf8'));
-      return pkg.version || '0.5.0-dev';
-    }
-  } catch {}
-  return '0.5.0-dev';
-}
-
-function writeRunReport(
-  cwd: string,
-  sessionPath: string,
-  sessionId: string,
-  task: string,
-  status: string,
-  config: any,
-  adapter: any,
-  options: {
-    error?: string;
-    noChangeNeeded?: boolean;
-    noChangeReason?: string;
-    patchBlocked?: boolean;
-    blockReasons?: string[];
-    diffAnalysis?: any;
-    verification?: any;
-    critic?: any;
-    reviewRequired?: boolean;
-    approved?: boolean;
-    keepFailed?: boolean;
-    testChangeFindings?: string[];
-    preserveExistingTests?: boolean;
-  }
-) {
-  const version = getPackageVersion(cwd);
-  const provider = config.provider || 'none';
-  const model = provider === 'none' ? 'mock' : (config.model || 'N/A');
-  const adapterName = provider === 'none' ? 'mock-agent' : (adapter?.name || 'N/A');
-  const verificationCommandsRun = options.verification 
-    ? options.verification.results.filter((r: any) => r.status !== 'SKIPPED').map((r: any) => r.commandLine)
-    : [];
-  
-  const diffGuardStatus = options.diffAnalysis ? options.diffAnalysis.status : 'N/A';
-  const safePatchWriterStatus = options.patchBlocked ? 'BLOCKED' : (options.noChangeNeeded ? 'SKIPPED' : (options.diffAnalysis ? 'PASS' : 'N/A'));
-  
-  let humanReviewStatus = 'SKIPPED';
-  if (options.reviewRequired) {
-    humanReviewStatus = options.approved ? 'APPROVED' : 'REJECTED';
-  }
-  
-  let rollbackStatus = 'N/A';
-  if (status === 'REJECTED' || status === 'FAIL' || status === 'BLOCKED' || status === 'GENERATED_TEST_SUSPECT' || status === 'EXISTING_TEST_MODIFIED' || status === 'RETRY_LIMIT_REACHED' || status === 'NEEDS_HUMAN_REVIEW') {
-    if (options.diffAnalysis || options.patchBlocked || status === 'REJECTED' || status === 'GENERATED_TEST_SUSPECT' || status === 'EXISTING_TEST_MODIFIED') {
-      rollbackStatus = options.keepFailed ? 'KEPT_FAILED' : 'ROLLED_BACK';
-    }
-  }
-
-  const filesChanged = options.diffAnalysis ? options.diffAnalysis.changedFiles : [];
-  const filesProposedButBlocked = options.patchBlocked ? (options.blockReasons || []) : [];
-
-  let tokenUsage = 'usage unavailable';
-  if (provider === 'none') {
-    tokenUsage = 'usage unavailable (mock)';
-  } else if (adapter?.usage) {
-    tokenUsage = `Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}`;
-  }
-
-  const finalReport: any = {
-    sessionId,
-    task,
-    status,
-    date: new Date().toISOString(),
-    jewelVersion: version,
-    provider,
-    model,
-    adapterName,
-    verificationCommandsRun,
-    diffGuardStatus,
-    safePatchWriterStatus,
-    humanReviewStatus,
-    rollbackStatus,
-    filesChanged,
-    filesProposedButBlocked,
-    preserveExistingTests: options.preserveExistingTests || false,
-    testChangeFindings: options.testChangeFindings || [],
-    usage: provider === 'none' ? 'usage unavailable (mock)' : (adapter?.usage ? {
-      inputTokens: adapter.usage.inputTokens,
-      outputTokens: adapter.usage.outputTokens,
-      totalTokens: adapter.usage.totalTokens,
-      estimatedCostUsd: adapter.usage.estimatedCostUsd
-    } : 'usage unavailable'),
-    error: options.error,
-    blockReasons: options.patchBlocked ? options.blockReasons : undefined,
-    noChangeReason: options.noChangeNeeded ? options.noChangeReason : undefined,
-    diffSummary: options.diffAnalysis ? {
-      filesChanged: options.diffAnalysis.changedFilesCount,
-      linesAdded: options.diffAnalysis.addedLinesCount,
-      linesRemoved: options.diffAnalysis.removedLinesCount,
-      files: options.diffAnalysis.changedFiles
-    } : null,
-    verification: options.verification ? {
-      overall: options.verification.overallStatus,
-      passed: options.verification.stats.passed,
-      failed: options.verification.stats.failed,
-      blocked: options.verification.stats.blocked,
-      skipped: options.verification.stats.skipped
-    } : null,
-    critic: options.critic ? {
-      status: options.critic.status,
-      confidence: options.critic.confidence,
-      findings: options.critic.findings
-    } : null
-  };
-
-  const reportsDir = path.join(cwd, '.jewel', 'reports');
-  if (!fs.existsSync(reportsDir)) {
-    fs.mkdirSync(reportsDir, { recursive: true });
-  }
-  fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-  fs.writeFileSync(path.join(sessionPath, 'run-report.json'), redactSecrets(JSON.stringify(finalReport, null, 2)), 'utf8');
-
-  let md = `# Jewel Run Report: ${status}\n\n`;
-  md += `**Jewel Version:** ${version}\n`;
-  md += `**Session:** ${sessionId}\n`;
-  md += `**Task:** ${task}\n`;
-  md += `**Result:** ${status}\n`;
-  md += `**Provider:** ${provider}\n`;
-  md += `**Model:** ${model}\n`;
-  md += `**Adapter Name:** ${adapterName}\n`;
-  
-  if (verificationCommandsRun.length > 0) {
-    md += `**Verification Commands Run:**\n` + verificationCommandsRun.map((c: string) => ` - \`${c}\``).join('\n') + '\n';
-  } else {
-    md += `**Verification Commands Run:** None\n`;
-  }
-
-  md += `**Diff Guard Status:** ${diffGuardStatus}\n`;
-  md += `**Safe Patch Writer Status:** ${safePatchWriterStatus}\n`;
-  md += `**Human Review Status:** ${humanReviewStatus}\n`;
-  md += `**Rollback Status:** ${rollbackStatus}\n`;
-  md += `**Preserve Existing Tests Enforced:** ${options.preserveExistingTests ? 'Yes' : 'No'}\n`;
-  
-  if (filesChanged.length > 0) {
-    md += `**Files Changed:**\n` + filesChanged.map((f: string) => ` - \`${f}\``).join('\n') + '\n';
-  } else {
-    md += `**Files Changed:** None\n`;
-  }
-
-  if (filesProposedButBlocked.length > 0) {
-    md += `**Files Proposed But Blocked:**\n` + filesProposedButBlocked.map((f: string) => ` - ${f}`).join('\n') + '\n';
-  } else {
-    md += `**Files Proposed But Blocked:** None\n`;
-  }
-
-  if (fs.existsSync(path.join(reportsDir, 'test-provenance.md'))) {
-    md += `**Test Provenance Report:** [test-provenance.md](file:///${path.join(reportsDir, 'test-provenance.md').replace(/\\/g, '/')})\n`;
-  }
-
-  md += `**Token Usage:** ${tokenUsage}\n`;
-  md += `**Date:** ${finalReport.date}\n\n`;
-
-  if (options.testChangeFindings && options.testChangeFindings.length > 0) {
-    md += `## Test Modification Policy Violations\n\n`;
-    md += options.testChangeFindings.map((f: string) => ` - ${f}`).join('\n') + '\n\n';
-  }
-
-  if (options.error) {
-    md += `## Error Details\n\n${options.error}\n\n`;
-  }
-
-  if (options.noChangeNeeded) {
-    md += `## No Changes Needed\n\n`;
-    md += `The LLM adapter indicated that no changes are needed for this task.\n`;
-    md += `**Reason:** ${options.noChangeReason}\n\n`;
-  }
-
-  if (options.patchBlocked && options.blockReasons) {
-    md += `## Blocked Patch Details\n\n`;
-    md += `The patch proposed by the adapter was blocked for the following safety reasons:\n\n`;
-    md += options.blockReasons.map((r: string) => ` - ${r}`).join('\n') + '\n\n';
-  }
-
-  if (options.diffAnalysis) {
-    md += `## Changes Details\n\n`;
-    md += `- Files changed: ${options.diffAnalysis.changedFilesCount}\n`;
-    md += `- Lines added: ${options.diffAnalysis.addedLinesCount}\n`;
-    md += `- Lines removed: ${options.diffAnalysis.removedLinesCount}\n\n`;
-  }
-
-  if (options.critic) {
-    md += `## Critic Findings\n\n`;
-    md += `Status: **${options.critic.status}**\n`;
-    md += options.critic.findings.map((f: string) => ` - ${f}`).join('\n') + '\n\n';
-  }
-
-  fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), redactSecrets(md), 'utf8');
-  fs.writeFileSync(path.join(sessionPath, 'run-report.md'), redactSecrets(md), 'utf8');
-}

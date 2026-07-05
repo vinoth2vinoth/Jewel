@@ -9,4 +9,11 @@ export interface SafePatchResult {
     appliedFiles: string[];
     blockedFiles: BlockedFile[];
 }
+export declare function applySearchReplaceEdits(originalContent: string, edits: Array<{
+    search: string;
+    replace: string;
+}>): {
+    content: string;
+    error?: string;
+};
 export declare function applyPatchProposalSafely(patchProposal: any, taskContract: TaskContract, config: JewelConfig, cwd?: string, sessionPath?: string): SafePatchResult;

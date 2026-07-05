@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runTask = runTask;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const readline = __importStar(require("readline"));
 const child_process_1 = require("child_process");
 const config_1 = require("../../core/config");
 const loader_1 = require("../../skills/loader");
@@ -53,77 +52,9 @@ const errors_1 = require("../errors");
 const test_change_policy_1 = require("../../verification/test-change-policy");
 const retry_policy_1 = require("../../core/retry-policy");
 const ui_server_1 = require("../ui-server");
-async function waitForExitAcknowledgment(uiServer) {
-    let rl = null;
-    const cliPrompt = new Promise((resolve) => {
-        rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
-        });
-        rl.on('line', () => {
-            resolve();
-        });
-    });
-    await Promise.race([
-        uiServer.waitForExitConfirmation(),
-        cliPrompt
-    ]);
-    if (rl) {
-        rl.close();
-    }
-}
-function askQuestion(query) {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-    return new Promise(resolve => rl.question(query, ans => {
-        rl.close();
-        resolve(ans);
-    }));
-}
-function broadcastState(uiServer, stateUpdate, config, adapter) {
-    if (!uiServer)
-        return;
-    const costUpdate = adapter && adapter.usage ? {
-        cost: {
-            totalTokens: adapter.usage.totalTokens || 0,
-            promptTokens: adapter.usage.inputTokens || 0,
-            completionTokens: adapter.usage.outputTokens || 0,
-            totalUSD: adapter.usage.estimatedCostUsd || 0,
-            maxCost: config.maxSessionCost
-        }
-    } : {};
-    uiServer.updateState({
-        ...stateUpdate,
-        ...costUpdate
-    });
-}
-function generateRepoSummary(cwd) {
-    const files = [];
-    try {
-        const listFilesRecursive = (dir, depth = 0) => {
-            if (depth > 3)
-                return;
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.jewel') {
-                    continue;
-                }
-                const rel = path.relative(cwd, path.join(dir, entry.name)).replace(/\\/g, '/');
-                if (entry.isDirectory()) {
-                    listFilesRecursive(path.join(dir, entry.name), depth + 1);
-                }
-                else {
-                    files.push(rel);
-                }
-            }
-        };
-        listFilesRecursive(cwd);
-    }
-    catch { }
-    return `Project Structure:\n${files.map(f => `- ${f}`).join('\n')}`;
-}
+const run_helpers_1 = require("./run-helpers");
+const run_report_1 = require("./run-report");
+const context_builder_1 = require("../../exploration/context-builder");
 async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cwd(), yesFlag = false, noReview = false, keepFailed = false, cliOverrides, dryRun = false, useUI = false) {
     let config = null;
     let adapter = null;
@@ -203,8 +134,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 config.maxOutputTokens = cliOverrides.maxOutputTokens;
             }
         }
+        const resolvedFiles = (0, context_builder_1.resolveFilesForTask)(cwd, task, filesNeeded);
         if (dryRun) {
-            const contract = (0, session_1.generateLocalContract)(task, config, filesNeeded);
+            const contract = (0, session_1.generateLocalContract)(task, config, resolvedFiles);
             console.log('\n======================================');
             console.log('   JEWEL RUN DRY-RUN PREVIEW          ');
             console.log('======================================');
@@ -212,12 +144,18 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             console.log(`Provider: ${config.provider}`);
             console.log(`Model: ${config.model || 'N/A'}`);
             console.log(`Allowed Files Scope: ${contract.filesLikelyNeeded.join(', ')}`);
+            if (filesNeeded.length === 0 && resolvedFiles.length > 0) {
+                console.log(`Auto-discovered Files: ${resolvedFiles.join(', ')}`);
+            }
             console.log(`Risk Level: ${contract.riskLevel}`);
             console.log('Success Criteria:');
             contract.successCriteria.forEach((c) => console.log(`  - ${c}`));
             console.log('\n[Dry-Run] No checkpoints will be created, no LLM provider will be called, and no files will be written or verified.');
             console.log('======================================\n');
             process.exit(0);
+        }
+        if (filesNeeded.length === 0 && resolvedFiles.length > 0) {
+            console.log(`[+] Auto-discovered ${resolvedFiles.length} relevant file(s): ${resolvedFiles.join(', ')}`);
         }
         const skills = (0, loader_1.loadSkills)(cwd);
         console.log(`[+] Loaded ${skills.length} skills from .jewel/skills`);
@@ -228,14 +166,14 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         // Determine if we are running an agent or manual human edits
         const isAgentMode = useMock || config.provider !== 'none';
         // 2. Initialize Session & Task Contract
-        const sessionData = (0, session_1.createSession)(task, config, filesNeeded, cwd);
+        const sessionData = (0, session_1.createSession)(task, config, resolvedFiles, cwd);
         sessionId = sessionData.sessionId;
         sessionPath = sessionData.sessionPath;
         contractPath = sessionData.contractPath;
         if (uiServer) {
-            broadcastState(uiServer, {
+            (0, run_helpers_1.broadcastState)(uiServer, {
                 sessionId,
-                files: filesNeeded,
+                files: resolvedFiles,
                 overrides: {
                     provider: config.provider,
                     model: config.model
@@ -252,10 +190,10 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 throw new errors_1.JewelError('ADAPTER_INSTANTIATION_FAILED', `Error instantiating agent adapter: ${err.message}`, 'Verify provider settings and environment.', err);
             }
             if (uiServer) {
-                broadcastState(uiServer, { stage: 'planning' }, config, adapter);
+                (0, run_helpers_1.broadcastState)(uiServer, { stage: 'planning' }, config, adapter);
             }
             console.log(`\n[Adapter] Asking agent "${adapter.name}" for plan...`);
-            const repoSummary = generateRepoSummary(cwd);
+            const repoSummary = (0, context_builder_1.buildEnrichedRepoSummary)(cwd, task);
             let contractFromAdapter;
             try {
                 contractFromAdapter = await adapter.plan({
@@ -264,18 +202,18 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     config,
                     skills,
                     sessionPath,
-                    filesNeeded
+                    filesNeeded: resolvedFiles
                 });
             }
             catch (err) {
-                writeRunReport(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
+                (0, run_report_1.writeRunReport)(cwd, sessionPath, sessionId, task, 'FAIL', config, adapter, { error: err.message });
                 throw (0, errors_1.toJewelError)(err);
             }
             try {
                 (0, json_response_1.validateTaskContractJson)(contractFromAdapter);
             }
             catch (err) {
-                writeRunReport(cwd, sessionPath, sessionId, task, 'BLOCKED', config, adapter, { error: `Task contract validation failed: ${err.message}` });
+                (0, run_report_1.writeRunReport)(cwd, sessionPath, sessionId, task, 'BLOCKED', config, adapter, { error: `Task contract validation failed: ${err.message}` });
                 throw new errors_1.JewelError('SCHEMA_VALIDATION_FAILURE', `Task contract validation failed: ${err.message}`, 'Retry the task or check model temperature/prompt settings.', err);
             }
             fs.writeFileSync(contractPath, JSON.stringify(contractFromAdapter, null, 2), 'utf8');
@@ -306,7 +244,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             else {
                 let approvedScope = false;
                 if (useUI && uiServer) {
-                    broadcastState(uiServer, { stage: 'review' }, config, adapter);
+                    (0, run_helpers_1.broadcastState)(uiServer, { stage: 'review' }, config, adapter);
                     const res = await uiServer.waitForApproval('scope-expansion', {
                         message: `Estimated scope exceeds limits. Files: ${estimatedFiles}/${config.maxFilesChanged}, Lines: ${estimatedLines}/${config.maxLinesChanged}. Approve to expand limits?`
                     });
@@ -315,7 +253,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     }
                 }
                 else {
-                    const response = await askQuestion('Would you like to expand the scope limits to accommodate this task? (y/n): ');
+                    const response = await (0, run_helpers_1.askQuestion)('Would you like to expand the scope limits to accommodate this task? (y/n): ');
                     if (response.toLowerCase().trim() === 'y') {
                         approvedScope = true;
                     }
@@ -343,17 +281,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         let noChangeReason = '';
         if (isAgentMode) {
             console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
-            let repoContext = '';
-            for (const filePath of contract.filesLikelyNeeded) {
-                const fullPath = path.resolve(cwd, filePath);
-                if (fs.existsSync(fullPath)) {
-                    const content = fs.readFileSync(fullPath, 'utf8');
-                    repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
-                }
-                else {
-                    repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
-                }
-            }
+            const repoContext = (0, run_helpers_1.buildRepoContext)(cwd, contract.filesLikelyNeeded);
             let patch;
             try {
                 patch = await adapter.proposePatch({
@@ -412,7 +340,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             console.log('\n>>> Jewel is now in SAFE SLEEP mode.');
             console.log('>>> Please make your edits in the workspace.');
             console.log('>>> When you are done editing, return here.');
-            await askQuestion('\nPress [ENTER] to verify and finalize your changes...');
+            await (0, run_helpers_1.askQuestion)('\nPress [ENTER] to verify and finalize your changes...');
         }
         // HUMAN DIFF APPROVAL loop
         if (!patchBlocked && !noChangeNeeded) {
@@ -467,7 +395,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 console.log('======================================\n');
                 let approvedFiles = [];
                 if (useUI && uiServer) {
-                    broadcastState(uiServer, { stage: 'review' }, config, adapter);
+                    (0, run_helpers_1.broadcastState)(uiServer, { stage: 'review' }, config, adapter);
                     const res = await uiServer.waitForApproval('patch-review', {
                         diff: diffContent,
                         files: diffAnalysisForReview.changedFiles,
@@ -482,7 +410,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     }
                 }
                 else {
-                    const response = await askQuestion('Do you approve these proposed changes? (y/n): ');
+                    const response = await (0, run_helpers_1.askQuestion)('Do you approve these proposed changes? (y/n): ');
                     const choice = response.toLowerCase().trim();
                     if (choice === 'y') {
                         approved = true;
@@ -505,7 +433,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             if (!approved) {
                 console.error('\n[-] Patch proposal rejected by human reviewer.');
                 const reportStatus = 'REJECTED';
-                writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
+                (0, run_report_1.writeRunReport)(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
                     diffAnalysis: diffAnalysisForReview,
                     reviewRequired,
                     approved,
@@ -601,7 +529,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 // B. Run verification commands
                 console.log('\nRunning verification tests...');
                 if (uiServer) {
-                    broadcastState(uiServer, { stage: 'verification' }, config, adapter);
+                    (0, run_helpers_1.broadcastState)(uiServer, { stage: 'verification' }, config, adapter);
                 }
                 verification = await (0, runner_1.runVerification)(config, cwd, (progress) => {
                     if (uiServer) {
@@ -620,7 +548,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                         else {
                             currentResults.push(item);
                         }
-                        broadcastState(uiServer, { verificationResults: [...currentResults] }, config, adapter);
+                        (0, run_helpers_1.broadcastState)(uiServer, { verificationResults: [...currentResults] }, config, adapter);
                     }
                 });
                 console.log(`[Verification] Overall: ${verification.overallStatus} (Pass: ${verification.stats.passed}, Fail: ${verification.stats.failed})`);
@@ -633,7 +561,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     catch { }
                 }
                 if (uiServer) {
-                    broadcastState(uiServer, { stage: 'critic' }, config, adapter);
+                    (0, run_helpers_1.broadcastState)(uiServer, { stage: 'critic' }, config, adapter);
                 }
                 critic = await (0, critic_1.runMultiAgentCriticReview)(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent);
                 console.log(`\n--- Critic Review (Status: ${critic.status}, Confidence: ${critic.confidence}) ---`);
@@ -720,7 +648,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     }
                     else {
                         while (choice !== 'r' && choice !== 'o' && choice !== 'a') {
-                            const answer = await askQuestion('Choice [r/o/a]: ');
+                            const answer = await (0, run_helpers_1.askQuestion)('Choice [r/o/a]: ');
                             choice = answer.toLowerCase().trim();
                             if (choice === '') {
                                 choice = 'a'; // default to abort
@@ -732,7 +660,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     }
                     if (choice === 'r' || choice === 'retry') {
                         if (!useUI || !customHint) {
-                            const hint = await askQuestion('Enter hint/guidance for the AI: ');
+                            const hint = await (0, run_helpers_1.askQuestion)('Enter hint/guidance for the AI: ');
                             customHint = hint;
                         }
                         maxRetries++;
@@ -774,19 +702,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     catch (err) {
                         console.error(`[-] Pre-retry rollback failed: ${err.message}`);
                     }
-                    // Re-read context
-                    let repoContext = '';
-                    for (const filePath of contract.filesLikelyNeeded) {
-                        const fullPath = path.resolve(cwd, filePath);
-                        if (fs.existsSync(fullPath)) {
-                            const content = fs.readFileSync(fullPath, 'utf8');
-                            repoContext += `=== File: ${filePath} ===\n${content}\n\n`;
-                        }
-                        else {
-                            repoContext += `=== File: ${filePath} ===\n(File does not exist yet)\n\n`;
-                        }
-                    }
-                    // Ask model to propose new patch
+                    const repoContext = (0, run_helpers_1.buildRepoContext)(cwd, contract.filesLikelyNeeded);
                     try {
                         const patch = await adapter.proposePatch({
                             taskContract: contract,
@@ -842,7 +758,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                             answer = res.action === 'retry' ? 'y' : 'n';
                         }
                         else {
-                            const response = await askQuestion('Would you like to re-run verification now? (y/n): ');
+                            const response = await (0, run_helpers_1.askQuestion)('Would you like to re-run verification now? (y/n): ');
                             answer = response.toLowerCase().trim();
                         }
                         if (answer !== 'y') {
@@ -901,7 +817,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         else {
             reportStatus = 'FAIL';
         }
-        writeRunReport(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
+        (0, run_report_1.writeRunReport)(cwd, sessionPath, sessionId, task, reportStatus, config, adapter, {
             noChangeNeeded,
             noChangeReason,
             patchBlocked,
@@ -920,7 +836,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             if (useUI && uiServer) {
                 uiServer.updateState({ stage: 'completed' });
                 console.log(`\nDashboard execution finished. Open ${uiServer.getUrl()} to stop the server and inspect results, or press [ENTER] in this terminal to exit.`);
-                await waitForExitAcknowledgment(uiServer);
+                await (0, run_helpers_1.waitForExitAcknowledgment)(uiServer);
             }
             process.exit(0);
         }
@@ -1022,7 +938,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             });
             console.log(`\n[!] Execution failed: ${jewelErr.message}`);
             console.log(`Open ${uiServer.getUrl()} to stop the server and exit, or press [ENTER] in this terminal to exit.`);
-            await waitForExitAcknowledgment(uiServer);
+            await (0, run_helpers_1.waitForExitAcknowledgment)(uiServer);
         }
         if (err && err.message && err.message.startsWith('exit-')) {
             throw err;
@@ -1030,7 +946,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         const jewelErr = (0, errors_1.toJewelError)(err);
         if (jewelErr.status === 'BUDGET_EXCEEDED') {
             if (sessionPath && sessionId) {
-                writeRunReport(cwd, sessionPath, sessionId, task, 'BUDGET_EXCEEDED', config, adapter, { error: err.message });
+                (0, run_report_1.writeRunReport)(cwd, sessionPath, sessionId, task, 'BUDGET_EXCEEDED', config, adapter, { error: err.message });
             }
             if (checkpoint && !keepFailed) {
                 console.log('Rolling back changes due to budget limit breach...');
@@ -1057,168 +973,4 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             await uiServer.close();
         }
     }
-}
-function getPackageVersion(cwd) {
-    try {
-        const pkgPath = path.join(__dirname, '../../../package.json');
-        if (fs.existsSync(pkgPath)) {
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-            return pkg.version || '0.5.0-dev';
-        }
-        const devPkgPath = path.join(__dirname, '../../package.json');
-        if (fs.existsSync(devPkgPath)) {
-            const pkg = JSON.parse(fs.readFileSync(devPkgPath, 'utf8'));
-            return pkg.version || '0.5.0-dev';
-        }
-    }
-    catch { }
-    return '0.5.0-dev';
-}
-function writeRunReport(cwd, sessionPath, sessionId, task, status, config, adapter, options) {
-    const version = getPackageVersion(cwd);
-    const provider = config.provider || 'none';
-    const model = provider === 'none' ? 'mock' : (config.model || 'N/A');
-    const adapterName = provider === 'none' ? 'mock-agent' : (adapter?.name || 'N/A');
-    const verificationCommandsRun = options.verification
-        ? options.verification.results.filter((r) => r.status !== 'SKIPPED').map((r) => r.commandLine)
-        : [];
-    const diffGuardStatus = options.diffAnalysis ? options.diffAnalysis.status : 'N/A';
-    const safePatchWriterStatus = options.patchBlocked ? 'BLOCKED' : (options.noChangeNeeded ? 'SKIPPED' : (options.diffAnalysis ? 'PASS' : 'N/A'));
-    let humanReviewStatus = 'SKIPPED';
-    if (options.reviewRequired) {
-        humanReviewStatus = options.approved ? 'APPROVED' : 'REJECTED';
-    }
-    let rollbackStatus = 'N/A';
-    if (status === 'REJECTED' || status === 'FAIL' || status === 'BLOCKED' || status === 'GENERATED_TEST_SUSPECT' || status === 'EXISTING_TEST_MODIFIED' || status === 'RETRY_LIMIT_REACHED' || status === 'NEEDS_HUMAN_REVIEW') {
-        if (options.diffAnalysis || options.patchBlocked || status === 'REJECTED' || status === 'GENERATED_TEST_SUSPECT' || status === 'EXISTING_TEST_MODIFIED') {
-            rollbackStatus = options.keepFailed ? 'KEPT_FAILED' : 'ROLLED_BACK';
-        }
-    }
-    const filesChanged = options.diffAnalysis ? options.diffAnalysis.changedFiles : [];
-    const filesProposedButBlocked = options.patchBlocked ? (options.blockReasons || []) : [];
-    let tokenUsage = 'usage unavailable';
-    if (provider === 'none') {
-        tokenUsage = 'usage unavailable (mock)';
-    }
-    else if (adapter?.usage) {
-        tokenUsage = `Input: ${adapter.usage.inputTokens ?? 0}, Output: ${adapter.usage.outputTokens ?? 0}, Total: ${adapter.usage.totalTokens ?? 0}`;
-    }
-    const finalReport = {
-        sessionId,
-        task,
-        status,
-        date: new Date().toISOString(),
-        jewelVersion: version,
-        provider,
-        model,
-        adapterName,
-        verificationCommandsRun,
-        diffGuardStatus,
-        safePatchWriterStatus,
-        humanReviewStatus,
-        rollbackStatus,
-        filesChanged,
-        filesProposedButBlocked,
-        preserveExistingTests: options.preserveExistingTests || false,
-        testChangeFindings: options.testChangeFindings || [],
-        usage: provider === 'none' ? 'usage unavailable (mock)' : (adapter?.usage ? {
-            inputTokens: adapter.usage.inputTokens,
-            outputTokens: adapter.usage.outputTokens,
-            totalTokens: adapter.usage.totalTokens,
-            estimatedCostUsd: adapter.usage.estimatedCostUsd
-        } : 'usage unavailable'),
-        error: options.error,
-        blockReasons: options.patchBlocked ? options.blockReasons : undefined,
-        noChangeReason: options.noChangeNeeded ? options.noChangeReason : undefined,
-        diffSummary: options.diffAnalysis ? {
-            filesChanged: options.diffAnalysis.changedFilesCount,
-            linesAdded: options.diffAnalysis.addedLinesCount,
-            linesRemoved: options.diffAnalysis.removedLinesCount,
-            files: options.diffAnalysis.changedFiles
-        } : null,
-        verification: options.verification ? {
-            overall: options.verification.overallStatus,
-            passed: options.verification.stats.passed,
-            failed: options.verification.stats.failed,
-            blocked: options.verification.stats.blocked,
-            skipped: options.verification.stats.skipped
-        } : null,
-        critic: options.critic ? {
-            status: options.critic.status,
-            confidence: options.critic.confidence,
-            findings: options.critic.findings
-        } : null
-    };
-    const reportsDir = path.join(cwd, '.jewel', 'reports');
-    if (!fs.existsSync(reportsDir)) {
-        fs.mkdirSync(reportsDir, { recursive: true });
-    }
-    fs.writeFileSync(path.join(reportsDir, 'latest-run.json'), (0, secret_redactor_1.redactSecrets)(JSON.stringify(finalReport, null, 2)), 'utf8');
-    fs.writeFileSync(path.join(sessionPath, 'run-report.json'), (0, secret_redactor_1.redactSecrets)(JSON.stringify(finalReport, null, 2)), 'utf8');
-    let md = `# Jewel Run Report: ${status}\n\n`;
-    md += `**Jewel Version:** ${version}\n`;
-    md += `**Session:** ${sessionId}\n`;
-    md += `**Task:** ${task}\n`;
-    md += `**Result:** ${status}\n`;
-    md += `**Provider:** ${provider}\n`;
-    md += `**Model:** ${model}\n`;
-    md += `**Adapter Name:** ${adapterName}\n`;
-    if (verificationCommandsRun.length > 0) {
-        md += `**Verification Commands Run:**\n` + verificationCommandsRun.map((c) => ` - \`${c}\``).join('\n') + '\n';
-    }
-    else {
-        md += `**Verification Commands Run:** None\n`;
-    }
-    md += `**Diff Guard Status:** ${diffGuardStatus}\n`;
-    md += `**Safe Patch Writer Status:** ${safePatchWriterStatus}\n`;
-    md += `**Human Review Status:** ${humanReviewStatus}\n`;
-    md += `**Rollback Status:** ${rollbackStatus}\n`;
-    md += `**Preserve Existing Tests Enforced:** ${options.preserveExistingTests ? 'Yes' : 'No'}\n`;
-    if (filesChanged.length > 0) {
-        md += `**Files Changed:**\n` + filesChanged.map((f) => ` - \`${f}\``).join('\n') + '\n';
-    }
-    else {
-        md += `**Files Changed:** None\n`;
-    }
-    if (filesProposedButBlocked.length > 0) {
-        md += `**Files Proposed But Blocked:**\n` + filesProposedButBlocked.map((f) => ` - ${f}`).join('\n') + '\n';
-    }
-    else {
-        md += `**Files Proposed But Blocked:** None\n`;
-    }
-    if (fs.existsSync(path.join(reportsDir, 'test-provenance.md'))) {
-        md += `**Test Provenance Report:** [test-provenance.md](file:///${path.join(reportsDir, 'test-provenance.md').replace(/\\/g, '/')})\n`;
-    }
-    md += `**Token Usage:** ${tokenUsage}\n`;
-    md += `**Date:** ${finalReport.date}\n\n`;
-    if (options.testChangeFindings && options.testChangeFindings.length > 0) {
-        md += `## Test Modification Policy Violations\n\n`;
-        md += options.testChangeFindings.map((f) => ` - ${f}`).join('\n') + '\n\n';
-    }
-    if (options.error) {
-        md += `## Error Details\n\n${options.error}\n\n`;
-    }
-    if (options.noChangeNeeded) {
-        md += `## No Changes Needed\n\n`;
-        md += `The LLM adapter indicated that no changes are needed for this task.\n`;
-        md += `**Reason:** ${options.noChangeReason}\n\n`;
-    }
-    if (options.patchBlocked && options.blockReasons) {
-        md += `## Blocked Patch Details\n\n`;
-        md += `The patch proposed by the adapter was blocked for the following safety reasons:\n\n`;
-        md += options.blockReasons.map((r) => ` - ${r}`).join('\n') + '\n\n';
-    }
-    if (options.diffAnalysis) {
-        md += `## Changes Details\n\n`;
-        md += `- Files changed: ${options.diffAnalysis.changedFilesCount}\n`;
-        md += `- Lines added: ${options.diffAnalysis.addedLinesCount}\n`;
-        md += `- Lines removed: ${options.diffAnalysis.removedLinesCount}\n\n`;
-    }
-    if (options.critic) {
-        md += `## Critic Findings\n\n`;
-        md += `Status: **${options.critic.status}**\n`;
-        md += options.critic.findings.map((f) => ` - ${f}`).join('\n') + '\n\n';
-    }
-    fs.writeFileSync(path.join(reportsDir, 'latest-run.md'), (0, secret_redactor_1.redactSecrets)(md), 'utf8');
-    fs.writeFileSync(path.join(sessionPath, 'run-report.md'), (0, secret_redactor_1.redactSecrets)(md), 'utf8');
 }

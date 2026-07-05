@@ -168,8 +168,30 @@ export function validatePatchProposalJson(input: unknown): PatchProposal {
     if (typeof f.filePath !== 'string' || f.filePath.trim() === '') {
       throw new Error(`Invalid PatchProposal: "files[${i}].filePath" is required and must be a non-empty string.`);
     }
-    if (typeof f.content !== 'string') {
-      throw new Error(`Invalid PatchProposal: "files[${i}].content" is required and must be a string.`);
+    const hasContent = typeof f.content === 'string';
+    const hasEdits = Array.isArray(f.edits) && f.edits.length > 0;
+    if (!hasContent && !hasEdits) {
+      throw new Error(`Invalid PatchProposal: "files[${i}]" must include "content" or a non-empty "edits" array.`);
+    }
+    if (hasContent && typeof f.content !== 'string') {
+      throw new Error(`Invalid PatchProposal: "files[${i}].content" must be a string when provided.`);
+    }
+    if (f.edits !== undefined) {
+      if (!Array.isArray(f.edits)) {
+        throw new Error(`Invalid PatchProposal: "files[${i}].edits" must be an array.`);
+      }
+      for (let j = 0; j < f.edits.length; j++) {
+        const edit = f.edits[j];
+        if (!edit || typeof edit !== 'object' || Array.isArray(edit)) {
+          throw new Error(`Invalid PatchProposal: "files[${i}].edits[${j}]" must be an object.`);
+        }
+        if (typeof edit.search !== 'string' || edit.search === '') {
+          throw new Error(`Invalid PatchProposal: "files[${i}].edits[${j}].search" is required.`);
+        }
+        if (typeof edit.replace !== 'string') {
+          throw new Error(`Invalid PatchProposal: "files[${i}].edits[${j}].replace" must be a string.`);
+        }
+      }
     }
     if (typeof f.reason !== 'string' || f.reason.trim() === '') {
       throw new Error(`Invalid PatchProposal: "files[${i}].reason" is required and must be a non-empty string.`);

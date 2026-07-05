@@ -10,7 +10,7 @@ _  | |  | |___     \  /    \  /      | |___   | |___
   
   **Jewel is an autonomous, task-based AI coder that writes code and runs tests inside a secure transactional safety harness.**
 
-  [![npm version](https://img.shields.io/badge/npm-0.9.0-emerald?style=flat-square)](https://www.npmjs.com)
+  [![npm version](https://img.shields.io/badge/npm-0.9.2-emerald?style=flat-square)](https://www.npmjs.com)
   [![Build Status](https://img.shields.io/badge/build-passing-emerald?style=flat-square)](https://github.com/vinoth2vinoth/Jewel/actions)
   [![License](https://img.shields.io/badge/license-MIT-slate?style=flat-square)](./LICENSE)
   [![Coverage](https://img.shields.io/badge/coverage-80%25-emerald?style=flat-square)](#)

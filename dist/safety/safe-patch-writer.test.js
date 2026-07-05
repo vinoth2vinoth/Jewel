@@ -335,3 +335,39 @@ function cleanupTempDir(dir) {
         cleanupTempDir(tempDir);
     }
 });
+(0, node_test_1.default)('safe-patch-writer - applies targeted search/replace edits', () => {
+    const tempDir = createTempDir();
+    const config = { ...config_1.DEFAULT_CONFIG, allowProtectedFileChanges: false, allowNewDependencies: false };
+    const taskContract = {
+        task: 'fix divide',
+        understanding: 'test',
+        assumptions: [],
+        filesLikelyNeeded: ['math.js'],
+        forbiddenActions: [],
+        successCriteria: [],
+        riskLevel: 'low',
+        requiresApproval: false,
+        createdAt: new Date().toISOString(),
+        mode: 'lax'
+    };
+    fs.writeFileSync(path.join(tempDir, 'math.js'), 'function divide(a,b){return a/b;}\n', 'utf8');
+    try {
+        const proposal = {
+            summary: 'guard zero',
+            files: [{
+                    filePath: 'math.js',
+                    edits: [{ search: 'return a/b', replace: 'if(b===0) throw new Error("division by zero"); return a/b' }],
+                    reason: 'prevent divide by zero'
+                }],
+            notes: [],
+            riskLevel: 'low'
+        };
+        const result = (0, safe_patch_writer_1.applyPatchProposalSafely)(proposal, taskContract, config, tempDir);
+        node_assert_1.default.ok(result.success);
+        const updated = fs.readFileSync(path.join(tempDir, 'math.js'), 'utf8');
+        node_assert_1.default.ok(updated.includes('division by zero'));
+    }
+    finally {
+        cleanupTempDir(tempDir);
+    }
+});

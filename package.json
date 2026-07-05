@@ -12,6 +12,8 @@
     "test": "node scripts/run-all-tests.js",
     "lint": "echo \"No linting configured\"",
     "verify:dogfood-fixture": "node scripts/verify-dogfood-fixture.js",
+    "benchmark": "node scripts/run-benchmark.js --mock",
+    "benchmark:live": "node scripts/run-benchmark.js",
     "prepare": "npm run build"
   },
   "keywords": [

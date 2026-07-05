@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.applySearchReplaceEdits = applySearchReplaceEdits;
 exports.applyPatchProposalSafely = applyPatchProposalSafely;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
@@ -128,6 +129,37 @@ function validateProposedFile(filePath, content, taskContract, config, cwd) {
     }
     return null;
 }
+function applySearchReplaceEdits(originalContent, edits) {
+    let content = originalContent;
+    for (let i = 0; i < edits.length; i++) {
+        const edit = edits[i];
+        if (!content.includes(edit.search)) {
+            return {
+                content: originalContent,
+                error: `Edit ${i + 1} search string not found in file.`
+            };
+        }
+        content = content.replace(edit.search, edit.replace);
+    }
+    return { content };
+}
+function resolveFileContent(file, cwd) {
+    if (typeof file.content === 'string' && (!file.edits || file.edits.length === 0)) {
+        return { content: file.content };
+    }
+    const targetPath = path.resolve(cwd, file.filePath);
+    if (!fs.existsSync(targetPath)) {
+        if (file.edits && file.edits.length > 0) {
+            return { content: '', error: `Cannot apply edits to non-existent file "${file.filePath}".` };
+        }
+        return { content: file.content || '' };
+    }
+    const original = fs.readFileSync(targetPath, 'utf8');
+    if (file.edits && file.edits.length > 0) {
+        return applySearchReplaceEdits(original, file.edits);
+    }
+    return { content: file.content || '' };
+}
 function applyPatchProposalSafely(patchProposal, taskContract, config, cwd = process.cwd(), sessionPath) {
     const blockedFiles = [];
     if (!patchProposal || !Array.isArray(patchProposal.files)) {
@@ -138,8 +170,18 @@ function applyPatchProposalSafely(patchProposal, taskContract, config, cwd = pro
         };
     }
     // Validate all proposed files before writing anything.
+    const resolvedContents = new Map();
     for (const file of patchProposal.files) {
-        const error = validateProposedFile(file.filePath, file.content, taskContract, config, cwd);
+        const resolved = resolveFileContent(file, cwd);
+        if (resolved.error) {
+            blockedFiles.push({
+                filePath: file.filePath,
+                reason: resolved.error
+            });
+            continue;
+        }
+        resolvedContents.set(file.filePath, resolved.content);
+        const error = validateProposedFile(file.filePath, resolved.content, taskContract, config, cwd);
         if (error) {
             blockedFiles.push({
                 filePath: file.filePath,
@@ -188,7 +230,7 @@ function applyPatchProposalSafely(patchProposal, taskContract, config, cwd = pro
             if (!fs.existsSync(parentDir)) {
                 fs.mkdirSync(parentDir, { recursive: true });
             }
-            fs.writeFileSync(targetPath, file.content, 'utf8');
+            fs.writeFileSync(targetPath, resolvedContents.get(file.filePath) ?? file.content ?? '', 'utf8');
             appliedFiles.push((0, path_policy_1.normalizeRepoPath)(file.filePath, cwd));
         }
     }

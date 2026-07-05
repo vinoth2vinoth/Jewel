@@ -97,13 +97,26 @@ const json_response_1 = require("./json-response");
             files: [{ filePath: '', content: 'hello', reason: 'reason' }]
         });
     }, /filePath.*must be a non-empty string/);
-    // Missing content
+    // Missing content and edits
     node_assert_1.default.throws(() => {
         (0, json_response_1.validatePatchProposalJson)({
             ...valid,
             files: [{ filePath: 'math.js', content: undefined, reason: 'reason' }]
         });
-    }, /content.*must be a string/);
+    }, /must include "content" or a non-empty "edits" array/);
+    // Valid edits-only patch
+    const editsOnly = {
+        summary: 'hunk patch',
+        files: [{
+                filePath: 'math.js',
+                edits: [{ search: 'a/b', replace: 'safe divide' }],
+                reason: 'surgical fix'
+            }],
+        notes: [],
+        riskLevel: 'low'
+    };
+    const parsedEdits = (0, json_response_1.validatePatchProposalJson)(editsOnly);
+    node_assert_1.default.strictEqual(parsedEdits.files[0].edits?.length, 1);
     // Invalid riskLevel
     node_assert_1.default.throws(() => {
         (0, json_response_1.validatePatchProposalJson)({ ...valid, riskLevel: 'critical' });

@@ -26,13 +26,21 @@ export interface PatchInput {
   failedDiff?: string;
 }
 
+export interface PatchFileEdit {
+  search: string;
+  replace: string;
+}
+
+export interface PatchFile {
+  filePath: string;
+  content?: string;
+  edits?: PatchFileEdit[];
+  reason: string;
+}
+
 export interface PatchProposal {
   summary: string;
-  files: {
-    filePath: string;
-    content: string;
-    reason: string;
-  }[];
+  files: PatchFile[];
   notes: string[];
   riskLevel: 'low' | 'medium' | 'high';
   noChangeNeeded?: boolean;

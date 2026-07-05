@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "description": "Curated Jewel benchmark tasks for measuring agent success rate.",
+  "tasks": [
+    {
+      "id": "dogfood-math-scoped",
+      "description": "Fix divide-by-zero with explicit file scope",
+      "projectPath": "examples/dogfood-broken-project",
+      "task": "fix the failing math test for division by zero",
+      "files": ["src/math.ts"],
+      "useMock": true,
+      "preCheck": "broken-tests",
+      "verifyCommand": "npm test",
+      "cleanup": [".jewel", "dist"]
+    },
+    {
+      "id": "dogfood-math-auto",
+      "description": "Fix divide-by-zero without --files (auto-discovery)",
+      "projectPath": "examples/dogfood-broken-project",
+      "task": "fix the failing math divide by zero test",
+      "files": [],
+      "useMock": true,
+      "preCheck": "broken-tests",
+      "verifyCommand": "npm test",
+      "cleanup": [".jewel", "dist"]
+    }
+  ]
+}

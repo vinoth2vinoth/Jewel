@@ -1,16 +1,16 @@
 # Jewel Architecture
 
-**Version**: 0.1 (Draft)
-**Last Updated**: 2026-06-04
+**Version**: 0.9.2
+**Last Updated**: 2026-07-05
 
-This document describes the high-level architecture and design decisions of Jewel.
+Jewel is an autonomous AI coding agent operating inside a transactional safety harness. The architecture prioritizes auditable safety logic, verification proof, and incremental agent autonomy.
 
 ## Goals
 
 - Keep the core safety logic isolated and auditable
 - Maintain a clear separation between CLI interface and safety engine
-- Support extensibility without increasing complexity
-- Enable strong dogfooding capabilities
+- Support extensible exploration and agent loops without sacrificing guardrails
+- Enable strong dogfooding and benchmark-driven improvement
 
 ## High-Level Architecture
 
@@ -18,95 +18,111 @@ This document describes the high-level architecture and design decisions of Jewe
 User
   |
   v
-CLI (src/cli)
+CLI (src/cli)  ── TUI shell, Web UI dashboard
   |
-  +--> Commands (init, run, verify, rollback, doctor...)
+  +--> Commands (init, run, verify, rollback, doctor, tui...)
+  |
+  v
+Exploration Layer (src/exploration)  <-- NEW
+  |
+  +--> RepoExplorer (list, glob, grep, read)
+  +--> ContextBuilder (auto file discovery, enriched summaries)
   |
   v
 Core Layer (src/core)
   |
-  +--> Config
-  +--> Session Management
-  +--> Templates
+  +--> Config, Session, Templates, Retry Policy
   |
   v
-Safety Layer (src/safety)  <-- Most critical
+Agents Layer (src/agents)
   |
-  +--> Policy Engine
-  +--> Path Policy
-  +--> Diff Guard
-  +--> Safe Patch Writer (with rollback)
-  +--> Secret Redactor
-  +--> Critic
+  +--> Provider adapters (OpenAI, Gemini, Anthropic, OpenRouter)
+  +--> Prompt builder, structured JSON schemas
+  |
+  v
+Safety Layer (src/safety)  <-- Heart of Jewel
+  |
+  +--> Policy, Path Policy, Diff Guard
+  +--> Safe Patch Writer (full-file + search/replace hunks, rollback)
+  +--> Secret Redactor, Critics
   |
   v
 Verification Layer (src/verification)
   |
-  +--> Runner (lint, typecheck, test, build...)
+  +--> Runner (lint, typecheck, test, build, sandbox)
   |
   v
-Storage & State
+Storage & State (src/storage, .jewel/)
 ```
 
 ## Core Modules
 
-### 1. CLI Layer (`src/cli`)
-- Responsible for argument parsing and command dispatching
-- Thin layer that delegates to domain logic
-- Currently contains many command implementations under `commands/`
+### CLI Layer (`src/cli`)
+Argument parsing, command dispatch, TUI interactive shell, and SSE Web UI dashboard.
 
-### 2. Core Layer (`src/core`)
-- Manages configuration loading
-- Handles session lifecycle and state
-- Provides shared utilities and templates
+Extracted run orchestration helpers:
+- `run-helpers.ts` — UI broadcast, prompts, repo context assembly
+- `run-report.ts` — session report generation
 
-### 3. Safety Layer (`src/safety`) — **Heart of Jewel**
-This is the most important and mature module. It includes:
+### Exploration Layer (`src/exploration`)
+Autonomous codebase context without external dependencies:
+- **`repo-explorer.ts`**: listDir, glob, grep, readFile, discoverRelevantFiles
+- **`context-builder.ts`**: resolveFilesForTask (makes `--files` optional), enriched repo summaries
 
-- **Policy** (`policy.ts`): Core rules and configuration enforcement
-- **Path Policy** (`path-policy.ts`): Prevents path traversal and out-of-scope edits
-- **Diff Guard** (`diff-guard.ts`): Validates proposed changes
-- **Safe Patch Writer** (`safe-patch-writer.ts`): Transactional file writing with rollback support
-- **Secret Redactor** (`secret-redactor.ts`): Removes sensitive data from logs/reports
-- **Critic** (`critic.ts`): Reviews proposed changes against safety rules
+### Safety Layer (`src/safety`)
+Transactional patch application with path escape prevention, protected file policy, dependency guards, and atomic rollback. Supports both full-file rewrites and targeted `edits[]` hunks.
 
-### 4. Verification Layer (`src/verification`)
-- Runs configured verification commands (lint, typecheck, tests, etc.)
-- Currently implemented via `runner.ts`
+### Verification Layer (`src/verification`)
+Runs configured verification commands on host or inside Docker sandboxes. Includes test-change policy (blocks tampering with existing tests).
 
-### 5. Other Modules
-- `agents/`: LLM provider adapters
-- `skills/`: Extensible capabilities (early stage)
-- `storage/`: Session and report storage
+## Agent Run Loop
 
-## Key Design Decisions
+```
+Task → Resolve Files (user scope or auto-discovery)
+     → Plan (LLM contract)
+     → Checkpoint (Git)
+     → Patch (full-file or hunk edits)
+     → Human Review (optional)
+     → Verify → Critic → Retry (with feedback)
+     → Report
+```
 
-### Safety by Default
-Jewel prioritizes safety over convenience. Many features (human review, strict scope, verification) are enabled by default.
+## Benchmarks
 
-### Transactional Safety
-All file modifications should go through the `safe-patch-writer` to ensure atomicity and rollback capability.
+Curated tasks live in `benchmarks/manifest.json`. Run with:
 
-### Human-in-the-Loop
-Even when using real LLM providers, Jewel keeps a human review gate unless explicitly disabled.
+```bash
+npm run benchmark        # mock provider
+npm run benchmark:live   # configured real provider
+```
 
-### Dogfooding
-The architecture should support Jewel being used on its own codebase effectively.
+Results are written to `.jewel/benchmarks/latest.json`.
 
-## Current State & Known Limitations
+## Current State
 
-- The `run` command is currently quite large and should be refactored
-- Some modules have inconsistent interfaces
-- The skills and agents layers are still early
-- Better dependency management would improve maintainability
+- 170+ unit/integration tests
+- Interactive TUI (`jewel` with no args)
+- Local Web UI dashboard (`--ui`)
+- Auto file discovery when `--files` is omitted
+- Targeted hunk edits in patch proposals
 
-## Future Directions
+## Known Limitations
 
-- Introduce a service container / dependency injection
-- Design a plugin system for custom rules and verifiers
-- Improve observability and structured logging
-- Consider a web UI for session management (long term)
+- `run.ts` orchestrator is still large (helpers extracted; further modularization planned)
+- Exploration is keyword/heuristic based (no embedding index yet)
+- No IDE extension yet (Phase 3)
+- Plugin/MCP ecosystem not yet shipped (Phase 4)
+
+## Roadmap
+
+| Phase | Focus |
+|---|---|
+| 0 | Foundation: benchmarks, run.ts split, docs sync |
+| 1 | Autonomous context: RepoExplorer, optional `--files`, hunk edits |
+| 2 | Multi-step tool loop with budget guards |
+| 3 | IDE extension, TUI polish, `jewel watch` |
+| 4 | Plugin system, MCP server mode, public benchmark results |
 
 ---
 
-*This document will be updated as the architecture evolves.*
+*Updated as the architecture evolves.*

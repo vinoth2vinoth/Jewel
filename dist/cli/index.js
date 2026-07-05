@@ -9,6 +9,7 @@ const doctor_1 = require("./commands/doctor");
 const audit_1 = require("./commands/audit");
 const run_1 = require("./commands/run");
 const version_1 = require("./commands/version");
+const tui_1 = require("./commands/tui");
 const errors_1 = require("./errors");
 function printHelp() {
     console.log(`
@@ -48,8 +49,12 @@ Options:
 }
 async function main() {
     const args = process.argv.slice(2);
-    if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
+    if (args.includes('-h') || args.includes('--help')) {
         printHelp();
+        process.exit(0);
+    }
+    if (args.length === 0) {
+        await (0, tui_1.runTui)();
         process.exit(0);
     }
     const command = args[0];

@@ -117,13 +117,27 @@ test('json-response - validatePatchProposalJson cases', () => {
     });
   }, /filePath.*must be a non-empty string/);
 
-  // Missing content
+  // Missing content and edits
   assert.throws(() => {
     validatePatchProposalJson({
       ...valid,
       files: [{ filePath: 'math.js', content: undefined, reason: 'reason' }]
     });
-  }, /content.*must be a string/);
+  }, /must include "content" or a non-empty "edits" array/);
+
+  // Valid edits-only patch
+  const editsOnly = {
+    summary: 'hunk patch',
+    files: [{
+      filePath: 'math.js',
+      edits: [{ search: 'a/b', replace: 'safe divide' }],
+      reason: 'surgical fix'
+    }],
+    notes: [],
+    riskLevel: 'low'
+  };
+  const parsedEdits = validatePatchProposalJson(editsOnly);
+  assert.strictEqual(parsedEdits.files[0].edits?.length, 1);
 
   // Invalid riskLevel
   assert.throws(() => {

@@ -131,6 +131,47 @@ function validateProposedFile(
   return null;
 }
 
+export function applySearchReplaceEdits(
+  originalContent: string,
+  edits: Array<{ search: string; replace: string }>
+): { content: string; error?: string } {
+  let content = originalContent;
+  for (let i = 0; i < edits.length; i++) {
+    const edit = edits[i];
+    if (!content.includes(edit.search)) {
+      return {
+        content: originalContent,
+        error: `Edit ${i + 1} search string not found in file.`
+      };
+    }
+    content = content.replace(edit.search, edit.replace);
+  }
+  return { content };
+}
+
+function resolveFileContent(
+  file: { filePath: string; content?: string; edits?: Array<{ search: string; replace: string }> },
+  cwd: string
+): { content: string; error?: string } {
+  if (typeof file.content === 'string' && (!file.edits || file.edits.length === 0)) {
+    return { content: file.content };
+  }
+
+  const targetPath = path.resolve(cwd, file.filePath);
+  if (!fs.existsSync(targetPath)) {
+    if (file.edits && file.edits.length > 0) {
+      return { content: '', error: `Cannot apply edits to non-existent file "${file.filePath}".` };
+    }
+    return { content: file.content || '' };
+  }
+
+  const original = fs.readFileSync(targetPath, 'utf8');
+  if (file.edits && file.edits.length > 0) {
+    return applySearchReplaceEdits(original, file.edits);
+  }
+  return { content: file.content || '' };
+}
+
 export function applyPatchProposalSafely(
   patchProposal: any,
   taskContract: TaskContract,
@@ -149,8 +190,18 @@ export function applyPatchProposalSafely(
   }
 
   // Validate all proposed files before writing anything.
+  const resolvedContents: Map<string, string> = new Map();
   for (const file of patchProposal.files) {
-    const error = validateProposedFile(file.filePath, file.content, taskContract, config, cwd);
+    const resolved = resolveFileContent(file, cwd);
+    if (resolved.error) {
+      blockedFiles.push({
+        filePath: file.filePath,
+        reason: resolved.error
+      });
+      continue;
+    }
+    resolvedContents.set(file.filePath, resolved.content);
+    const error = validateProposedFile(file.filePath, resolved.content, taskContract, config, cwd);
     if (error) {
       blockedFiles.push({
         filePath: file.filePath,
@@ -203,7 +254,7 @@ export function applyPatchProposalSafely(
         fs.mkdirSync(parentDir, { recursive: true });
       }
       
-      fs.writeFileSync(targetPath, file.content, 'utf8');
+      fs.writeFileSync(targetPath, resolvedContents.get(file.filePath) ?? file.content ?? '', 'utf8');
       appliedFiles.push(normalizeRepoPath(file.filePath, cwd));
     }
   } catch (err: any) {

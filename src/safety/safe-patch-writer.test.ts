@@ -334,3 +334,41 @@ test('safe-patch-writer - transactional rollback on failure', () => {
     cleanupTempDir(tempDir);
   }
 });
+
+test('safe-patch-writer - applies targeted search/replace edits', () => {
+  const tempDir = createTempDir();
+  const config = { ...DEFAULT_CONFIG, allowProtectedFileChanges: false, allowNewDependencies: false };
+  const taskContract: TaskContract = {
+    task: 'fix divide',
+    understanding: 'test',
+    assumptions: [],
+    filesLikelyNeeded: ['math.js'],
+    forbiddenActions: [],
+    successCriteria: [],
+    riskLevel: 'low',
+    requiresApproval: false,
+    createdAt: new Date().toISOString(),
+    mode: 'lax'
+  };
+
+  fs.writeFileSync(path.join(tempDir, 'math.js'), 'function divide(a,b){return a/b;}\n', 'utf8');
+
+  try {
+    const proposal = {
+      summary: 'guard zero',
+      files: [{
+        filePath: 'math.js',
+        edits: [{ search: 'return a/b', replace: 'if(b===0) throw new Error("division by zero"); return a/b' }],
+        reason: 'prevent divide by zero'
+      }],
+      notes: [],
+      riskLevel: 'low'
+    };
+    const result = applyPatchProposalSafely(proposal, taskContract, config, tempDir);
+    assert.ok(result.success);
+    const updated = fs.readFileSync(path.join(tempDir, 'math.js'), 'utf8');
+    assert.ok(updated.includes('division by zero'));
+  } finally {
+    cleanupTempDir(tempDir);
+  }
+});
