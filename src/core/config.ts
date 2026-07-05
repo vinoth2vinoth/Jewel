@@ -13,7 +13,7 @@ export interface JewelConfig {
   allowProtectedFileChanges: boolean;
   allowGitPush: boolean;
   requireHumanDiffApproval: boolean;
-  provider: 'none' | 'openai' | 'anthropic' | 'gemini' | 'openrouter';
+  provider: 'none' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'deepseek';
   model: string;
   temperature: number;
   maxOutputTokens: number;
@@ -62,6 +62,8 @@ export interface JewelConfig {
   fastPathEnabled?: boolean;
   fastPathMaxFiles?: number;
   fastPathMaxRisk?: 'low' | 'medium' | 'high';
+  /** Character budget for plan/patch prompt context (repo files + summary). */
+  maxPromptContextChars?: number;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -133,7 +135,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
   requirePlanApproval: false,
   fastPathEnabled: true,
   fastPathMaxFiles: 1,
-  fastPathMaxRisk: 'low'
+  fastPathMaxRisk: 'low',
+  maxPromptContextChars: 120_000
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -170,7 +173,7 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     config.mode = parsed.mode;
   }
 
-  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars', 'fastPathMaxFiles'];
+  const numericFields: (keyof JewelConfig)[] = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars', 'fastPathMaxFiles', 'maxPromptContextChars'];
   for (const field of numericFields) {
     if (parsed[field] !== undefined) {
       const val = Number(parsed[field]);
@@ -211,8 +214,8 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
   }
 
   if (parsed.provider !== undefined) {
-    if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(parsed.provider)) {
-      throw new Error('Invalid config: "provider" must be one of "none", "openai", "anthropic", "gemini", or "openrouter".');
+    if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter', 'deepseek'].includes(parsed.provider)) {
+      throw new Error('Invalid config: "provider" must be one of "none", "openai", "anthropic", "gemini", "openrouter", or "deepseek".');
     }
     config.provider = parsed.provider;
   }

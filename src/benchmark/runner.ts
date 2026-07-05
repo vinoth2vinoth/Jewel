@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, spawnSync } from 'child_process';
+import { getBlueprint } from '../scaffold/blueprints';
+import { scaffoldProject } from '../scaffold/scaffolder';
 
 export interface BenchmarkTask {
   id: string;
@@ -13,6 +15,8 @@ export interface BenchmarkTask {
   verifyCommand?: string;
   cleanup?: string[];
   resetFixture?: boolean;
+  /** Blueprint id to scaffold into projectPath before running the task */
+  scaffold?: string;
 }
 
 export interface BenchmarkManifest {
@@ -72,6 +76,25 @@ export function runBenchmarkSuite(
   for (const task of manifest.tasks) {
     const taskDir = path.join(rootDir, task.projectPath);
     const label = task.id;
+
+    if (task.scaffold) {
+      const blueprint = getBlueprint(task.scaffold);
+      if (!blueprint) {
+        results.push({ id: label, status: 'SKIP', reason: `unknown blueprint "${task.scaffold}"` });
+        continue;
+      }
+      try {
+        if (fs.existsSync(taskDir)) fs.rmSync(taskDir, { recursive: true, force: true });
+        scaffoldProject(blueprint, {
+          projectName: path.basename(taskDir),
+          targetDir: path.dirname(taskDir),
+          gitInit: false
+        });
+      } catch (err) {
+        results.push({ id: label, status: 'SKIP', reason: `scaffold failed: ${err instanceof Error ? err.message : String(err)}` });
+        continue;
+      }
+    }
 
     if (task.preCheck === 'broken-tests') {
       resetDogfoodFixture(taskDir);

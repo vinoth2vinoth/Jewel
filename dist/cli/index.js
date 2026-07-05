@@ -16,6 +16,8 @@ const lsp_1 = require("./commands/lsp");
 const benchmark_1 = require("./commands/benchmark");
 const continue_1 = require("./commands/continue");
 const ship_1 = require("./commands/ship");
+const create_1 = require("./commands/create");
+const build_1 = require("./commands/build");
 const session_history_1 = require("../core/session-history");
 const errors_1 = require("./errors");
 function printHelp() {
@@ -27,6 +29,8 @@ Usage:
 
 Commands:
   init                       Initialize Jewel configuration, AGENTS.md, and skills in the current folder.
+  create [type] [name]       Create a new project from a blueprint (static-site, node-api, fullstack). Interactive wizard if no args.
+  build "<project goal>"     Plan and build a multi-milestone project autonomously (use --resume to continue a paused build).
   run "<task>"               Execute a task protected by Jewel rules and verification checks.
   verify                     Run all configured verification commands.
   status                     Display the current session, checkpoint, and repository status.
@@ -199,6 +203,79 @@ async function main() {
             }
             case 'audit': {
                 (0, audit_1.runAudit)();
+                break;
+            }
+            case 'create': {
+                let type;
+                let name;
+                let provider;
+                let model;
+                let yes = false;
+                const remaining = args.slice(1);
+                for (let i = 0; i < remaining.length; i++) {
+                    const arg = remaining[i];
+                    if (arg === '--provider') {
+                        provider = remaining[++i];
+                    }
+                    else if (arg === '--model') {
+                        model = remaining[++i];
+                    }
+                    else if (arg === '--yes') {
+                        yes = true;
+                    }
+                    else if (!arg.startsWith('-')) {
+                        if (!type)
+                            type = arg;
+                        else if (!name)
+                            name = arg;
+                    }
+                }
+                await (0, create_1.runCreate)({ type, name, provider, model, yes, cwd: process.cwd() });
+                break;
+            }
+            case 'build': {
+                let goal;
+                let resume = false;
+                let useMock = false;
+                let yesFlag = false;
+                let maxMilestones;
+                let providerOverride;
+                let modelOverride;
+                const remaining = args.slice(1);
+                for (let i = 0; i < remaining.length; i++) {
+                    const arg = remaining[i];
+                    if (arg === '--resume')
+                        resume = true;
+                    else if (arg === '-m' || arg === '--mock')
+                        useMock = true;
+                    else if (arg === '--yes')
+                        yesFlag = true;
+                    else if (arg === '--max-milestones') {
+                        maxMilestones = parseInt(remaining[++i], 10);
+                    }
+                    else if (arg === '--provider') {
+                        providerOverride = remaining[++i];
+                    }
+                    else if (arg === '--model') {
+                        modelOverride = remaining[++i];
+                    }
+                    else if (!arg.startsWith('-') && !goal)
+                        goal = arg;
+                }
+                if (!goal && !resume) {
+                    console.error('Error: Provide a project goal or use --resume. Example: jewel build "todo app with delete and edit"');
+                    process.exit(1);
+                }
+                await (0, build_1.runBuild)({
+                    goal,
+                    resume,
+                    useMock,
+                    yes: yesFlag,
+                    maxMilestones,
+                    provider: providerOverride,
+                    model: modelOverride,
+                    cwd: process.cwd()
+                });
                 break;
             }
             case 'ship': {

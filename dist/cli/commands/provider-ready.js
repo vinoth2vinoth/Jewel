@@ -47,7 +47,7 @@ async function runProviderReady(provider, modelOverride, cwd = process.cwd()) {
         process.exit(1);
         return;
     }
-    const validProviders = ['openai', 'gemini', 'anthropic', 'openrouter'];
+    const validProviders = ['openai', 'gemini', 'anthropic', 'openrouter', 'deepseek'];
     if (!validProviders.includes(provider)) {
         console.error(`Error: Invalid provider "${provider}". Must be one of: ${validProviders.join(', ')}.`);
         process.exit(1);
@@ -58,7 +58,8 @@ async function runProviderReady(provider, modelOverride, cwd = process.cwd()) {
         openai: 'OPENAI_API_KEY',
         gemini: 'GEMINI_API_KEY',
         anthropic: 'ANTHROPIC_API_KEY',
-        openrouter: 'OPENROUTER_API_KEY'
+        openrouter: 'OPENROUTER_API_KEY',
+        deepseek: 'DEEPSEEK_API_KEY'
     };
     const expectedKey = keyMap[provider];
     const apiKey = process.env[expectedKey];

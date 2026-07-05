@@ -93,6 +93,11 @@ export interface LLMResponse {
   };
 }
 
+export interface MilestoneGenerationInput {
+  goal: string;
+  maxMilestones: number;
+}
+
 export interface AgentAdapter {
   name: string;
   plan(input: PlanInput): Promise<TaskContract>;
@@ -100,6 +105,8 @@ export interface AgentAdapter {
   reviewDiff(input: ReviewInput): Promise<ReviewResult>;
   reviewTestCorrectness?(input: ReviewInput): Promise<TestCriticResult>;
   decideToolStep?(input: ToolLoopInput): Promise<ToolLoopDecision>;
+  /** Optional: decompose a project goal into ordered milestone titles (validated by caller). */
+  generateMilestones?(input: MilestoneGenerationInput): Promise<unknown>;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
@@ -146,6 +153,14 @@ export class MockAgentAdapter implements AgentAdapter {
     const contract = generateLocalContract(input.task, input.config, files);
     contract.understanding = `Mock understanding of: ${input.task}`;
     return contract;
+  }
+
+  async generateMilestones(input: MilestoneGenerationInput): Promise<unknown> {
+    this.accumulateMockUsage();
+    return [
+      `Implement the core feature: ${input.goal}`,
+      `Add tests covering: ${input.goal}`
+    ].slice(0, input.maxMilestones);
   }
 
   async decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision> {

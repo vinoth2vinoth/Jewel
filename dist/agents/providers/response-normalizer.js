@@ -14,7 +14,7 @@ function normalizeResponse(responseBody, provider, model) {
     // Redact secrets before processing
     const bodyStr = (0, secret_redactor_1.redactSecrets)(JSON.stringify(responseBody));
     const safeBody = JSON.parse(bodyStr);
-    if (p === 'openai' || p === 'openrouter') {
+    if (p === 'openai' || p === 'openrouter' || p === 'deepseek') {
         const choice = safeBody.choices?.[0];
         if (!choice) {
             throw new Error(`Invalid ${provider} response: choices array is missing or empty.`);

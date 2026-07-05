@@ -53,6 +53,7 @@ const test_change_policy_1 = require("../../verification/test-change-policy");
 const retry_policy_1 = require("../../core/retry-policy");
 const ui_server_1 = require("../ui-server");
 const run_helpers_1 = require("./run-helpers");
+const context_budget_1 = require("../../agents/context-budget");
 const run_report_1 = require("./run-report");
 const context_builder_1 = require("../../exploration/context-builder");
 const tool_loop_1 = require("../../agents/tool-loop");
@@ -123,8 +124,8 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         }
         if (cliOverrides) {
             if (cliOverrides.provider !== undefined) {
-                if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(cliOverrides.provider)) {
-                    throw new errors_1.JewelError('INVALID_INPUT', 'Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".', 'Provide a valid provider name.');
+                if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter', 'deepseek'].includes(cliOverrides.provider)) {
+                    throw new errors_1.JewelError('INVALID_INPUT', 'Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", "openrouter", or "deepseek".', 'Provide a valid provider name.');
                 }
                 config.provider = cliOverrides.provider;
             }
@@ -260,6 +261,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
             if (continuationAppendix) {
                 repoSummary += `\n${continuationAppendix}`;
             }
+            repoSummary = (0, context_budget_1.compactSummaryText)(repoSummary, config.maxPromptContextChars ?? context_budget_1.DEFAULT_PROMPT_CONTEXT_MAX_CHARS);
             let contractFromAdapter;
             try {
                 contractFromAdapter = await adapter.plan({
@@ -370,7 +372,11 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         let noChangeReason = '';
         if (isAgentMode) {
             console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
-            const repoContext = (0, run_helpers_1.buildRepoContext)(cwd, contract.filesLikelyNeeded);
+            const rawRepoContext = (0, run_helpers_1.buildRepoContext)(cwd, contract.filesLikelyNeeded);
+            const repoContext = (0, context_budget_1.compactRepoContext)(rawRepoContext, config.maxPromptContextChars ?? context_budget_1.DEFAULT_PROMPT_CONTEXT_MAX_CHARS);
+            if (repoContext.length < rawRepoContext.length) {
+                console.log(`[+] Context budget: compacted patch context from ${rawRepoContext.length} to ${repoContext.length} chars.`);
+            }
             let patch;
             try {
                 patch = await adapter.proposePatch({
@@ -791,7 +797,7 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                     catch (err) {
                         console.error(`[-] Pre-retry rollback failed: ${err.message}`);
                     }
-                    const repoContext = (0, run_helpers_1.buildRepoContext)(cwd, contract.filesLikelyNeeded);
+                    const repoContext = (0, context_budget_1.compactRepoContext)((0, run_helpers_1.buildRepoContext)(cwd, contract.filesLikelyNeeded), config.maxPromptContextChars ?? context_budget_1.DEFAULT_PROMPT_CONTEXT_MAX_CHARS);
                     try {
                         const patch = await adapter.proposePatch({
                             taskContract: contract,
@@ -927,6 +933,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
                 console.log(`\nDashboard execution finished. Open ${uiServer.getUrl()} to stop the server and inspect results, or press [ENTER] in this terminal to exit.`);
                 await (0, run_helpers_1.waitForExitAcknowledgment)(uiServer);
             }
+            if (runOptions?.returnOutcome) {
+                return;
+            }
             process.exit(0);
         }
         else {
@@ -1053,6 +1062,9 @@ async function runTask(task, filesNeeded = [], useMock = false, cwd = process.cw
         console.error(`Error: ${jewelErr.message}`);
         console.error(`Next Action: ${jewelErr.nextAction}`);
         console.error(`======================================\n`);
+        if (runOptions?.returnOutcome) {
+            throw jewelErr;
+        }
         process.exit(1);
     }
     finally {

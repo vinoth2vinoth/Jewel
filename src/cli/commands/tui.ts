@@ -240,6 +240,7 @@ Available TUI Slash Commands:
   /smoke-provider            Run validation smoke tests. Support flags: --provider, --model, --schema, --no-write.
   /provider-ready            Verify model config. Support flags: --provider, --model.
   /run <task>                Start a safe AI coding task. Support standard flags like --mock.
+  /new                       Create a new project with the guided wizard (blueprints).
   /history                   Show recent session task history.
   /resume [session-id]       Re-run a previous session task. Supports --mock, --yes, --ui flags.
   /help, /h                  Show this help menu.
@@ -317,6 +318,13 @@ Available TUI Slash Commands:
           case '/provider-ready': {
             const { options } = parseOptions(tokens.slice(1));
             await executeWithSafetyPatch(() => runProviderReady(options.provider || '', options.model, cwd));
+            promptLoop();
+            break;
+          }
+
+          case '/new': {
+            const { runCreate } = require('./create');
+            await executeWithSafetyPatch(() => runCreate({ cwd }));
             promptLoop();
             break;
           }

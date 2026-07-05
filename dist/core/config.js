@@ -107,7 +107,8 @@ exports.DEFAULT_CONFIG = {
     requirePlanApproval: false,
     fastPathEnabled: true,
     fastPathMaxFiles: 1,
-    fastPathMaxRisk: 'low'
+    fastPathMaxRisk: 'low',
+    maxPromptContextChars: 120_000
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -138,7 +139,7 @@ function validateAndMergeConfig(parsed) {
         }
         config.mode = parsed.mode;
     }
-    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars', 'fastPathMaxFiles'];
+    const numericFields = ['maxRetries', 'maxFilesChanged', 'maxLinesChanged', 'llmTimeoutMs', 'llmMaxRetries', 'maxSessionCost', 'agentToolLoopMaxSteps', 'agentToolLoopMaxContextChars', 'fastPathMaxFiles', 'maxPromptContextChars'];
     for (const field of numericFields) {
         if (parsed[field] !== undefined) {
             const val = Number(parsed[field]);
@@ -177,8 +178,8 @@ function validateAndMergeConfig(parsed) {
         }
     }
     if (parsed.provider !== undefined) {
-        if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(parsed.provider)) {
-            throw new Error('Invalid config: "provider" must be one of "none", "openai", "anthropic", "gemini", or "openrouter".');
+        if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter', 'deepseek'].includes(parsed.provider)) {
+            throw new Error('Invalid config: "provider" must be one of "none", "openai", "anthropic", "gemini", "openrouter", or "deepseek".');
         }
         config.provider = parsed.provider;
     }

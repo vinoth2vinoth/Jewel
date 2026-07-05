@@ -13,6 +13,8 @@ import { runLsp } from './commands/lsp';
 import { runBenchmarkCommand } from './commands/benchmark';
 import { runContinueCommand } from './commands/continue';
 import { runShip } from './commands/ship';
+import { runCreate } from './commands/create';
+import { runBuild } from './commands/build';
 import { getSessionForResume } from '../core/session-history';
 import { toJewelError } from './errors';
 
@@ -25,6 +27,8 @@ Usage:
 
 Commands:
   init                       Initialize Jewel configuration, AGENTS.md, and skills in the current folder.
+  create [type] [name]       Create a new project from a blueprint (static-site, node-api, fullstack). Interactive wizard if no args.
+  build "<project goal>"     Plan and build a multi-milestone project autonomously (use --resume to continue a paused build).
   run "<task>"               Execute a task protected by Jewel rules and verification checks.
   verify                     Run all configured verification commands.
   status                     Display the current session, checkpoint, and repository status.
@@ -211,6 +215,65 @@ export async function main(): Promise<void> {
 
       case 'audit': {
         runAudit();
+        break;
+      }
+
+      case 'create': {
+        let type: string | undefined;
+        let name: string | undefined;
+        let provider: string | undefined;
+        let model: string | undefined;
+        let yes = false;
+        const remaining = args.slice(1);
+        for (let i = 0; i < remaining.length; i++) {
+          const arg = remaining[i];
+          if (arg === '--provider') { provider = remaining[++i]; }
+          else if (arg === '--model') { model = remaining[++i]; }
+          else if (arg === '--yes') { yes = true; }
+          else if (!arg.startsWith('-')) {
+            if (!type) type = arg;
+            else if (!name) name = arg;
+          }
+        }
+        await runCreate({ type, name, provider, model, yes, cwd: process.cwd() });
+        break;
+      }
+
+      case 'build': {
+        let goal: string | undefined;
+        let resume = false;
+        let useMock = false;
+        let yesFlag = false;
+        let maxMilestones: number | undefined;
+        let providerOverride: string | undefined;
+        let modelOverride: string | undefined;
+        const remaining = args.slice(1);
+        for (let i = 0; i < remaining.length; i++) {
+          const arg = remaining[i];
+          if (arg === '--resume') resume = true;
+          else if (arg === '-m' || arg === '--mock') useMock = true;
+          else if (arg === '--yes') yesFlag = true;
+          else if (arg === '--max-milestones') { maxMilestones = parseInt(remaining[++i], 10); }
+          else if (arg === '--provider') { providerOverride = remaining[++i]; }
+          else if (arg === '--model') { modelOverride = remaining[++i]; }
+          else if (!arg.startsWith('-') && !goal) goal = arg;
+        }
+
+        if (!goal && !resume) {
+          console.error('Error: Provide a project goal or use --resume. Example: jewel build "todo app with delete and edit"');
+          process.exit(1);
+        }
+
+        await runBuild({
+          goal,
+          resume,
+          useMock,
+          yes: yesFlag,
+          maxMilestones,
+          provider: providerOverride,
+          model: modelOverride,
+          cwd: process.cwd()
+        });
         break;
       }
 

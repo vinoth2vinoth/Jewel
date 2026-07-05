@@ -7,6 +7,11 @@ export interface RunTaskOptions {
   planOnly?: boolean;
   /** Skip interactive plan approval gate */
   approvePlan?: boolean;
+  /**
+   * Return/throw instead of process.exit so callers (e.g. the build
+   * orchestrator) can run multiple tasks in one process.
+   */
+  returnOutcome?: boolean;
 }
 
 export interface ContinuationContext {

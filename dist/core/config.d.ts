@@ -10,7 +10,7 @@ export interface JewelConfig {
     allowProtectedFileChanges: boolean;
     allowGitPush: boolean;
     requireHumanDiffApproval: boolean;
-    provider: 'none' | 'openai' | 'anthropic' | 'gemini' | 'openrouter';
+    provider: 'none' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'deepseek';
     model: string;
     temperature: number;
     maxOutputTokens: number;
@@ -59,6 +59,8 @@ export interface JewelConfig {
     fastPathEnabled?: boolean;
     fastPathMaxFiles?: number;
     fastPathMaxRisk?: 'low' | 'medium' | 'high';
+    /** Character budget for plan/patch prompt context (repo files + summary). */
+    maxPromptContextChars?: number;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

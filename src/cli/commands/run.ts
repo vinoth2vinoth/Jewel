@@ -17,6 +17,7 @@ import { checkTestChangePolicy, getOriginalFileContent } from '../../verificatio
 import { createRetryState, recordRetryAttempt, shouldStopRetry, StopDecision } from '../../core/retry-policy';
 import { UIServer } from '../ui-server';
 import { askQuestion, broadcastState, buildRepoContext, waitForExitAcknowledgment } from './run-helpers';
+import { compactRepoContext, compactSummaryText, DEFAULT_PROMPT_CONTEXT_MAX_CHARS } from '../../agents/context-budget';
 import { writeRunReport } from './run-report';
 import { buildEnrichedRepoSummary, resolveFilesForTask } from '../../exploration/context-builder';
 import { runAgentToolLoop } from '../../agents/tool-loop';
@@ -115,8 +116,8 @@ export async function runTask(
 
   if (cliOverrides) {
     if (cliOverrides.provider !== undefined) {
-      if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter'].includes(cliOverrides.provider)) {
-        throw new JewelError('INVALID_INPUT', 'Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", or "openrouter".', 'Provide a valid provider name.');
+      if (!['none', 'openai', 'anthropic', 'gemini', 'openrouter', 'deepseek'].includes(cliOverrides.provider)) {
+        throw new JewelError('INVALID_INPUT', 'Invalid provider override. Must be one of "none", "openai", "anthropic", "gemini", "openrouter", or "deepseek".', 'Provide a valid provider name.');
       }
       config.provider = cliOverrides.provider as any;
     }
@@ -275,6 +276,7 @@ export async function runTask(
     if (continuationAppendix) {
       repoSummary += `\n${continuationAppendix}`;
     }
+    repoSummary = compactSummaryText(repoSummary, config.maxPromptContextChars ?? DEFAULT_PROMPT_CONTEXT_MAX_CHARS);
     let contractFromAdapter;
     try {
       contractFromAdapter = await adapter.plan({
@@ -402,7 +404,11 @@ export async function runTask(
 
   if (isAgentMode) {
     console.log(`\n[Adapter] Running agent adapter "${adapter.name}" to propose patch...`);
-    const repoContext = buildRepoContext(cwd, contract.filesLikelyNeeded);
+    const rawRepoContext = buildRepoContext(cwd, contract.filesLikelyNeeded);
+    const repoContext = compactRepoContext(rawRepoContext, config.maxPromptContextChars ?? DEFAULT_PROMPT_CONTEXT_MAX_CHARS);
+    if (repoContext.length < rawRepoContext.length) {
+      console.log(`[+] Context budget: compacted patch context from ${rawRepoContext.length} to ${repoContext.length} chars.`);
+    }
 
     let patch: any;
     try {
@@ -858,7 +864,10 @@ export async function runTask(
           console.error(`[-] Pre-retry rollback failed: ${err.message}`);
         }
 
-        const repoContext = buildRepoContext(cwd, contract.filesLikelyNeeded);
+        const repoContext = compactRepoContext(
+          buildRepoContext(cwd, contract.filesLikelyNeeded),
+          config.maxPromptContextChars ?? DEFAULT_PROMPT_CONTEXT_MAX_CHARS
+        );
         try {
           const patch = await adapter.proposePatch({
             taskContract: contract,
@@ -986,6 +995,9 @@ export async function runTask(
       uiServer.updateState({ stage: 'completed' });
       console.log(`\nDashboard execution finished. Open ${uiServer.getUrl()} to stop the server and inspect results, or press [ENTER] in this terminal to exit.`);
       await waitForExitAcknowledgment(uiServer);
+    }
+    if (runOptions?.returnOutcome) {
+      return;
     }
     process.exit(0);
   } else {
@@ -1168,6 +1180,9 @@ export async function runTask(
     console.error(`Error: ${jewelErr.message}`);
     console.error(`Next Action: ${jewelErr.nextAction}`);
     console.error(`======================================\n`);
+    if (runOptions?.returnOutcome) {
+      throw jewelErr;
+    }
     process.exit(1);
   } finally {
     process.stdout.write = originalStdoutWrite;

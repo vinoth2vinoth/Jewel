@@ -31,6 +31,13 @@ class MockAgentAdapter {
         contract.understanding = `Mock understanding of: ${input.task}`;
         return contract;
     }
+    async generateMilestones(input) {
+        this.accumulateMockUsage();
+        return [
+            `Implement the core feature: ${input.goal}`,
+            `Add tests covering: ${input.goal}`
+        ].slice(0, input.maxMilestones);
+    }
     async decideToolStep(input) {
         this.accumulateMockUsage();
         this.checkBudget(input.config);

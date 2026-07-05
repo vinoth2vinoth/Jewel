@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { loadConfig } from '../../core/config';
 import { resolveSessionId } from '../../core/session-history';
 import { getSessionDiffPayload } from '../../lsp/session-data';
@@ -72,12 +72,12 @@ export function runShip(options: ShipOptions = {}): void {
   for (const file of changedFiles) {
     const full = path.resolve(cwd, file);
     if (fs.existsSync(full)) {
-      execSync(`git add -- ${JSON.stringify(file).slice(1, -1)}`, { cwd, stdio: 'pipe' });
+      execFileSync('git', ['add', '--', file], { cwd, stdio: 'pipe' });
     }
   }
 
   try {
-    execSync(`git commit -m ${JSON.stringify(message)}`, { cwd, stdio: 'inherit' });
+    execFileSync('git', ['commit', '-m', message], { cwd, stdio: 'inherit' });
   } catch {
     console.error('Error: git commit failed. Ensure files are staged and changes exist.');
     if (branchCreated) {

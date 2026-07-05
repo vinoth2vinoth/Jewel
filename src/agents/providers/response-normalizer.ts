@@ -8,7 +8,7 @@ export interface NormalizedResponse {
     totalTokens?: number;
     estimatedCostUsd?: undefined;
   };
-  rawProvider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
+  rawProvider: 'openai' | 'gemini' | 'anthropic' | 'openrouter' | 'deepseek';
   model: string;
   finishReason?: string;
 }
@@ -27,7 +27,7 @@ export function normalizeResponse(responseBody: any, provider: string, model: st
   const bodyStr = redactSecrets(JSON.stringify(responseBody));
   const safeBody = JSON.parse(bodyStr);
 
-  if (p === 'openai' || p === 'openrouter') {
+  if (p === 'openai' || p === 'openrouter' || p === 'deepseek') {
     const choice = safeBody.choices?.[0];
     if (!choice) {
       throw new Error(`Invalid ${provider} response: choices array is missing or empty.`);

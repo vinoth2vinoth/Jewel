@@ -25,6 +25,17 @@
       "verifyCommand": "npm test",
       "cleanup": [".jewel", "dist"],
       "resetFixture": true
+    },
+    {
+      "id": "create-node-api-mock",
+      "description": "Scaffold the node-api blueprint and run one mock milestone on it",
+      "projectPath": "benchmarks/tmp/create-node-api-mock",
+      "scaffold": "node-api",
+      "task": "add a request logging helper module",
+      "files": ["src/logger.js"],
+      "useMock": true,
+      "verifyCommand": "npm test",
+      "cleanup": ["."]
     }
   ]
 }

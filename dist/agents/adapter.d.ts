@@ -83,6 +83,10 @@ export interface LLMResponse {
         totalTokens: number;
     };
 }
+export interface MilestoneGenerationInput {
+    goal: string;
+    maxMilestones: number;
+}
 export interface AgentAdapter {
     name: string;
     plan(input: PlanInput): Promise<TaskContract>;
@@ -90,6 +94,8 @@ export interface AgentAdapter {
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;
     reviewTestCorrectness?(input: ReviewInput): Promise<TestCriticResult>;
     decideToolStep?(input: ToolLoopInput): Promise<ToolLoopDecision>;
+    /** Optional: decompose a project goal into ordered milestone titles (validated by caller). */
+    generateMilestones?(input: MilestoneGenerationInput): Promise<unknown>;
     usage?: {
         inputTokens?: number;
         outputTokens?: number;
@@ -110,6 +116,7 @@ export declare class MockAgentAdapter implements AgentAdapter {
     private accumulateMockUsage;
     private checkBudget;
     plan(input: PlanInput): Promise<TaskContract>;
+    generateMilestones(input: MilestoneGenerationInput): Promise<unknown>;
     decideToolStep(input: ToolLoopInput): Promise<ToolLoopDecision>;
     proposePatch(input: PatchInput): Promise<PatchProposal>;
     reviewDiff(input: ReviewInput): Promise<ReviewResult>;

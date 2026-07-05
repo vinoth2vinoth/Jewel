@@ -58,7 +58,7 @@ async function runSmokeProvider(providerOverride, modelOverride, schemaFlag, noW
         process.exit(1);
         return;
     }
-    const validProviders = ['openai', 'gemini', 'anthropic', 'openrouter'];
+    const validProviders = ['openai', 'gemini', 'anthropic', 'openrouter', 'deepseek'];
     if (!validProviders.includes(provider)) {
         const msg = `Error: Invalid provider "${provider}". Must be one of: ${validProviders.join(', ')}.`;
         console.error(msg);
@@ -71,7 +71,8 @@ async function runSmokeProvider(providerOverride, modelOverride, schemaFlag, noW
         openai: 'OPENAI_API_KEY',
         gemini: 'GEMINI_API_KEY',
         anthropic: 'ANTHROPIC_API_KEY',
-        openrouter: 'OPENROUTER_API_KEY'
+        openrouter: 'OPENROUTER_API_KEY',
+        deepseek: 'DEEPSEEK_API_KEY'
     };
     const expectedKey = keyMap[provider];
     if (!process.env[expectedKey]) {

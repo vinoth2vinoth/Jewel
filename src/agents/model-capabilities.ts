@@ -174,6 +174,42 @@ export const CAPABILITY_REGISTRY: Record<string, ProviderCapabilityRegistry> = {
       }
     }
   },
+  deepseek: {
+    defaultModel: 'deepseek-v4-flash',
+    recommendedModels: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+    models: {
+      'deepseek-v4-flash': {
+        supportsStructuredOutput: true,
+        supportsUsage: true,
+        supportsSystemPrompt: true,
+        supportsTemperature: true,
+        supportsMaxTokens: true,
+        knownLimitations: ['JSON object mode only (no strict json_schema); Jewel validates all responses against its schemas'],
+        inputCostPerMillionToken: 0.14,
+        outputCostPerMillionToken: 0.28
+      },
+      'deepseek-v4-pro': {
+        supportsStructuredOutput: true,
+        supportsUsage: true,
+        supportsSystemPrompt: true,
+        supportsTemperature: true,
+        supportsMaxTokens: true,
+        knownLimitations: ['JSON object mode only (no strict json_schema); Jewel validates all responses against its schemas'],
+        inputCostPerMillionToken: 0.435,
+        outputCostPerMillionToken: 0.87
+      },
+      'deepseek-chat': {
+        supportsStructuredOutput: true,
+        supportsUsage: true,
+        supportsSystemPrompt: true,
+        supportsTemperature: true,
+        supportsMaxTokens: true,
+        knownLimitations: ['Legacy alias for deepseek-v4-flash non-thinking mode (deprecated 2026-07-24)'],
+        inputCostPerMillionToken: 0.14,
+        outputCostPerMillionToken: 0.28
+      }
+    }
+  },
   openrouter: {
     defaultModel: 'openai/gpt-4o-mini',
     recommendedModels: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],

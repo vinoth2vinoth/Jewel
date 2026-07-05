@@ -174,7 +174,8 @@ export function runDoctor(cwd: string = process.cwd()): void {
       openai: 'OPENAI_API_KEY',
       anthropic: 'ANTHROPIC_API_KEY',
       gemini: 'GEMINI_API_KEY',
-      openrouter: 'OPENROUTER_API_KEY'
+      openrouter: 'OPENROUTER_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY'
     };
     for (const p of providersToCheck) {
       const expectedKey = keyMap[p];

@@ -6,7 +6,7 @@ export interface NormalizedResponse {
         totalTokens?: number;
         estimatedCostUsd?: undefined;
     };
-    rawProvider: 'openai' | 'gemini' | 'anthropic' | 'openrouter';
+    rawProvider: 'openai' | 'gemini' | 'anthropic' | 'openrouter' | 'deepseek';
     model: string;
     finishReason?: string;
 }
