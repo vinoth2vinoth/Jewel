@@ -1,0 +1,29 @@
+{
+  "name": "jewel-vscode",
+  "displayName": "Jewel",
+  "description": "Run Jewel tasks, verify, and status from VS Code",
+  "version": "0.1.0",
+  "publisher": "jewel-cli",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "jewel.runTask",
+        "title": "Jewel: Run Task"
+      },
+      {
+        "command": "jewel.verify",
+        "title": "Jewel: Verify"
+      },
+      {
+        "command": "jewel.status",
+        "title": "Jewel: Status"
+      }
+    ]
+  }
+}

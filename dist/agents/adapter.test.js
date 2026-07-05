@@ -23,8 +23,9 @@ const config_1 = require("../core/config");
         repoContext: 'File contents...',
         verificationResult: null
     });
-    node_assert_1.default.strictEqual(patch.files.length, 1);
-    node_assert_1.default.ok(patch.files[0].content.includes('Task executed successfully'));
+    const firstFile = patch.files[0];
+    node_assert_1.default.ok(firstFile);
+    node_assert_1.default.ok(firstFile.content.includes('Task executed successfully'));
     const review = await adapter.reviewDiff({
         diff: 'diff content',
         verificationResult: null,

@@ -40,6 +40,8 @@ const cp = __importStar(require("child_process"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const policy_1 = require("../safety/policy");
+const loader_1 = require("../plugins/loader");
+const runner_1 = require("../plugins/runner");
 exports.dockerUtils = {
     isDockerAvailable() {
         try {
@@ -444,6 +446,28 @@ async function runVerification(config, cwd = process.cwd(), onProgress) {
     }
     else if (passed === 0 && skipped > 0) {
         overallStatus = 'SKIPPED';
+    }
+    if (config.pluginsEnabled !== false) {
+        const verifierPlugins = (0, loader_1.loadPluginsByType)(cwd, 'verifier');
+        for (const entry of (0, runner_1.runPlugins)(verifierPlugins, { cwd, verification: { overallStatus, results } })) {
+            const pluginFailed = entry.result.status === 'FAIL' || entry.result.status === 'BLOCK';
+            results.push({
+                commandKey: `plugin:${entry.plugin.name}`,
+                commandLine: entry.plugin.command,
+                status: pluginFailed ? 'FAIL' : 'PASS',
+                stdout: entry.result.findings.join('\n'),
+                stderr: ''
+            });
+            if (pluginFailed) {
+                failed++;
+                if (entry.plugin.blockOnFail || entry.result.status === 'BLOCK') {
+                    overallStatus = 'FAIL';
+                }
+            }
+            else {
+                passed++;
+            }
+        }
     }
     const report = {
         projectName: config.projectName || path.basename(cwd),

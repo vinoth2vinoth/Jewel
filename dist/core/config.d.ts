@@ -53,6 +53,7 @@ export interface JewelConfig {
     agentToolLoopEnabled?: boolean;
     agentToolLoopMaxSteps?: number;
     agentToolLoopMaxContextChars?: number;
+    pluginsEnabled?: boolean;
 }
 export declare const DEFAULT_CONFIG: JewelConfig;
 export declare function loadConfig(cwd?: string): JewelConfig;

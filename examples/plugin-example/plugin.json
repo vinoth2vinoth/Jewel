@@ -1,0 +1,9 @@
+{
+  "name": "example-critic",
+  "version": "1.0.0",
+  "type": "critic",
+  "description": "Example critic plugin — warns when diff touches package.json",
+  "command": "node run.js",
+  "blockOnFail": false,
+  "timeoutMs": 5000
+}

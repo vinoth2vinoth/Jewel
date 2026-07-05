@@ -56,6 +56,7 @@ export interface JewelConfig {
   agentToolLoopEnabled?: boolean;
   agentToolLoopMaxSteps?: number;
   agentToolLoopMaxContextChars?: number;
+  pluginsEnabled?: boolean;
 }
 
 export const DEFAULT_CONFIG: JewelConfig = {
@@ -121,7 +122,8 @@ export const DEFAULT_CONFIG: JewelConfig = {
   sandboxWritePaths: [],
   agentToolLoopEnabled: true,
   agentToolLoopMaxSteps: 8,
-  agentToolLoopMaxContextChars: 80_000
+  agentToolLoopMaxContextChars: 80_000,
+  pluginsEnabled: true
 };
 
 export function loadConfig(cwd: string = process.cwd()): JewelConfig {
@@ -183,7 +185,8 @@ export function validateAndMergeConfig(parsed: any): JewelConfig {
     'useASTDiffGuard',
     'useSandbox',
     'sandboxFallbackToHost',
-    'agentToolLoopEnabled'
+    'agentToolLoopEnabled',
+    'pluginsEnabled'
   ];
   for (const field of booleanFields) {
     if (parsed[field] !== undefined) {

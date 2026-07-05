@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { JewelConfig } from '../core/config';
 import { checkCommandPolicy } from '../safety/policy';
+import { loadPluginsByType } from '../plugins/loader';
+import { runPlugins } from '../plugins/runner';
 
 export interface CommandResult {
   commandKey: string;
@@ -470,6 +472,28 @@ export async function runVerification(
     overallStatus = 'BLOCKED';
   } else if (passed === 0 && skipped > 0) {
     overallStatus = 'SKIPPED';
+  }
+
+  if (config.pluginsEnabled !== false) {
+    const verifierPlugins = loadPluginsByType(cwd, 'verifier');
+    for (const entry of runPlugins(verifierPlugins, { cwd, verification: { overallStatus, results } })) {
+      const pluginFailed = entry.result.status === 'FAIL' || entry.result.status === 'BLOCK';
+      results.push({
+        commandKey: `plugin:${entry.plugin.name}`,
+        commandLine: entry.plugin.command,
+        status: pluginFailed ? 'FAIL' : 'PASS',
+        stdout: entry.result.findings.join('\n'),
+        stderr: ''
+      });
+      if (pluginFailed) {
+        failed++;
+        if (entry.plugin.blockOnFail || entry.result.status === 'BLOCK') {
+          overallStatus = 'FAIL';
+        }
+      } else {
+        passed++;
+      }
+    }
   }
 
   const report: VerificationReport = {

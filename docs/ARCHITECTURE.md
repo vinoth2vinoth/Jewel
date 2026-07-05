@@ -102,34 +102,58 @@ Curated tasks live in `benchmarks/manifest.json`. Run with:
 ```bash
 npm run benchmark        # mock provider
 npm run benchmark:live   # configured real provider
+jewel benchmark          # same harness via CLI
 ```
 
-Results are written to `.jewel/benchmarks/latest.json`.
+Results are written to `.jewel/benchmarks/latest.json` and `latest.md`.
+
+### Plugin System (`src/plugins`) — Phase 4
+
+Drop-in verifiers and critics via `.jewel/plugins/<name>/plugin.json`:
+- **loader.ts** — discovers manifests
+- **runner.ts** — executes plugin commands (JSON stdin/stdout)
+- Hooks: verification runner + multi-agent critic review
+
+Example: `examples/plugin-example/`
+
+### MCP Server (`src/mcp`) — Phase 4
+
+Stdio JSON-RPC server for Cursor / Claude Desktop:
+
+```bash
+jewel mcp
+```
+
+Tools: `jewel_verify`, `jewel_status`, `jewel_grep`, `jewel_read_file`, `jewel_run_preview`. See `docs/mcp-setup.md`.
+
+### VS Code Extension — Phase 4 (scaffold)
+
+`extensions/jewel-vscode/` — Run Task, Verify, Status commands via integrated terminal.
 
 ## Current State
 
-- 170+ unit/integration tests
+- 180+ unit/integration tests
 - Interactive TUI (`jewel` with no args)
 - Local Web UI dashboard (`--ui`)
 - Auto file discovery when `--files` is omitted
 - Targeted hunk edits in patch proposals
+- Plugin system, MCP server, benchmark CLI
 
 ## Known Limitations
 
 - `run.ts` orchestrator is still large (helpers extracted; further modularization planned)
 - Exploration is keyword/heuristic based (no embedding index yet)
-- No IDE extension yet (Phase 3)
-- Plugin/MCP ecosystem not yet shipped (Phase 4)
+- VS Code extension is a minimal scaffold (no Language Server Protocol yet)
 
 ## Roadmap
 
-| Phase | Focus |
-|---|---|
-| 0 | Foundation: benchmarks, run.ts split, docs sync |
-| 1 | Autonomous context: RepoExplorer, optional `--files`, hunk edits |
-| 2 | Multi-step tool loop with budget guards |
-| 3 | IDE extension, TUI polish, `jewel watch` |
-| 4 | Plugin system, MCP server mode, public benchmark results |
+| Phase | Focus | Status |
+|---|---|---|
+| 0 | Foundation: benchmarks, run.ts split, docs sync | Done |
+| 1 | Autonomous context: RepoExplorer, optional `--files`, hunk edits | Done |
+| 2 | Multi-step tool loop with budget guards | Done |
+| 3 | TUI polish, `jewel watch`, session resume | Done |
+| 4 | Plugin system, MCP server, benchmark CLI, VS Code scaffold | Done |
 
 ## Phase 3 — Developer UX (shipped)
 
@@ -137,6 +161,14 @@ Results are written to `.jewel/benchmarks/latest.json`.
 - **CLI**: `jewel resume [session-id]`, `jewel watch [--interval ms] [--debounce ms] [--once]`
 - **Web UI**: Repo exploration timeline step, live exploration log panel, retry hint placeholder
 - **Session history**: `src/core/session-history.ts` reads `.jewel/sessions/` for resume
+
+## Phase 4 — Ecosystem & Proof (shipped)
+
+- **Plugins**: `.jewel/plugins/<name>/plugin.json` — verifier and critic hooks
+- **MCP**: `jewel mcp` stdio server — see `docs/mcp-setup.md`
+- **Benchmark CLI**: `jewel benchmark [--mock|--live]` with JSON + Markdown reports
+- **VS Code scaffold**: `extensions/jewel-vscode/` — Run Task, Verify, Status
+- **Example plugin**: `examples/plugin-example/`
 
 ---
 

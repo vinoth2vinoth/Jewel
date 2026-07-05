@@ -101,7 +101,8 @@ exports.DEFAULT_CONFIG = {
     sandboxWritePaths: [],
     agentToolLoopEnabled: true,
     agentToolLoopMaxSteps: 8,
-    agentToolLoopMaxContextChars: 80_000
+    agentToolLoopMaxContextChars: 80_000,
+    pluginsEnabled: true
 };
 function loadConfig(cwd = process.cwd()) {
     const configPath = path.join(cwd, 'jewel.config.json');
@@ -156,7 +157,8 @@ function validateAndMergeConfig(parsed) {
         'useASTDiffGuard',
         'useSandbox',
         'sandboxFallbackToHost',
-        'agentToolLoopEnabled'
+        'agentToolLoopEnabled',
+        'pluginsEnabled'
     ];
     for (const field of booleanFields) {
         if (parsed[field] !== undefined) {

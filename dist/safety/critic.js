@@ -1,7 +1,44 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runCriticReview = runCriticReview;
 exports.runMultiAgentCriticReview = runMultiAgentCriticReview;
+const path = __importStar(require("path"));
+const loader_1 = require("../plugins/loader");
+const runner_1 = require("../plugins/runner");
+const merge_1 = require("../plugins/merge");
 function runCriticReview(contract, diffAnalysis, verification, config) {
     const findings = [];
     const requiredActions = [];
@@ -100,12 +137,30 @@ function runCriticReview(contract, diffAnalysis, verification, config) {
     };
 }
 async function runMultiAgentCriticReview(contract, diffAnalysis, verification, config, adapter, sessionPath, diffContent) {
-    // 1. Gather local heuristic check results
     const localResult = runCriticReview(contract, diffAnalysis, verification, config);
-    if (!adapter || !config.critics || config.critics.length === 0) {
-        return localResult;
+    let merged = localResult;
+    if (config.pluginsEnabled !== false) {
+        const cwd = path.dirname(path.dirname(path.dirname(sessionPath)));
+        const criticPlugins = (0, loader_1.loadPluginsByType)(cwd, 'critic');
+        if (criticPlugins.length > 0) {
+            const pluginRuns = (0, runner_1.runPlugins)(criticPlugins, {
+                cwd,
+                task: contract.task,
+                contract,
+                verification,
+                diffAnalysis,
+                diffContent
+            });
+            merged = (0, merge_1.mergePluginResultsIntoCritic)(localResult, pluginRuns.map(p => ({
+                name: p.plugin.name,
+                result: p.result
+            })));
+        }
     }
-    // 2. Perform parallel LLM critic runs
+    if (!adapter || !config.critics || config.critics.length === 0) {
+        return merged;
+    }
+    // Perform parallel LLM critic runs
     const llmPromises = config.critics.map(async (criticType) => {
         try {
             const reviewInput = {
@@ -130,10 +185,9 @@ async function runMultiAgentCriticReview(contract, diffAnalysis, verification, c
         }
     });
     const llmResults = await Promise.all(llmPromises);
-    // 3. Aggregate results
-    let mergedStatus = localResult.status;
-    const mergedFindings = [...localResult.findings];
-    const mergedActions = [...localResult.requiredActions];
+    let mergedStatus = merged.status;
+    const mergedFindings = [...merged.findings];
+    const mergedActions = [...merged.requiredActions];
     for (const r of llmResults) {
         // Merge findings
         if (r.findings && r.findings.length > 0) {
@@ -152,6 +206,6 @@ async function runMultiAgentCriticReview(contract, diffAnalysis, verification, c
         status: mergedStatus,
         findings: mergedFindings,
         requiredActions: mergedActions,
-        confidence: localResult.confidence
+        confidence: merged.confidence
     };
 }

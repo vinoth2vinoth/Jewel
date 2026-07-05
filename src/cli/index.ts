@@ -8,6 +8,8 @@ import { runTask } from './commands/run';
 import { runVersion } from './commands/version';
 import { runTui } from './commands/tui';
 import { runWatch } from './commands/watch';
+import { runMcp } from './commands/mcp';
+import { runBenchmarkCommand } from './commands/benchmark';
 import { getSessionForResume } from '../core/session-history';
 import { toJewelError } from './errors';
 
@@ -32,6 +34,8 @@ Commands:
   release-check              Verify public package and release readiness checklist.
   watch                      Run verification continuously when source files change.
   resume [session-id]        Re-run a previous session task from history.
+  benchmark                  Run curated benchmark tasks (use --mock for deterministic runs).
+  mcp                        Start Jewel MCP server on stdio (Cursor / Claude Desktop).
   version                    Print the version info.
 
 Options:
@@ -200,6 +204,17 @@ export async function main(): Promise<void> {
 
       case 'audit': {
         runAudit();
+        break;
+      }
+
+      case 'benchmark': {
+        const useMock = args.includes('--mock') || !args.includes('--live');
+        runBenchmarkCommand(useMock);
+        break;
+      }
+
+      case 'mcp': {
+        runMcp(process.cwd());
         break;
       }
 

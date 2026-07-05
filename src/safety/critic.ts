@@ -3,6 +3,10 @@ import { TaskContract } from '../core/session';
 import { DiffAnalysis } from './diff-guard';
 import { VerificationReport } from '../verification/runner';
 import { AgentAdapter, ReviewInput } from '../agents/adapter';
+import * as path from 'path';
+import { loadPluginsByType } from '../plugins/loader';
+import { runPlugins } from '../plugins/runner';
+import { mergePluginResultsIntoCritic } from '../plugins/merge';
 
 export interface CriticResult {
   status: 'PASS' | 'WARN' | 'BLOCK';
@@ -124,14 +128,33 @@ export async function runMultiAgentCriticReview(
   sessionPath: string,
   diffContent: string
 ): Promise<CriticResult> {
-  // 1. Gather local heuristic check results
   const localResult = runCriticReview(contract, diffAnalysis, verification, config);
 
-  if (!adapter || !config.critics || config.critics.length === 0) {
-    return localResult;
+  let merged = localResult;
+  if (config.pluginsEnabled !== false) {
+    const cwd = path.dirname(path.dirname(path.dirname(sessionPath)));
+    const criticPlugins = loadPluginsByType(cwd, 'critic');
+    if (criticPlugins.length > 0) {
+      const pluginRuns = runPlugins(criticPlugins, {
+        cwd,
+        task: contract.task,
+        contract,
+        verification,
+        diffAnalysis,
+        diffContent
+      });
+      merged = mergePluginResultsIntoCritic(localResult, pluginRuns.map(p => ({
+        name: p.plugin.name,
+        result: p.result
+      })));
+    }
   }
 
-  // 2. Perform parallel LLM critic runs
+  if (!adapter || !config.critics || config.critics.length === 0) {
+    return merged;
+  }
+
+  // Perform parallel LLM critic runs
   const llmPromises = config.critics.map(async (criticType) => {
     try {
       const reviewInput: ReviewInput = {
@@ -157,10 +180,9 @@ export async function runMultiAgentCriticReview(
 
   const llmResults = await Promise.all(llmPromises);
 
-  // 3. Aggregate results
-  let mergedStatus = localResult.status;
-  const mergedFindings = [...localResult.findings];
-  const mergedActions = [...localResult.requiredActions];
+  let mergedStatus = merged.status;
+  const mergedFindings = [...merged.findings];
+  const mergedActions = [...merged.requiredActions];
 
   for (const r of llmResults) {
     // Merge findings
@@ -181,6 +203,6 @@ export async function runMultiAgentCriticReview(
     status: mergedStatus,
     findings: mergedFindings,
     requiredActions: mergedActions,
-    confidence: localResult.confidence
+    confidence: merged.confidence
   };
 }

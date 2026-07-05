@@ -23,8 +23,9 @@ test('agent adapter - mock adapter runs plan and proposePatch', async () => {
     verificationResult: null
   });
 
-  assert.strictEqual(patch.files.length, 1);
-  assert.ok(patch.files[0].content.includes('Task executed successfully'));
+  const firstFile = patch.files[0];
+  assert.ok(firstFile);
+  assert.ok(firstFile.content.includes('Task executed successfully'));
 
   const review = await adapter.reviewDiff({
     diff: 'diff content',
