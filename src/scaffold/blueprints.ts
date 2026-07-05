@@ -137,7 +137,7 @@ test('script increments click counter', () => {
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test tests/*.test.js",
     "start": "npx serve . || echo Open index.html in your browser"
   }
 }
@@ -302,7 +302,7 @@ const NODE_API_FILES: BlueprintFile[] = [
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test tests/"
+    "test": "node --test tests/*.test.js"
   }
 }
 `
@@ -420,7 +420,7 @@ const FULLSTACK_FILES: BlueprintFile[] = [
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test tests/"
+    "test": "node --test tests/*.test.js"
   }
 }
 `

@@ -84,7 +84,7 @@ test('scaffolder - scaffolded blueprints pass their own starter tests', () => {
   try {
     for (const bp of BLUEPRINTS) {
       const result = scaffoldProject(bp, { projectName: `check-${bp.id}`, targetDir: dir, gitInit: false });
-      execSync('node --test tests/', { cwd: result.projectDir, stdio: 'pipe', timeout: 60_000 });
+      execSync('node --test tests/*.test.js', { cwd: result.projectDir, stdio: 'pipe', timeout: 60_000 });
     }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
